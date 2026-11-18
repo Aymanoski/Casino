@@ -67,3 +67,19 @@
 - **Built in Phase 1:** Added an interactive **Quick Role Switcher Popover** directly on the Header's Role Badge (plus a Studio Role selector in the Admin/Scorer header) alongside the full `/login` page, and a pulsing **"LIVE · Live Table B"** pill in the top bar that jumps straight to the active live game (`game-11`).
 - **Default Initial Session:** On first load, the mock auth defaults to `Super Admin` (`user-admin`) so the reviewer can immediately inspect any route without hitting an access wall first, while still allowing 1-click switching to restricted roles (`Scorer`, `Check-In`, `Content`, `Player`, or `Public Visitor`) to verify `RoleGuard` enforcement.
 
+---
+
+## Phase 2 Design System Decisions & Bonus Ideas (2026-11-18)
+
+### 12. Deterministic Geometric Avatar Patterns (`PlayerAvatar`)
+- **Context:** `AGENTS.md` §10 strictly forbids photos of real people, and `DESIGN.md` §6 & §9 specify generated geometric patterns or initials in gold rings.
+- **Decision:** `PlayerAvatar` hashes `avatarSeed` (or `name`) via FNV-1a into 6 distinct Islamic/casino geometric SVG line-art patterns (octagram Khatam stars, diamond rosettes, hexagonal lattices, intersecting circles) inside a dual gold ring with initials, plus a crowned `isHost` Golden Seat medallion (`♛`) for Marwan Serry.
+
+### 13. Bilingual Display Typography Tracking & Line-Height (`SectionHeading`)
+- **Context:** `DESIGN.md` §3 specifies tight tracking for English display headlines (`Cormorant Garamond`), whereas negative letter-spacing in Arabic `Reem Kufi` causes adjacent glyphs to crowd.
+- **Decision:** `SectionHeading` applies `ltr:tracking-tight ltr:leading-[1.15]` for English LTR and `rtl:tracking-normal rtl:leading-[1.38]` for Arabic RTL, automatically highlighting the specified `goldKeyword` (or the final word when omitted) in `--gold-gradient`.
+
+### 14. Bonus Idea: Interactive Broadcast Table Sandbox & Dual EN/AR Specimen Inspector in `/styleguide`
+- **Built in Phase 2:** Instead of a static component gallery, `/styleguide` includes a sticky **Inspector Bar** (`EN · LTR` / `عربي · RTL` toggle, Western `123` vs. Arabic-Indic `١٢٣` numeral toggle, and a **Dual EN/AR Specimen** side-by-side preview) plus a live **Broadcast Table Sandbox** where clicking `+10`, `+5`, `-5`, or `Buzzed First` on any `PlayerPanel` updates `ScoreboardRow` animated counters, triggers floating emerald/ruby delta flashes, reorders ranks with Framer Motion layout animations, and fires themed `Toast` notifications.
+
+

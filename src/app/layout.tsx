@@ -9,6 +9,7 @@ import {
 import './globals.css';
 import { I18nProvider } from '@/lib/i18n';
 import { AuthProvider } from '@/lib/auth';
+import { ToastProvider } from '@/components/ui/toast';
 
 const cormorant = Cormorant_Garamond({
   subsets: ['latin'],
@@ -65,7 +66,9 @@ export default function RootLayout({
     >
       <body className="min-h-screen bg-bg text-ivory antialiased selection:bg-gold-500 selection:text-bg">
         <I18nProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </AuthProvider>
         </I18nProvider>
       </body>
     </html>
