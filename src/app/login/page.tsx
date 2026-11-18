@@ -19,6 +19,7 @@ import type { UserRole } from '@/lib/schemas';
 import { cn, localizeText } from '@/lib/utils';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
+import { SkipLink } from '@/components/layout/SkipLink';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -106,6 +107,7 @@ export default function LoginPage() {
 
   return (
     <div className="theme-paper flex min-h-dvh flex-col bg-paper text-ink">
+      <SkipLink />
       <PublicHeader />
 
       {/* Stage Hero Header */}
@@ -116,11 +118,6 @@ export default function LoginPage() {
             size="xl"
             align="center"
             surface="stage"
-            eyebrow={
-              lang === 'ar'
-                ? 'نظام الدخول التجريبي وتبديل الصلاحيات'
-                : 'Mock Role-Based Authentication & Demo Picker'
-            }
             title={
               lang === 'ar'
                 ? 'اختر دورك في بطولة كازينو الألعاب'
@@ -137,11 +134,15 @@ export default function LoginPage() {
       </SunburstStage>
       <StageDivider variant="zigzag" from="stage" to="paper" />
 
-      <main className="mx-auto w-full max-w-content-wide flex-1 px-safe py-8 sm:py-12">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="mx-auto w-full max-w-content-wide flex-1 px-safe py-8 sm:py-12 outline-none"
+      >
         {/* Active Session Banner */}
         <Card
           appearance="sticker"
-          className="mb-8 sm:mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white"
+          className="mb-10 sm:mb-12 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white"
         >
           <div className="flex min-w-0 items-center gap-3.5 sm:gap-4">
             <PokerChipIcon
@@ -155,7 +156,7 @@ export default function LoginPage() {
               </div>
               <div className="truncate font-display text-fluid-xl text-red-900">
                 {user
-                  ? `${localizeText(lang, user.name, user.nameAr)} — ${t.roles[user.role]}`
+                  ? `${localizeText(lang, user.name, user.nameAr)} · ${t.roles[user.role]}`
                   : t.roles.visitor}
               </div>
             </div>
@@ -190,23 +191,23 @@ export default function LoginPage() {
           </div>
         </Card>
 
-        {/* Role Groups */}
-        <div className="space-y-6 sm:space-y-8">
+        {/* Role Groups (flat sections directly on Paper to avoid nested cards) */}
+        <div className="space-y-10 sm:space-y-12">
           {rolesOrder.map((roleKey) => {
             const meta = ROLE_META[roleKey];
             const Icon = meta.icon;
             const accounts = demoUsers.filter((u) => u.role === roleKey);
 
             return (
-              <Card key={roleKey} appearance="calm" className="space-y-5">
-                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border-paper pb-4">
+              <section key={roleKey} className="space-y-5">
+                <div className="flex flex-wrap items-start justify-between gap-4 border-b-2 border-border-paper pb-4">
                   <div className="flex min-w-0 items-start gap-3.5">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-button border-2 border-outline bg-gold-400 text-red-900 shadow-sticker-sm">
                       <Icon className="h-5 w-5" />
                     </div>
                     <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="font-display text-fluid-xl text-red-900">
+                        <h2 className="font-display text-fluid-xl text-red-900 [text-wrap:balance]">
                           {t.roles[roleKey]}
                         </h2>
                         <Badge variant="gold">{accounts.length}</Badge>
@@ -223,17 +224,18 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4">
                   {accounts.map((acc) => {
                     const isSelected = user?.id === acc.id;
                     return (
-                      <div
+                      <Card
                         key={acc.id}
+                        appearance="calm"
                         className={cn(
-                          'flex min-w-0 flex-col justify-between rounded-input border-2 p-4 transition-all',
+                          'flex min-w-0 flex-col justify-between p-4 transition-all',
                           isSelected
-                            ? 'border-blue-500 ring-2 ring-blue-500 bg-blue-100/50'
-                            : 'border-border-paper bg-paper hover:border-outline'
+                            ? 'border-2 border-blue-500 ring-2 ring-blue-500 bg-blue-100/50'
+                            : 'hover:border-outline'
                         )}
                       >
                         <div className="mb-4 min-w-0 space-y-1">
@@ -252,7 +254,7 @@ export default function LoginPage() {
                               acc.titleAr
                             )}
                           </div>
-                          <div className="truncate text-[11px] text-ink-muted font-mono">
+                          <div className="truncate text-xs text-ink-muted font-mono">
                             {acc.email}
                           </div>
                         </div>
@@ -267,11 +269,11 @@ export default function LoginPage() {
                             ? 'دخول وفتح اللوحة'
                             : 'Sign In & Open'}
                         </Button>
-                      </div>
+                      </Card>
                     );
                   })}
                 </div>
-              </Card>
+              </section>
             );
           })}
         </div>

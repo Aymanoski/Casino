@@ -89,7 +89,7 @@ export function PokerChipIcon({
   const toneClasses = {
     gold: 'bg-gold-400 border-outline text-red-900',
     red: 'bg-red-600 border-outline text-white',
-    blue: 'bg-blue-500 border-white ring-2 ring-outline text-white',
+    blue: 'bg-blue-600 border-white ring-2 ring-outline text-white',
     white: 'bg-white border-outline text-ink',
   }[tone];
 

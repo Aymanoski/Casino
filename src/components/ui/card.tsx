@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { MarqueeBulbs } from '@/components/brand/MarqueeBulbs';
 
@@ -30,6 +31,9 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
     },
     ref
   ) => {
+    const { lang } = useI18n();
+    const defaultRibbon = lang === 'ar' ? '★ مميز' : '★ PREMIUM';
+
     const cardInner = (
       <div
         ref={ref}
@@ -49,10 +53,10 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
         {/* Gold Corner Ribbon on Premium Cards (DESIGN.md §6) */}
         {premium && (
           <span
-            className="pointer-events-none absolute top-0 end-5 z-20 rounded-b-[10px] border-x-2 border-b-2 border-outline bg-gold-gradient px-3 py-1 text-[10px] font-black uppercase tracking-wider text-red-900 shadow-sticker-sm"
+            className="pointer-events-none absolute top-0 end-5 z-20 rounded-none border-x-2 border-b-2 border-outline bg-gold-gradient px-3 py-1 text-[11px] font-black uppercase ltr:tracking-wider rtl:tracking-normal text-red-900 shadow-sticker-sm"
             aria-hidden="true"
           >
-            {ribbonLabel ?? '★ PREMIUM'}
+            {ribbonLabel ?? defaultRibbon}
           </span>
         )}
 
@@ -99,7 +103,7 @@ export const CardTitle = React.forwardRef<
   <h3
     ref={ref}
     className={cn(
-      'font-display text-fluid-xl leading-tight ltr:tracking-tight rtl:tracking-normal text-red-900',
+      'font-display text-fluid-xl leading-tight ltr:tracking-tight rtl:tracking-normal text-red-900 [text-wrap:balance]',
       className
     )}
     {...props}
@@ -113,7 +117,7 @@ export const CardDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <p
     ref={ref}
-    className={cn('text-sm card-muted leading-relaxed', className)}
+    className={cn('text-sm card-muted leading-relaxed [text-wrap:pretty]', className)}
     {...props}
   />
 ));

@@ -73,7 +73,7 @@ export function BracketNode({
         isFinal
           ? 'bg-gradient-to-b from-gold-200/50 via-paper to-white shadow-sticker-lg'
           : status === 'live'
-            ? 'ring-[3px] ring-red-600 shadow-sticker animate-pulse'
+            ? 'ring-[3px] ring-red-600 shadow-sticker'
             : 'shadow-sticker',
         onSelect &&
           'cursor-pointer hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
@@ -82,7 +82,7 @@ export function BracketNode({
     >
       {/* Final Boss Gold Corner Ribbon */}
       {isFinal && (
-        <span className="pointer-events-none absolute -top-0.5 end-4 rounded-b-[10px] border-x-2 border-b-2 border-outline bg-gold-gradient px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-red-900 shadow-sticker-sm">
+        <span className="pointer-events-none absolute -top-0.5 end-4 rounded-none border-x-2 border-b-2 border-outline bg-gold-gradient px-2.5 py-0.5 text-[11px] font-black uppercase ltr:tracking-wider rtl:tracking-normal text-red-900 shadow-sticker-sm">
           ★ {lang === 'ar' ? 'المقعد الذهبي' : 'GOLDEN SEAT'}
         </span>
       )}
@@ -91,12 +91,12 @@ export function BracketNode({
       <div
         className={cn(
           'flex items-center justify-between gap-2 border-b-2 border-border-paper pb-2',
-          isFinal && 'pt-3'
+          isFinal && 'pt-4'
         )}
       >
         <div className="min-w-0">
           {roundLabel && (
-            <div className="truncate text-[10px] font-bold uppercase ltr:tracking-wider rtl:tracking-normal text-red-700">
+            <div className="truncate text-[11px] font-bold uppercase ltr:tracking-wider rtl:tracking-normal text-red-700">
               {roundLabel}
             </div>
           )}
@@ -110,11 +110,11 @@ export function BracketNode({
           {status === 'live' ? (
             <LiveBadge size="sm" surface="paper" />
           ) : status === 'finished' ? (
-            <Badge variant="muted" className="px-2.5 py-0.5 text-[10px]">
+            <Badge variant="muted" className="px-2.5 py-0.5 text-[11px]">
               {lang === 'ar' ? 'منتهية' : 'DONE'}
             </Badge>
           ) : (
-            <Badge variant="info" className="px-2.5 py-0.5 text-[10px]">
+            <Badge variant="info" className="px-2.5 py-0.5 text-[11px]">
               {lang === 'ar' ? 'قادمة' : 'UPCOMING'}
             </Badge>
           )}
@@ -167,7 +167,7 @@ export function BracketNode({
                   {slot.nickname && !slot.isPlaceholder && (
                     <div
                       className={cn(
-                        'hidden @xs:block truncate text-[10px]',
+                        'hidden @xs:block truncate text-xs',
                         slot.isHost ? 'text-red-900/80' : 'text-ink-muted'
                       )}
                     >
@@ -256,7 +256,7 @@ export function BracketTrack({ children, title, className }: BracketTrackProps) 
         </div>
       </div>
 
-      <div className="w-full overflow-x-auto overscroll-x-contain rounded-card border-[2.5px] border-outline bg-paper-2/90 p-4 sm:p-6 shadow-sticker">
+      <div className="w-full overflow-x-auto overscroll-x-contain border-y-2 border-outline bg-paper-2/70 py-4 sm:py-6 px-2 sm:px-4">
         <div
           className="origin-top-start transition-transform duration-200"
           style={

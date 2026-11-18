@@ -153,37 +153,37 @@ export function RouteShellPlaceholder({
           </p>
         </div>
 
-        <div className="rounded-input border-2 border-border-paper bg-paper-2 p-4 text-xs sm:text-sm text-ink">
+        <div className="border-t border-border-paper pt-3 text-xs sm:text-sm text-ink">
           <span className="font-extrabold text-red-800">
             {lang === 'ar' ? 'حالة المرحلة الحالية: ' : 'Phase Roadmap Note: '}
           </span>
           {localizeText(lang, phaseNoteEn, phaseNoteAr)}
         </div>
 
-        {/* Live Repository Layer Verification Grid */}
+        {/* Live Repository Layer Verification Grid (hairline-divided strip to avoid nested card boxes) */}
         {stats && (
-          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-input border-2 border-border-paper bg-paper p-4">
-              <div className="flex items-center justify-between gap-2 text-xs font-bold text-ink-muted">
+          <dl className="grid divide-y sm:grid-cols-2 xl:grid-cols-4 xl:divide-y-0 sm:divide-x rtl:sm:divide-x-reverse divide-border-paper border-y border-border-paper bg-paper/50">
+            <div className="p-4">
+              <dt className="flex items-center justify-between gap-2 text-xs font-bold text-ink-muted">
                 <span>{lang === 'ar' ? 'اللاعبون (playerRepo)' : 'Seeded Players (playerRepo)'}</span>
-                <Users className="h-4 w-4 shrink-0 text-red-600" />
-              </div>
-              <div className="mt-2 font-score text-2xl sm:text-3xl font-black text-red-900 tabular-nums">
+                <Users className="h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
+              </dt>
+              <dd className="mt-2 font-score text-2xl sm:text-3xl font-black text-red-900 tabular-nums">
                 {formatNumber(stats.playerCount, {
                   useArabicIndicDigits: stats.useArabicIndic,
                 })}{' '}
                 <span className="text-sm font-bold text-red-700">
                   {lang === 'ar' ? '+ مروان سري' : '+ Marwan Serry'}
                 </span>
-              </div>
+              </dd>
             </div>
 
-            <div className="rounded-input border-2 border-border-paper bg-paper p-4">
-              <div className="flex items-center justify-between gap-2 text-xs font-bold text-ink-muted">
+            <div className="p-4">
+              <dt className="flex items-center justify-between gap-2 text-xs font-bold text-ink-muted">
                 <span>{lang === 'ar' ? 'المباريات (gameRepo)' : 'Tournament Games (gameRepo)'}</span>
-                <Activity className="h-4 w-4 shrink-0 text-red-600" />
-              </div>
-              <div className="mt-2 font-score text-xl sm:text-2xl font-black text-red-900 tabular-nums">
+                <Activity className="h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
+              </dt>
+              <dd className="mt-2 font-score text-xl sm:text-2xl font-black text-red-900 tabular-nums">
                 {lang === 'ar' ? (
                   <>
                     {stats.finishedGames} منتهية ·{' '}
@@ -197,34 +197,34 @@ export function RouteShellPlaceholder({
                     {stats.scheduledGames} Sched
                   </>
                 )}
-              </div>
+              </dd>
             </div>
 
-            <div className="rounded-input border-2 border-border-paper bg-paper p-4">
-              <div className="flex items-center justify-between gap-2 text-xs font-bold text-ink-muted">
+            <div className="p-4">
+              <dt className="flex items-center justify-between gap-2 text-xs font-bold text-ink-muted">
                 <span>{lang === 'ar' ? 'فقرات البرنامج (segmentRepo)' : 'Show Segments (segmentRepo)'}</span>
-                <Database className="h-4 w-4 shrink-0 text-blue-600" />
-              </div>
-              <div className="mt-2 font-score text-2xl sm:text-3xl font-black text-red-900 tabular-nums">
+                <Database className="h-4 w-4 shrink-0 text-blue-600" aria-hidden="true" />
+              </dt>
+              <dd className="mt-2 font-score text-2xl sm:text-3xl font-black text-red-900 tabular-nums">
                 {stats.segmentCount}{' '}
                 <span className="text-sm font-bold text-ink-muted">
                   ({stats.roundCount} {lang === 'ar' ? 'جولات' : 'Rounds'})
                 </span>
-              </div>
+              </dd>
             </div>
 
-            <div className="rounded-input border-2 border-border-paper bg-paper p-4">
-              <div className="flex items-center justify-between gap-2 text-xs font-bold text-ink-muted">
+            <div className="p-4">
+              <dt className="flex items-center justify-between gap-2 text-xs font-bold text-ink-muted">
                 <span>{lang === 'ar' ? 'الأحداث والسجل (scoreRepo)' : 'Events & Audit (scoreRepo)'}</span>
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-positive-ink" />
-              </div>
-              <div className="mt-2 font-score text-xl sm:text-2xl font-black text-red-900 tabular-nums">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-positive-ink" aria-hidden="true" />
+              </dt>
+              <dd className="mt-2 font-score text-xl sm:text-2xl font-black text-red-900 tabular-nums">
                 {lang === 'ar'
                   ? `${stats.scoreEventCount} نتيجة · ${stats.auditCount} سجل`
                   : `${stats.scoreEventCount} Scores · ${stats.auditCount} Audits`}
-              </div>
+              </dd>
             </div>
-          </div>
+          </dl>
         )}
 
         {/* Interactive Realtime & Reset Verification Bar */}

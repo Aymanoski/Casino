@@ -11,7 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 
 export function PublicFooter() {
-  const { t, toggleLang } = useI18n();
+  const { lang, t, toggleLang } = useI18n();
 
   return (
     <footer className="theme-stage mt-auto border-t-[3px] border-outline bg-red-800 pt-8 pb-[calc(2.5rem+env(safe-area-inset-bottom))] text-white">
@@ -26,7 +26,7 @@ export function PublicFooter() {
                 <FanousIcon className="h-6 w-6" />
               </div>
               <div>
-                <div className="font-display text-xl text-gold-sticker">
+                <div className="font-display text-2xl text-gold-sticker">
                   {t.brandName}
                 </div>
                 <div className="text-xs font-semibold text-white/90">
@@ -100,7 +100,9 @@ export function PublicFooter() {
           {/* Role Portals & Language Toggle */}
           <div className="space-y-3">
             <div className="inline-block rounded-pill border-2 border-outline bg-white px-3 py-0.5 text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900 shadow-sticker-sm">
-              {t.nav.adminArea} & {t.nav.scorerConsole}
+              {lang === 'ar'
+                ? `${t.nav.adminArea} و${t.nav.scorerConsole}`
+                : `${t.nav.adminArea} & ${t.nav.scorerConsole}`}
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm font-semibold text-white/90">
               <Link

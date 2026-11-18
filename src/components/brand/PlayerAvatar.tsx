@@ -180,7 +180,7 @@ export function PlayerAvatar({
       {typeof rank === 'number' && (
         <span
           className={cn(
-            'absolute -bottom-1 -end-1 z-20 flex h-5 w-5 items-center justify-center rounded-pill border-2 border-outline text-[10px] font-black tabular-nums shadow-sticker-sm',
+            'absolute -bottom-1 -end-1 z-20 flex h-5 min-w-[20px] px-1 items-center justify-center rounded-pill border-2 border-outline text-[11px] font-black leading-none tabular-nums shadow-sticker-sm',
             rank === 1
               ? 'bg-gold-400 text-red-900'
               : 'bg-white text-ink'

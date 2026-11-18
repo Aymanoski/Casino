@@ -45,12 +45,12 @@ export function EmptyState({
         />
       </div>
 
-      <h3 className="font-display text-xl md:text-2xl text-red-900">
+      <h3 className="font-display text-xl md:text-2xl text-red-900 [text-wrap:balance]">
         {title}
       </h3>
 
       {description && (
-        <p className="mt-1.5 max-w-md text-sm text-ink-muted leading-relaxed">
+        <p className="mt-1.5 max-w-md text-sm text-ink-muted leading-relaxed [text-wrap:pretty]">
           {description}
         </p>
       )}

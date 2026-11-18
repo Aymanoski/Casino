@@ -92,7 +92,7 @@ export function ScoreboardRow({
           ? 'border-[2.5px] border-outline shadow-sticker'
           : 'border border-border-paper shadow-soft',
         isHighlighted || rank === 1
-          ? 'bg-gradient-to-r from-gold-200/45 via-paper to-white text-ink'
+          ? 'ltr:bg-gradient-to-r rtl:bg-gradient-to-l from-gold-200/45 via-paper to-white text-ink'
           : 'bg-white text-ink hover:bg-paper',
         className
       )}
@@ -135,7 +135,7 @@ export function ScoreboardRow({
             {statusLabel && (
               <Badge
                 variant={rank <= 2 ? 'gold' : 'muted'}
-                className="hidden @md:inline-flex px-2.5 py-0.5 text-[10px]"
+                className="hidden @md:inline-flex px-2.5 py-0.5 text-[11px]"
               >
                 {statusLabel}
               </Badge>
@@ -213,7 +213,7 @@ export function ScoreboardRow({
               rank === 1 ? 'text-red-600' : 'text-red-900'
             )}
           />
-          <span className="ms-1 text-[10px] font-bold uppercase ltr:tracking-wider rtl:tracking-normal text-ink-muted">
+          <span className="ms-1 text-[11px] font-bold uppercase ltr:tracking-wider rtl:tracking-normal text-ink-muted">
             {lang === 'ar' ? 'نقطة' : 'PTS'}
           </span>
         </div>

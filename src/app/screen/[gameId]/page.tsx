@@ -1,6 +1,7 @@
 import React from 'react';
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { RouteShellPlaceholder } from '@/components/layout/RouteShellPlaceholder';
+import { SkipLink } from '@/components/layout/SkipLink';
 import { SunburstStage } from '@/components/brand/SunburstStage';
 
 export default async function BigScreenGamePage({
@@ -11,9 +12,10 @@ export default async function BigScreenGamePage({
   const { gameId } = await params;
   return (
     <div className="theme-stage flex min-h-dvh flex-col bg-red-600 text-white">
+      <SkipLink />
       <PublicHeader />
       <SunburstStage as="div" className="flex-1">
-        <main className="mx-auto w-full max-w-stage px-safe py-6">
+        <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-stage px-safe py-6 outline-none">
           <RouteShellPlaceholder
             titleEn={`Venue Big Screen Broadcast — ${gameId.toUpperCase()}`}
             titleAr={`شاشة العرض العملاقة للاستوديو — ${gameId.toUpperCase()}`}

@@ -184,6 +184,8 @@ html[dir="rtl"] {
     scroll-behavior: smooth;
     overflow-x: clip;
     -webkit-text-size-adjust: 100%;
+    scrollbar-color: var(--red-700) var(--paper-2);
+    scrollbar-width: thin;
   }
 
   html[dir="rtl"] body {
@@ -222,6 +224,17 @@ html[dir="rtl"] {
     font-size: max(16px, 1rem);
   }
 
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
   /* Focus ring: 3px electric blue with 2px white offset on all interactive elements */
   :focus-visible {
     outline: 3px solid var(--blue-500);
@@ -256,6 +269,14 @@ html[dir="rtl"] {
     paint-order: stroke fill;
     text-shadow: none;
     filter: drop-shadow(var(--shadow-x) 4px 0 var(--red-900));
+  }
+
+  /* Connected Arabic glyphs (Lalezar) need a slimmer stroke so inner counters stay glossy gold */
+  html[dir="rtl"] .text-gold-sticker {
+    -webkit-text-stroke: 0.042em var(--red-900);
+  }
+  html[dir="rtl"] .text-gold-sticker-lg {
+    -webkit-text-stroke: 0.052em var(--red-900);
   }
 
   /* Crisp white sticker headline with maroon outline (for secondary Stage callouts) */
@@ -443,12 +464,12 @@ html[dir="rtl"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+  html {
+    scroll-behavior: auto;
+  }
+  .animate-sunburst-slow,
+  .animate-pulse,
+  .animate-ping {
+    animation: none !important;
   }
 }

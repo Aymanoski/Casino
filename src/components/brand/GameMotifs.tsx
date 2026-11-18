@@ -506,7 +506,7 @@ export function StickerBadge({
     gold: 'bg-gold-gradient text-red-900 border-[2.5px] border-outline shadow-sticker',
     white: 'bg-white text-ink border-[2.5px] border-outline shadow-sticker',
     red: 'bg-red-600 text-white border-[2.5px] border-outline shadow-sticker',
-    blue: 'bg-blue-500 text-white border-[2.5px] border-white ring-2 ring-outline shadow-sticker',
+    blue: 'bg-blue-600 text-white border-[2.5px] border-white ring-2 ring-outline shadow-sticker',
   }[tone];
 
   return (

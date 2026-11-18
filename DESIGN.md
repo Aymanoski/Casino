@@ -1,3 +1,136 @@
+---
+name: "Casino El Al3ab — Stage & Paper"
+description: "Bold, joyful Egyptian TV game-show design system with crimson sunburst stages, glossy gold-to-orange sticker lettering, crisp warm-white Paper clarity, electric blue contrast sparks, and subtle Ramadan accents."
+colors:
+  stage-red: "#C4163A"
+  stage-red-ray: "#B21235"
+  stage-red-deep: "#A81233"
+  stage-maroon: "#7E0D26"
+  stage-dark-ray: "#5C091A"
+  stage-dark-ray-alt: "#5F0A1C"
+  outline-maroon: "#4F0716"
+  stage-blush: "#FDE7EB"
+  stage-coral: "#E5405C"
+  star-gold-top: "#FFE066"
+  star-gold-bright: "#FFE899"
+  star-gold-light: "#FFD54A"
+  star-gold: "#FFC12B"
+  star-orange: "#FF9F1C"
+  star-amber: "#E8740C"
+  pure-white: "#FFFFFF"
+  warm-paper: "#FFF9F0"
+  warm-paper-2: "#FBEFE0"
+  electric-blue: "#2F6BFF"
+  electric-blue-deep: "#1F4FD8"
+  electric-blue-navy: "#14327F"
+  electric-blue-tint: "#E6EEFF"
+  electric-blue-sky: "#7FA8FF"
+  ink-primary: "#2A0A10"
+  ink-muted: "#6B4A50"
+  ink-faint: "#9A7C82"
+  status-positive: "#1FA971"
+  status-positive-ink: "#0D6A43"
+  status-positive-soft: "#E6F8F0"
+  status-negative: "#B3001B"
+typography:
+  display:
+    fontFamily: "Lilita One, Lalezar, sans-serif"
+    fontSize: "clamp(1.75rem, 1.3rem + 1.85vw, 3rem)"
+    fontWeight: 400
+    lineHeight: 1.12
+    letterSpacing: "-0.02em"
+  headline:
+    fontFamily: "Lilita One, Lalezar, sans-serif"
+    fontSize: "clamp(1.5rem, 1.2rem + 1.15vw, 2.25rem)"
+    fontWeight: 400
+    lineHeight: 1.2
+    letterSpacing: "-0.015em"
+  title:
+    fontFamily: "Lilita One, Lalezar, sans-serif"
+    fontSize: "clamp(1.25rem, 1.08rem + 0.7vw, 1.625rem)"
+    fontWeight: 400
+    lineHeight: 1.3
+    letterSpacing: "0em"
+  score:
+    fontFamily: "Bebas Neue, Cairo, sans-serif"
+    fontSize: "clamp(2.25rem, 1.75rem + 2.2vw, 4.25rem)"
+    fontWeight: 400
+    lineHeight: 1
+    letterSpacing: "0em"
+    fontFeature: "\"tnum\""
+  body:
+    fontFamily: "Inter, Cairo, sans-serif"
+    fontSize: "clamp(0.9375rem, 0.9rem + 0.22vw, 1.0625rem)"
+    fontWeight: 400
+    lineHeight: 1.6
+    letterSpacing: "0em"
+  label:
+    fontFamily: "Inter, Cairo, sans-serif"
+    fontSize: "clamp(0.75rem, 0.72rem + 0.12vw, 0.875rem)"
+    fontWeight: 700
+    lineHeight: 1.45
+    letterSpacing: "0.05em"
+rounded:
+  highlight: "4px"
+  chip-sm: "8px"
+  ribbon: "10px"
+  input: "12px"
+  button: "14px"
+  card: "20px"
+  marquee: "26px"
+  pill: "9999px"
+spacing:
+  xs: "8px"
+  sm: "16px"
+  md: "24px"
+  lg: "32px"
+  xl: "48px"
+  section-y: "clamp(3.5rem, 6vw, 7.5rem)"
+  card-pad: "clamp(1rem, 2.2vw, 2rem)"
+  grid-gap: "clamp(0.75rem, 2vw, 1.5rem)"
+components:
+  button-stage-primary:
+    backgroundColor: "{colors.star-gold}"
+    textColor: "{colors.outline-maroon}"
+    rounded: "{rounded.button}"
+    padding: "10px 20px"
+  button-paper-primary:
+    backgroundColor: "{colors.stage-red}"
+    textColor: "{colors.pure-white}"
+    rounded: "{rounded.button}"
+    padding: "10px 20px"
+  button-secondary:
+    backgroundColor: "{colors.pure-white}"
+    textColor: "{colors.stage-red-deep}"
+    rounded: "{rounded.button}"
+    padding: "10px 20px"
+  button-info:
+    backgroundColor: "{colors.electric-blue-deep}"
+    textColor: "{colors.pure-white}"
+    rounded: "{rounded.button}"
+    padding: "10px 20px"
+  card-sticker:
+    backgroundColor: "{colors.pure-white}"
+    textColor: "{colors.ink-primary}"
+    rounded: "{rounded.card}"
+    padding: "{spacing.card-pad}"
+  card-calm:
+    backgroundColor: "{colors.pure-white}"
+    textColor: "{colors.ink-primary}"
+    rounded: "{rounded.card}"
+    padding: "{spacing.card-pad}"
+  input-paper:
+    backgroundColor: "{colors.pure-white}"
+    textColor: "{colors.ink-primary}"
+    rounded: "{rounded.input}"
+    padding: "8px 14px"
+  chip-gold:
+    backgroundColor: "{colors.star-gold}"
+    textColor: "{colors.outline-maroon}"
+    rounded: "{rounded.pill}"
+    padding: "4px 12px"
+---
+
 # DESIGN.md — "Casino El Al3ab": Bold Red, Gold, White and Blue
 
 The site should feel like **a loud, joyful, premium TV game show**: crimson sunburst stages, glossy gold-to-orange lettering with chunky dark outlines, crisp white surfaces, and a hint of electric blue for contrast. Playful and confident, with dice, cards and chips, but still polished enough to pitch a celebrity sponsor. Ramadan appears as a warm secondary accent (lanterns, crescent), because the event runs in Ramadan.

@@ -99,16 +99,16 @@ export function PublicHeader() {
           {/* Brand Identity */}
           <Link
             href="/"
-            className="group flex min-h-[44px] min-w-0 shrink xl:shrink-0 items-center gap-2 sm:gap-2.5 py-1 rounded-button focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+            className="group flex min-h-[44px] min-w-0 shrink xl:shrink-0 items-center gap-1.5 xs:gap-2 sm:gap-2.5 py-1 rounded-button focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           >
             <div className="relative flex h-9 w-9 xs:h-10 xs:w-10 shrink-0 items-center justify-center rounded-button border-2 border-outline bg-white shadow-sticker-sm transition-transform duration-150 group-hover:scale-105">
               <FanousIcon className="h-5 w-5 xs:h-6 xs:w-6" />
             </div>
             <div className="flex min-w-0 flex-col">
-              <span className="truncate xl:whitespace-nowrap py-0.5 leading-tight font-display text-base xs:text-lg sm:text-xl ltr:tracking-tight rtl:tracking-normal text-gold-sticker">
+              <span className="truncate xl:whitespace-nowrap py-0.5 leading-tight font-display text-sm xs:text-lg sm:text-xl ltr:tracking-tight rtl:tracking-normal text-white [text-shadow:0_2px_0_var(--red-900)]">
                 {t.brandName}
               </span>
-              <span className="hidden sm:block truncate xl:whitespace-nowrap text-[10px] font-bold uppercase ltr:tracking-widest rtl:tracking-normal text-white/90">
+              <span className="hidden 2xl:block truncate whitespace-nowrap text-[11px] font-bold uppercase ltr:tracking-widest rtl:tracking-normal text-white/95">
                 {t.brandSubtitle}
               </span>
             </div>
@@ -116,8 +116,8 @@ export function PublicHeader() {
 
           {/* Desktop Primary Navigation (xl: 1280px+) */}
           <nav
-            aria-label="Main Navigation"
-            className="hidden xl:flex items-center gap-0.5 2xl:gap-1.5"
+            aria-label={lang === 'ar' ? 'القائمة الرئيسية' : 'Main Navigation'}
+            className="hidden xl:flex items-center gap-0.5 2xl:gap-1"
           >
             {navItems.map((item) => {
               const isActive =
@@ -128,8 +128,9 @@ export function PublicHeader() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  aria-current={isActive ? 'page' : undefined}
                   className={cn(
-                    'relative inline-flex min-h-[44px] items-center whitespace-nowrap rounded-button px-2.5 2xl:px-3 py-2 text-xs 2xl:text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+                    'relative inline-flex min-h-[44px] items-center whitespace-nowrap rounded-button px-2 2xl:px-2.5 py-2 text-xs 2xl:text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
                     isActive
                       ? 'text-white'
                       : 'text-white/90 hover:bg-red-700/65 hover:text-white'
@@ -146,7 +147,7 @@ export function PublicHeader() {
 
           {/* Right / End Controls */}
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-            {/* Live Game Quick-Jump Pill on md+ */}
+            {/* Live Game Quick-Jump Pill on md+ (compact label at xl so 1280px fits cleanly) */}
             {liveGame && (
               <Link
                 href={`/screen/${liveGame.id}`}
@@ -156,7 +157,14 @@ export function PublicHeader() {
                 <LiveBadge
                   surface="stage"
                   size="sm"
+                  label={t.common.live}
+                  className="2xl:hidden"
+                />
+                <LiveBadge
+                  surface="stage"
+                  size="sm"
                   label={`${t.common.live} · ${t.common.viewLiveGame}`}
+                  className="hidden 2xl:inline-flex"
                 />
               </Link>
             )}
@@ -171,15 +179,15 @@ export function PublicHeader() {
                 aria-label={`${t.common.switchRoleQuick}: ${
                   user ? localizeText(lang, user.name, user.nameAr) : roleLabel
                 }`}
-                className="inline-flex min-h-[44px] min-w-[44px] h-11 items-center justify-center gap-1.5 rounded-pill border-2 border-outline bg-white px-2.5 xs:px-3.5 text-xs font-extrabold text-red-900 shadow-sticker-sm sticker-press hover:bg-paper focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                className="inline-flex min-h-[44px] min-w-[44px] h-11 items-center justify-center gap-1.5 rounded-pill border-2 border-outline bg-white px-2.5 xs:px-3 text-xs font-extrabold text-red-900 shadow-sticker-sm sticker-press hover:bg-paper focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >
                 <ShieldCheck className="h-4 w-4 shrink-0 text-red-600" />
-                <span className="hidden sm:inline max-w-[140px] truncate">
+                <span className="hidden sm:inline max-w-[104px] 2xl:max-w-[150px] truncate">
                   {user
                     ? localizeText(lang, user.name, user.nameAr)
                     : roleLabel}
                   {user && (
-                    <span className="hidden md:inline text-ink-muted font-semibold">
+                    <span className="hidden 2xl:inline text-ink-muted font-semibold">
                       {' '}
                       ({roleLabel})
                     </span>
@@ -271,7 +279,7 @@ export function PublicHeader() {
                               </div>
                             </div>
                             {isCurrent && (
-                              <Badge variant="info" className="shrink-0 px-2 py-0.5 text-[10px]">
+                              <Badge variant="info" className="shrink-0 px-2 py-0.5 text-[11px]">
                                 ✓
                               </Badge>
                             )}
@@ -301,7 +309,7 @@ export function PublicHeader() {
             <button
               type="button"
               onClick={toggleLang}
-              aria-label="Toggle Language (English / Arabic)"
+              aria-label={lang === 'ar' ? 'تبديل اللغة إلى الإنجليزية' : 'Switch language to Arabic'}
               className="inline-flex min-h-[44px] min-w-[44px] h-11 shrink-0 items-center justify-center gap-1.5 rounded-pill border-2 border-outline bg-gold-400 px-3 xs:px-3.5 text-xs font-black text-red-900 shadow-sticker-sm sticker-press hover:bg-gold-300 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             >
               <Globe className="h-3.5 w-3.5 shrink-0 text-red-900" />
@@ -316,7 +324,7 @@ export function PublicHeader() {
               onClick={() => setMobileMenuOpen((prev) => !prev)}
               aria-expanded={mobileMenuOpen}
               aria-controls="public-nav-drawer"
-              aria-label="Toggle Menu"
+              aria-label={lang === 'ar' ? 'فتح أو إغلاق القائمة' : 'Toggle Menu'}
             >
               {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </Button>
@@ -330,6 +338,7 @@ export function PublicHeader() {
           className="fixed inset-0 z-50 xl:hidden"
           role="dialog"
           aria-modal="true"
+          aria-label={lang === 'ar' ? 'قائمة التنقل' : 'Navigation Menu'}
           id="public-nav-drawer"
         >
           <div
@@ -338,12 +347,12 @@ export function PublicHeader() {
           />
           <aside className="theme-stage fixed inset-y-0 end-0 z-50 flex w-[min(88vw,360px)] flex-col border-s-[3px] border-outline bg-red-700 pt-safe pb-safe pe-safe text-white shadow-sticker-lg">
             {/* Drawer Header */}
-            <div className="flex h-16 items-center justify-between border-b-2 border-outline bg-red-600 px-4">
+            <div className="flex h-header-h items-center justify-between border-b-2 border-outline bg-red-600 px-4">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-button border-2 border-outline bg-white shadow-sticker-sm">
                   <FanousIcon className="h-5 w-5" />
                 </div>
-                <span className="truncate font-display text-lg text-gold-sticker">
+                <span className="truncate font-display text-lg text-white [text-shadow:0_2px_0_var(--red-900)]">
                   {t.brandName}
                 </span>
               </div>
@@ -351,7 +360,7 @@ export function PublicHeader() {
                 variant="surface"
                 size="icon"
                 onClick={() => setMobileMenuOpen(false)}
-                aria-label="Close Navigation Drawer"
+                aria-label={lang === 'ar' ? 'إغلاق القائمة' : 'Close Navigation Drawer'}
               >
                 <X className="h-5 w-5" />
               </Button>
@@ -373,7 +382,7 @@ export function PublicHeader() {
               )}
 
               {/* Primary Public Pages */}
-              <nav aria-label="Mobile Navigation" className="grid grid-cols-1 xs:grid-cols-2 gap-2">
+              <nav aria-label={lang === 'ar' ? 'التنقل على الهاتف' : 'Mobile Navigation'} className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                 {navItems.map((item) => {
                   const isActive =
                     item.href === '/'
@@ -383,6 +392,7 @@ export function PublicHeader() {
                     <Link
                       key={item.href}
                       href={item.href}
+                      aria-current={isActive ? 'page' : undefined}
                       onClick={() => setMobileMenuOpen(false)}
                       className={cn(
                         'flex min-h-[44px] items-center rounded-input border-2 border-outline px-3.5 py-2.5 text-sm font-extrabold transition-colors shadow-sticker-sm',
@@ -400,7 +410,9 @@ export function PublicHeader() {
               {/* Workspace Portals */}
               <div className="space-y-2 border-t-2 border-outline/60 pt-4">
                 <div className="inline-block rounded-pill border border-outline bg-white px-2.5 py-0.5 text-[11px] font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
-                  {t.nav.adminArea} & {t.nav.scorerConsole}
+                  {lang === 'ar'
+                    ? `${t.nav.adminArea} و${t.nav.scorerConsole}`
+                    : `${t.nav.adminArea} & ${t.nav.scorerConsole}`}
                 </div>
                 <div className="grid grid-cols-1 gap-2">
                   <Link

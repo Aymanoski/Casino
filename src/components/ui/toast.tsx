@@ -15,6 +15,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 export type ToastVariant = 'gold' | 'positive' | 'negative' | 'info';
@@ -59,13 +60,14 @@ const VARIANT_STYLES: Record<
     Icon: AlertCircle,
   },
   info: {
-    accentBg: 'bg-blue-500',
-    iconBox: 'bg-blue-500 text-white border-outline',
+    accentBg: 'bg-blue-600',
+    iconBox: 'bg-blue-600 text-white border-outline',
     Icon: Info,
   },
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const { lang } = useI18n();
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const prefersReducedMotion = useReducedMotion();
 
@@ -106,7 +108,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {/* Toast Viewport — clears mobile bottom bar & safe-area inset */}
       <div
         role="region"
-        aria-label="Notifications"
+        aria-label={lang === 'ar' ? 'الإشعارات' : 'Notifications'}
         aria-live="polite"
         className="pointer-events-none fixed inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-[60] flex w-auto flex-col gap-2.5 sm:inset-x-auto sm:bottom-4 sm:end-4 sm:w-full sm:max-w-sm"
       >
@@ -157,7 +159,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={() => dismissToast(item.id)}
-                  aria-label="Dismiss notification"
+                  aria-label={lang === 'ar' ? 'إغلاق الإشعار' : 'Dismiss notification'}
                   className="-m-1 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-pill text-ink-muted hover:bg-paper-2 hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
                 >
                   <X className="h-4 w-4" />

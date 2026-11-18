@@ -119,8 +119,8 @@ export function SectionHeading({
 
       <HeadingTag
         className={cn(
-          'font-display break-words ltr:tracking-tight ltr:leading-[1.12] rtl:tracking-normal rtl:leading-[1.35]',
-          isStage ? 'text-white [text-shadow:0_3px_0_#4F0716]' : 'text-red-900',
+          'font-display break-words [text-wrap:balance] ltr:tracking-tight ltr:leading-[1.12] rtl:tracking-normal rtl:leading-[1.35]',
+          isStage ? 'text-white [text-shadow:0_3px_0_var(--red-900)]' : 'text-red-900',
           SIZE_STYLES[size]
         )}
       >
@@ -130,7 +130,7 @@ export function SectionHeading({
       {subtitle && (
         <p
           className={cn(
-            'text-fluid-base leading-relaxed',
+            'text-fluid-base leading-relaxed [text-wrap:pretty]',
             isStage ? 'text-white/95' : 'text-ink-muted',
             align === 'center' ? 'mx-auto max-w-2xl' : 'max-w-2xl'
           )}

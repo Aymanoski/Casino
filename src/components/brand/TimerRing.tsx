@@ -24,8 +24,8 @@ export interface TimerRingProps {
 }
 
 const SIZE_CONFIG = {
-  sm: { fluidWidth: 'w-[clamp(76px,22vw,96px)]', stroke: 11 },
-  md: { fluidWidth: 'w-[clamp(108px,28vw,140px)]', stroke: 10 },
+  sm: { fluidWidth: 'w-[clamp(96px,26vw,112px)]', stroke: 11 },
+  md: { fluidWidth: 'w-[clamp(112px,28vw,140px)]', stroke: 10 },
   lg: { fluidWidth: 'w-[clamp(136px,34vw,180px)]', stroke: 9.5 },
   xl: { fluidWidth: 'w-[clamp(160px,38vw,228px)]', stroke: 9 },
 };
@@ -86,8 +86,8 @@ export function TimerRing({
   const ringStroke =
     isUrgent || isExpired
       ? isStage
-        ? '#FFE899'
-        : '#B3001B'
+        ? 'var(--gold-200)'
+        : 'var(--negative)'
       : isStage
         ? 'var(--gold-400)'
         : 'var(--red-600)';
@@ -128,7 +128,11 @@ export function TimerRing({
         )}
         role="timer"
         aria-live="polite"
-        aria-label={`${clampedRemaining} seconds remaining`}
+        aria-label={
+          lang === 'ar'
+            ? `متبقي ${clampedRemaining} ثانية`
+            : `${clampedRemaining} seconds remaining`
+        }
       >
         <svg
           viewBox={`0 0 ${viewSize} ${viewSize}`}
@@ -177,7 +181,7 @@ export function TimerRing({
           </span>
           <span
             className={cn(
-              'mt-1 font-bold uppercase ltr:tracking-wider rtl:tracking-normal text-[clamp(0.55rem,7.2cqi,0.8rem)] leading-tight',
+              'mt-1 font-bold uppercase ltr:tracking-wider rtl:tracking-normal text-[clamp(0.6875rem,7.2cqi,0.875rem)] leading-tight',
               isStage
                 ? isUrgent || isExpired
                   ? 'text-gold-200'

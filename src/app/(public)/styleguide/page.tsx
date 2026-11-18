@@ -273,22 +273,22 @@ export default function StyleguidePage() {
   return (
     <div className="min-h-dvh pb-16">
       {/* 0. STYLEGUIDE INSPECTOR BAR */}
-      <div className="relative md:sticky md:top-header-h [@media(max-height:740px)]:static z-30 border-b-2 border-outline bg-white/95 backdrop-blur-md">
+      <div className="relative md:sticky md:top-[calc(var(--header-h)+var(--sat))] [@media(max-height:740px)]:static z-30 border-b-2 border-outline bg-white/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-content-wide 3xl:max-w-stage flex-col gap-3 px-safe py-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <ScoreChip value="★" tone="red" size="sm" className="shrink-0" />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="truncate font-display text-fluid-lg text-red-900">
+                <span className="font-display text-fluid-lg text-red-900">
                   {lang === 'ar'
-                    ? 'دليل نظام التصميم — كازينو الألعاب'
-                    : 'Casino El Al3ab — Stage & Paper Styleguide'}
+                    ? 'دليل نظام التصميم: كازينو الألعاب'
+                    : 'Casino El Al3ab: Stage & Paper Styleguide'}
                 </span>
                 <Badge variant="gold" className="hidden sm:inline-flex shrink-0">
                   DESIGN.md · Stage & Paper
                 </Badge>
               </div>
-              <p className="truncate text-xs text-ink-muted">
+              <p className="text-xs text-ink-muted line-clamp-2 sm:line-clamp-none">
                 {lang === 'ar'
                   ? 'أحمر المسرح المشع، الذهبي، الأبيض، ولمسة الأزرق الكهربائي (٣٢٠–٢٥٦٠ بكسل)'
                   : 'Sunburst Stage, Paper clarity, sticker outlines, Lilita One / Lalezar / Bebas Neue / Cairo'}
@@ -300,7 +300,7 @@ export default function StyleguidePage() {
             {/* Explicit EN (LTR) / AR (RTL) Switcher */}
             <div
               role="group"
-              aria-label="Language & Direction Mode"
+              aria-label={lang === 'ar' ? 'اللغة واتجاه العرض' : 'Language and direction mode'}
               className="inline-flex rounded-pill border-2 border-outline bg-paper-2 p-0.5 shadow-sticker-sm"
             >
               <button
@@ -341,13 +341,13 @@ export default function StyleguidePage() {
               <span>{useArabicIndic ? '١٢٣ (هندي)' : '123 (Western)'}</span>
             </button>
 
-            {/* Dual EN/AR Specimen Toggle */}
+            {/* Dual EN/AR Specimen Toggle (uses blue-600 for 7.1:1 WCAG AA/AAA white text contrast) */}
             <button
               type="button"
               onClick={() => setBilingualPreview((prev) => !prev)}
               className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-pill border-2 border-outline px-3.5 text-xs font-extrabold shadow-sticker-sm transition-colors ${
                 bilingualPreview
-                  ? 'bg-blue-500 text-white'
+                  ? 'bg-blue-600 text-white'
                   : 'bg-white text-ink hover:bg-paper'
               }`}
             >
@@ -410,11 +410,6 @@ export default function StyleguidePage() {
               size="xl"
               align="center"
               surface="stage"
-              eyebrow={
-                lang === 'ar'
-                  ? 'هوية العرض التلفزيوني المبهجة · Stage & Paper'
-                  : 'GAME-SHOW DESIGN SYSTEM · STAGE & PAPER'
-              }
               title={
                 lang === 'ar'
                   ? 'ليالي رمضان داخل كازينو الألعاب'
@@ -464,7 +459,6 @@ export default function StyleguidePage() {
                 <SectionHeading
                   size="md"
                   surface="paper"
-                  eyebrow="PAPER HEADLINE TREATMENT"
                   title="Two Finalists. One Golden Seat."
                   goldKeyword="Golden Seat."
                   subtitle="Chunky maroon headline on warm Paper, gold-highlighted keyword, 20px card radius, 14px button radius, and mirrored RTL sticker shadows."
@@ -489,7 +483,6 @@ export default function StyleguidePage() {
                 <SectionHeading
                   size="md"
                   surface="paper"
-                  eyebrow="عرض ليلة النهائي الكبرى"
                   title="متأهلان اثنان في مواجهة مروان سري"
                   goldKeyword="مروان سري"
                   subtitle="تصميم ثنائي اللغة أصيل بخط Lalezar للعناوين و Cairo للنصوص والأرقام مع تباين يتجاوز معيار WCAG AA."
@@ -519,7 +512,6 @@ export default function StyleguidePage() {
             id="section-tokens"
             size="md"
             surface="paper"
-            eyebrow={lang === 'ar' ? '١. الألوان والتباين' : '1. PALETTE & CONTRAST RULES'}
             title={
               lang === 'ar'
                 ? 'باليتة الألوان وقواعد القراءة (WCAG AA)'
@@ -537,15 +529,15 @@ export default function StyleguidePage() {
             {paletteGroups.map((group) => (
               <Card key={group.title} appearance="calm" className="space-y-3">
                 <h3 className="font-display text-base text-red-900">{group.title}</h3>
-                <div className="space-y-2">
+                <div className="divide-y divide-border-paper">
                   {group.swatches.map((sw) => (
                     <div
                       key={sw.token}
-                      className="flex items-center justify-between gap-2 rounded-input border border-border-paper p-2 bg-paper"
+                      className="flex items-center justify-between gap-2 py-2 first:pt-1 last:pb-0"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <span
-                          className={`h-8 w-8 shrink-0 rounded-[8px] border-2 border-outline ${sw.bg}`}
+                          className={`h-7 w-7 shrink-0 rounded-[8px] border-2 border-outline ${sw.bg}`}
                           aria-hidden="true"
                         />
                         <span className="truncate font-mono text-xs font-bold text-ink">
@@ -621,19 +613,36 @@ export default function StyleguidePage() {
           ornament="dice"
           label={
             lang === 'ar'
-              ? '٢. مقارنة السمات الثلاث: Stage و Paper و Stage-Dark'
-              : '2. STAGE vs PAPER vs STAGE-DARK SURFACES'
+              ? 'مقارنة السمات الثلاث: Stage و Paper و Stage-Dark'
+              : 'STAGE vs PAPER vs STAGE-DARK SURFACES'
           }
         />
 
         {/* 3. SIDE-BY-SIDE THEME COMPARISON */}
-        <section className="space-y-6">
+        <section className="space-y-6" aria-labelledby="section-surfaces">
+          <SectionHeading
+            id="section-surfaces"
+            size="md"
+            surface="paper"
+            title={
+              lang === 'ar'
+                ? 'سمات الأسطح: المسرح والورق ولوحة الحكم'
+                : 'Three Purpose-Built Surface Modes'
+            }
+            goldKeyword={lang === 'ar' ? 'المسرح' : 'Surface Modes'}
+            subtitle={
+              lang === 'ar'
+                ? 'تبديل تلقائي لألوان الأزرار والبطاقات والمؤقتات بين سمة العرض وسمة البيانات الورقية وسمة التحكيم.'
+                : 'Primary buttons, cards, and timer rings automatically adapt to Stage, Paper, and Stage-Dark contexts.'
+            }
+          />
+
           <div className="grid gap-6 lg:grid-cols-2">
-            {/* STAGE THEME DEMO */}
+            {/* STAGE THEME DEMO (un-rounded section strip containing a real Sticker Card) */}
             <SunburstStage
               as="div"
               animateRays={false}
-              className="rounded-card border-[3px] border-outline p-5 sm:p-7 shadow-sticker-lg"
+              className="border-y-[3px] border-outline p-5 sm:p-7"
             >
               <div className="space-y-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -642,6 +651,7 @@ export default function StyleguidePage() {
                 </div>
 
                 <SectionHeading
+                  as="h3"
                   size="md"
                   surface="stage"
                   title={
@@ -675,7 +685,7 @@ export default function StyleguidePage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-xs text-ink-muted">
+                      <p className="text-xs text-ink-muted [text-wrap:pretty]">
                         {lang === 'ar'
                           ? 'إطار عنابي سميك ٢.٥ بكسل مع ظل ستيكر صلب ينعكس في العربية.'
                           : '2.5px maroon outline + mirrored hard offset sticker shadow.'}
@@ -698,7 +708,7 @@ export default function StyleguidePage() {
             </SunburstStage>
 
             {/* PAPER THEME DEMO */}
-            <div className="theme-paper rounded-card border-[3px] border-outline bg-paper p-5 sm:p-7 text-ink shadow-sticker-lg">
+            <div className="theme-paper border-y-[3px] border-outline bg-paper p-5 sm:p-7 text-ink">
               <div className="space-y-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <StickerBadge tone="red">PAPER THEME (.theme-paper)</StickerBadge>
@@ -706,6 +716,7 @@ export default function StyleguidePage() {
                 </div>
 
                 <SectionHeading
+                  as="h3"
                   size="md"
                   surface="paper"
                   title={
@@ -739,7 +750,7 @@ export default function StyleguidePage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-xs text-ink-muted">
+                      <p className="text-xs text-ink-muted [text-wrap:pretty]">
                         {lang === 'ar'
                           ? 'إطار رقيق هادئ وظل ناعم لعرض البيانات الكثيفة بدون ضجيج بصري.'
                           : '1px --border-paper + soft shadow for dense admin and reading layouts.'}
@@ -763,7 +774,7 @@ export default function StyleguidePage() {
           </div>
 
           {/* STAGE-DARK (SCORER CONSOLE) STRIP */}
-          <div className="theme-stage-dark rounded-card border-[3px] border-outline bg-red-900 p-5 sm:p-7 text-white shadow-sticker-lg">
+          <div className="theme-stage-dark border-y-[3px] border-outline bg-red-900 p-5 sm:p-7 text-white">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
@@ -820,18 +831,18 @@ export default function StyleguidePage() {
           ornament="suits"
           label={
             lang === 'ar'
-              ? '٣. محاكي الطاولة المباشرة (PlayerPanel + ScoreboardRow + TimerRing)'
-              : '3. LIVE BROADCAST TABLE SANDBOX'
+              ? 'محاكي الطاولة المباشرة (PlayerPanel + ScoreboardRow + TimerRing)'
+              : 'LIVE BROADCAST TABLE SANDBOX'
           }
         />
 
         {/* 4. INTERACTIVE SANDBOX: PLAYER PANELS, SCOREBOARD ROWS & TIMERS */}
-        <section className="space-y-8">
+        <section className="space-y-8" aria-labelledby="section-sandbox">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <SectionHeading
+              id="section-sandbox"
               size="md"
               surface="paper"
-              eyebrow={lang === 'ar' ? 'مكونات برنامج المسابقات' : 'BROADCAST SANDBOX'}
               title={
                 lang === 'ar'
                   ? 'لوحات اللاعبين ولوحة الصدارة والمؤقت'
@@ -949,25 +960,25 @@ export default function StyleguidePage() {
               </div>
             </div>
 
-            <Card appearance="sticker" className="flex flex-col justify-between lg:col-span-5">
+            <Card appearance="sticker" className="flex flex-col justify-between overflow-hidden pb-0 lg:col-span-5">
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="font-display text-fluid-xl text-red-900">
+                  <h3 className="font-display text-fluid-xl text-red-900 [text-wrap:balance]">
                     {lang === 'ar'
                       ? 'حلقات المؤقت (Stage · Paper · 5s)'
                       : 'Timer Rings (Stage · Paper · 5s Flash)'}
                   </h3>
                   <Badge variant="negative">≤ 5s White Flash</Badge>
                 </div>
-                <p className="mt-1 text-xs text-ink-muted">
+                <p className="mt-1 text-xs text-ink-muted [text-wrap:pretty]">
                   {lang === 'ar'
                     ? 'حلقة ذهبية على المسرح وحمراء على الورق، مع نبض وإطار أبيض وامض في آخر ٥ ثوانٍ.'
                     : 'Gold ring on Stage, red ring on Paper, plus pulsing white flash border in the final 5 seconds.'}
                 </p>
               </div>
 
-              <div className="my-5 flex flex-wrap items-start justify-around gap-4">
-                <div className="flex flex-col items-center gap-2">
+              <div className="mt-5 -mx-card-pad grid sm:grid-cols-2 border-t-2 border-outline">
+                <div className="flex flex-col items-center justify-center gap-2 bg-white p-5">
                   <TimerRing
                     durationSec={30}
                     remainingSec={timerRemaining}
@@ -988,7 +999,7 @@ export default function StyleguidePage() {
                   </span>
                 </div>
 
-                <div className="flex flex-col items-center gap-2 rounded-card border-2 border-outline bg-red-600 p-3 shadow-sticker-sm">
+                <div className="flex flex-col items-center justify-center gap-3 border-t-2 sm:border-t-0 sm:border-s-2 border-outline bg-red-600 p-5 text-white">
                   <TimerRing
                     durationSec={30}
                     remainingSec={urgentRemaining}
@@ -1016,13 +1027,29 @@ export default function StyleguidePage() {
           ornament="crescent"
           label={
             lang === 'ar'
-              ? '٤. شجرة البطولة (BracketNode + المقعد الذهبي)'
-              : '4. BRACKET NODES & GOLDEN SEAT BOSS NODE'
+              ? 'شجرة البطولة (BracketNode + المقعد الذهبي)'
+              : 'BRACKET NODES & GOLDEN SEAT BOSS NODE'
           }
         />
 
         {/* 5. BRACKET NODES */}
-        <section className="space-y-6">
+        <section className="space-y-6" aria-labelledby="section-bracket">
+          <SectionHeading
+            id="section-bracket"
+            size="md"
+            surface="paper"
+            title={
+              lang === 'ar'
+                ? 'بطاقات شجرة البطولة والمقعد الذهبي'
+                : 'Tournament Bracket Nodes & Final Boss Seat'
+            }
+            goldKeyword={lang === 'ar' ? 'الذهبي' : 'Final Boss'}
+            subtitle={
+              lang === 'ar'
+                ? 'حالات المباريات المنتهية والمباشرة والقادمة مع شريط إضاءة المسرح للنهائي.'
+                : 'Finished, Live, and Scheduled 3-player game nodes inside a scrollable pan-and-zoom bracket track.'
+            }
+          />
           <BracketTrack
             title={
               lang === 'ar'
@@ -1128,21 +1155,33 @@ export default function StyleguidePage() {
           ornament="dice"
           label={
             lang === 'ar'
-              ? '٥. فيشات الكازينو (الأربعة الكلاسيكية) والشارات والصور الرمزية'
-              : '5. CASINO CHIPS (4 CLASSIC + SCORE), BADGES & AVATARS'
+              ? 'فيشات الكازينو والشارات والصور الرمزية'
+              : 'CASINO CHIPS, BADGES & GEOMETRIC AVATARS'
           }
         />
 
         {/* 6. CHIPS, BADGES & AVATARS */}
-        <section className="grid gap-6 lg:grid-cols-2">
+        <section className="space-y-6" aria-labelledby="section-chips">
+          <SectionHeading
+            id="section-chips"
+            size="md"
+            surface="paper"
+            title={
+              lang === 'ar'
+                ? 'فيشات الكازينو والشارات والصور الرمزية'
+                : 'Casino Chips, Status Badges & Generated Avatars'
+            }
+            goldKeyword={lang === 'ar' ? 'الرمزية' : 'Generated Avatars'}
+          />
+          <div className="grid gap-6 lg:grid-cols-2">
           <Card appearance="sticker" className="space-y-6">
             <div>
-              <h3 className="font-display text-fluid-xl text-red-900">
+              <h3 className="font-display text-fluid-xl text-red-900 [text-wrap:balance]">
                 {lang === 'ar'
                   ? 'فيشات الكازينو (الأحمر والأبيض والأزرق والذهبي + النقاط)'
                   : 'Casino Chips (Red, White, Blue, Gold + Score Chips)'}
               </h3>
-              <p className="mt-1 text-sm text-ink-muted">
+              <p className="mt-1 text-sm text-ink-muted [text-wrap:pretty]">
                 {lang === 'ar'
                   ? 'فيشات دائرية بإطار عنابي صلب وحلقة متقطعة، مع علامة +/- دائماً.'
                   : 'Circular chips with dashed inner ring, thick maroon outline, and explicit + / − indicators.'}
@@ -1254,27 +1293,39 @@ export default function StyleguidePage() {
               ))}
             </div>
           </Card>
+          </div>
         </section>
 
         <GoldDivider
           ornament="suits"
           label={
             lang === 'ar'
-              ? '٦. الأزرار والبطاقات والنماذج والنوافذ المنبثقة'
-              : '6. BUTTONS, CARDS, FORMS (BLUE FOCUS) & DIALOGS'
+              ? 'الأزرار والبطاقات والنماذج والنوافذ المنبثقة'
+              : 'BUTTONS, CARDS, FORMS & DIALOGS'
           }
         />
 
         {/* 7. BUTTONS & CARDS */}
-        <section className="space-y-8">
+        <section className="space-y-8" aria-labelledby="section-controls">
+          <SectionHeading
+            id="section-controls"
+            size="md"
+            surface="paper"
+            title={
+              lang === 'ar'
+                ? 'عناصر التحكم التفاعلية، النماذج والبطاقات'
+                : 'Buttons, Cards, Forms & Confirmation Dialogs'
+            }
+            goldKeyword={lang === 'ar' ? 'والبطاقات' : 'Confirmation Dialogs'}
+          />
           <Card appearance="sticker" className="space-y-6">
             <div>
-              <h3 className="font-display text-fluid-xl text-red-900">
+              <h3 className="font-display text-fluid-xl text-red-900 [text-wrap:balance]">
                 {lang === 'ar'
                   ? 'الأزرار (١٤ بكسل · ظل ستيكر · هبوط عند الضغط)'
                   : 'Buttons (14px Radius · Blue Focus Ring · Tactile Pressed-Sink)'}
               </h3>
-              <p className="mt-1 text-sm text-ink-muted">
+              <p className="mt-1 text-sm text-ink-muted [text-wrap:pretty]">
                 {lang === 'ar'
                   ? 'اضغط مع الاستمرار على أي زر لمشاهدة هبوط الزر وتلاشي الظل الصلب، وتنقل بـ Tab لمشاهدة حلقة التركيز الزرقاء.'
                   : 'Press and hold any button to feel the shadow collapse; tab through for the 3px electric blue focus ring with 2px white offset.'}
@@ -1524,8 +1575,8 @@ export default function StyleguidePage() {
                     </DialogHeader>
                     <div className="rounded-input border-2 border-outline bg-paper-2 p-4 text-xs font-bold text-red-900">
                       {lang === 'ar'
-                        ? 'الفقرة ١٦: جولة التحدي / الحسم — نقاط مقترحة: +10 / −5'
-                        : 'Segment #16: Tie-Breaker & Penalty Challenge — Presets: +10 / −5'}
+                        ? 'الفقرة ١٦: جولة التحدي / الحسم (نقاط مقترحة: +10 / −5)'
+                        : 'Segment #16: Tie-Breaker & Penalty Challenge (Presets: +10 / −5)'}
                     </div>
                     <DialogFooter>
                       <DialogClose asChild>
@@ -1659,13 +1710,24 @@ export default function StyleguidePage() {
           ornament="crescent"
           label={
             lang === 'ar'
-              ? '٧. الجداول الورقية المتجاوبة وحالة الفراغ بالزهر والكروت'
-              : '7. PAPER DATA TABLE, DICE EMPTY STATE & SKELETONS'
+              ? 'الجداول الورقية وحالة الفراغ بالزهر والكروت'
+              : 'PAPER DATA TABLE, DICE EMPTY STATE & SKELETONS'
           }
         />
 
         {/* 9. PAPER DATA TABLE, DICE EMPTY STATE & SKELETONS */}
-        <section className="space-y-6">
+        <section className="space-y-6" aria-labelledby="section-data">
+          <SectionHeading
+            id="section-data"
+            size="md"
+            surface="paper"
+            title={
+              lang === 'ar'
+                ? 'الجداول، حالات الفراغ، وهياكل التحميل'
+                : 'Data Tables, Empty States & Loading Skeletons'
+            }
+            goldKeyword={lang === 'ar' ? 'التحميل' : 'Skeletons'}
+          />
           <Tabs defaultValue="table">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <TabsList>
@@ -1895,11 +1957,6 @@ export default function StyleguidePage() {
               size="lg"
               align="center"
               surface="stage"
-              eyebrow={
-                lang === 'ar'
-                  ? '٨. الزخارف الأصلية (SVG/CSS مبتكرة ١٠٠٪)'
-                  : '8. ORIGINAL SIGNATURE MOTIFS GALLERY'
-              }
               title={
                 lang === 'ar'
                   ? 'النرد، الكروت، الفيشات، الدوامات والزخارف الرمضانية'

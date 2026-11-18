@@ -44,7 +44,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
                 : undefined
           }
           className={cn(
-            'flex min-h-[112px] w-full min-w-0 rounded-input border-2 bg-white px-3.5 py-2.5 text-base leading-relaxed text-ink placeholder:text-ink-faint transition-colors duration-150 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50',
+            'flex min-h-[112px] w-full min-w-0 rounded-input border-2 bg-white px-3.5 py-2.5 text-base leading-relaxed text-ink placeholder:text-ink-muted transition-colors duration-150 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50',
             error
               ? 'border-negative focus-visible:border-negative focus-visible:ring-negative'
               : 'border-border-paper hover:border-red-900/35 focus-visible:border-blue-500',

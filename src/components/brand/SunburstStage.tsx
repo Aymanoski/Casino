@@ -71,7 +71,7 @@ export function SunburstStage({
           className="pointer-events-none absolute inset-0 select-none"
           style={{
             background: isDark
-              ? 'radial-gradient(circle at 50% 50%, transparent 50%, rgba(36, 2, 10, 0.55) 100%)'
+              ? 'radial-gradient(circle at 50% 50%, transparent 50%, rgba(79, 7, 22, 0.68) 100%)'
               : 'radial-gradient(circle at 50% 50%, transparent 50%, rgba(79, 7, 22, 0.42) 100%)',
           }}
         />

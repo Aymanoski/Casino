@@ -124,4 +124,21 @@
 - **Decisions:** Replaced the midnight lantern illustration inside `EmptyState` with original sticker-style `PlayingDice` + `PlayingCardMotif` artwork per `DESIGN.md` §6, while keeping `Lantern`, `LanternCluster`, and `CrescentStar` rethemed in the new warm gold/maroon sticker style strictly as subtle secondary Ramadan accents.
 - **Bonus Idea:** Built reusable `StageDivider` SVG section transitions (`zigzag`, `angled`, `scallop`) with thick `#4F0716` sticker borders to cleanly separate Stage sunburst bands from Paper bands across `/` and `/styleguide`.
 
+---
+
+## Impeccable Skill Integration & Craft Audit Decisions (2026-11-18)
+
+### 20. Impeccable Precedence & Intentional `DESIGN.md` Exceptions (`AGENTS.md §14`)
+- **Setup:** Installed Impeccable (`v4.9.1`, engine `v0.1.24`/`v0.1.25`) into `.agent/skills/impeccable` for Antigravity, authored `PRODUCT.md` (`<!-- impeccable:product-schema 1 -->`) strictly from `AGENTS.md`, `DESIGN.md`, and `ASSUMPTIONS.md`, added machine-readable YAML frontmatter to `DESIGN.md` (preserving all existing sections `0`–`12` verbatim), and generated the `.impeccable/design.json` sidecar (`schemaVersion: 2`).
+- **Narrow Font Ignore (`.impeccable/config.json`):** Registered `overused-font: Inter` via `impeccable hooks ignore-value` because `DESIGN.md §3` & `ASSUMPTIONS.md #16` explicitly choose `Inter` as the English Body/UI font paired with `Lilita One`, `Bebas Neue`, `Lalezar`, and `Cairo`.
+- **Intentional `DESIGN.md` Findings Declined (Brand & Identity Wins):**
+  1. `gradient-text` (`.text-gold-sticker`, `.text-gold-sticker-lg`): Kept per `DESIGN.md §1 & §2` glossy gold-to-orange headline sticker treatment (adjusted Arabic `Lalezar` RTL stroke width to `0.042em`/`0.052em` so connected counters stay filled with gold, and reserved gold-on-red for `24px+` display text per `DESIGN.md §2` while making `<24px` header brand text crisp `#FFFFFF`).
+  2. `hard-offset-shadow` (`--shadow-sticker*`): Kept per `DESIGN.md §2 & §4` die-cut sticker offset shadow system (mirrored in RTL).
+  3. `dark-glow` (`--glow-gold` on `Buzzed First` state, Golden Seat, Lanterns, CrescentStar, MarqueeBulbs): Kept per `DESIGN.md §2 & §6`.
+  4. `radial-spotlight-glow` (`SunburstStage` focal radial bloom and `Spotlight` beams): Kept per `DESIGN.md §2 & §5`.
+  5. `repeating-stripes-gradient` (`repeating-conic-gradient` sunburst Stage background): Kept per `DESIGN.md §2 & §5`.
+  6. `cream-palette` (`--paper: #FFF9F0` warm off-white Paper surface): Kept per `DESIGN.md §2`.
+- **Bonus Idea (Shareable `?lang=ar|en` Query Param):** Extended `I18nProvider` (`src/lib/i18n/index.tsx`) to honor an initial `?lang=ar` or `?lang=en` URL parameter (persisting to `localStorage`) so presenters, clients, and automated RTL audits can open any route directly in Arabic RTL or English LTR via URL.
+
+
 

@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-18T20:25:00Z",
+  "title": "Design System: Casino El Al3ab — Stage & Paper",
+  "extensions": {
+    "colorMeta": {
+      "stage-red": {
+        "role": "primary",
+        "displayName": "Stage Crimson",
+        "canonical": "#C4163A",
+        "tonalRamp": ["#4F0716", "#5C091A", "#5F0A1C", "#7E0D26", "#A81233", "#C4163A", "#E5405C", "#FDE7EB", "#FFF9F0"]
+      },
+      "star-gold": {
+        "role": "secondary",
+        "displayName": "Game-Show Star Gold",
+        "canonical": "#FFC12B",
+        "tonalRamp": ["#4F0716", "#B35600", "#E8740C", "#FF9F1C", "#FFC12B", "#FFD54A", "#FFE066", "#FFE899"]
+      },
+      "electric-blue": {
+        "role": "tertiary",
+        "displayName": "Electric Contrast Spark",
+        "canonical": "#2F6BFF",
+        "tonalRamp": ["#14327F", "#1F4FD8", "#2F6BFF", "#5C8BFF", "#7FA8FF", "#B8D0FF", "#E6EEFF"]
+      },
+      "warm-paper": {
+        "role": "neutral",
+        "displayName": "Warm Off-White Paper",
+        "canonical": "#FFF9F0",
+        "tonalRamp": ["#2A0A10", "#4F0716", "#6B4A50", "#9A7C82", "#FBEFE0", "#FFF9F0", "#FFFFFF"]
+      },
+      "status-positive": {
+        "role": "semantic",
+        "displayName": "Positive Points Emerald",
+        "canonical": "#1FA971",
+        "tonalRamp": ["#0D6A43", "#168B5B", "#1FA971", "#5BC898", "#B7EED6", "#E6F8F0"]
+      },
+      "status-negative": {
+        "role": "semantic",
+        "displayName": "Penalty Maroon Red",
+        "canonical": "#B3001B",
+        "tonalRamp": ["#4F0716", "#7E0D26", "#B3001B", "#DC2F4A", "#FDE7EB"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display (Lilita One / Lalezar)", "purpose": "Chunky game-show headlines; gold gradient + maroon sticker stroke on Stage, maroon ink + gold highlight on Paper." },
+      "headline": { "displayName": "Headline", "purpose": "Section headings and modal titles with bilingual LTR/RTL tracking rules." },
+      "title": { "displayName": "Title", "purpose": "Card titles and player panel names." },
+      "score": { "displayName": "Score Numerals (Bebas Neue / Cairo 900)", "purpose": "Tabular score counters, timers, and casino chip numbers." },
+      "body": { "displayName": "Body (Inter / Cairo)", "purpose": "Readable bilingual UI copy and admin tables (16px minimum on inputs)." },
+      "label": { "displayName": "Label", "purpose": "Uppercase badges, eyebrows, and form field labels (no letter-spacing in RTL)." }
+    },
+    "shadows": [
+      { "name": "sticker", "value": "4px 4px 0 #4F0716", "purpose": "Standard die-cut sticker offset shadow (x mirrors to -4px in RTL)." },
+      { "name": "sticker-sm", "value": "2px 2px 0 #4F0716", "purpose": "Compact sticker shadow for badges, chips, and icon pills." },
+      { "name": "sticker-lg", "value": "8px 8px 0 #4F0716", "purpose": "Hero cards, bracket boss node, and dialogs." },
+      { "name": "soft", "value": "0 10px 30px rgba(79, 7, 22, 0.18)", "purpose": "Calm elevation for Paper admin cards and data tables." },
+      { "name": "glow-gold", "value": "0 0 28px rgba(255, 193, 43, 0.55)", "purpose": "Active Buzzed-First highlight and Golden Seat spotlight." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(0, 0, 0.2, 1)", "purpose": "Framer Motion easeOut (200-600ms) for reveals, counters, and tactile press states." },
+      { "name": "sunburst-spin", "value": "90s linear infinite", "purpose": "Slow Stage sunburst ray rotation (disabled under prefers-reduced-motion)." }
+    ],
+    "breakpoints": [
+      { "name": "xs", "value": "360px" },
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "2xl", "value": "1536px" },
+      { "name": "3xl", "value": "1920px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Stage Primary Button (Gold)",
+      "kind": "button",
+      "refersTo": "button-stage-primary",
+      "description": "Gold gradient sticker CTA used on red Stage and Stage-Dark surfaces.",
+      "html": "<button class=\"ds-btn-gold\">SEE LIVE DEMO</button>",
+      "css": ".ds-btn-gold { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 20px; border-radius: 14px; border: 2.5px solid var(--red-900, #4F0716); background: linear-gradient(180deg, #FFE066 0%, #FFC12B 40%, #FF9F1C 75%, #E8740C 100%); color: var(--red-900, #4F0716); font-weight: 800; font-size: 14px; box-shadow: 4px 4px 0 var(--red-900, #4F0716); cursor: pointer; transition: transform 150ms ease-out, box-shadow 150ms ease-out; } .ds-btn-gold:hover { transform: translateY(-2px); box-shadow: 6px 6px 0 var(--red-900, #4F0716); } .ds-btn-gold:active { transform: translate(3px, 3px); box-shadow: none; } .ds-btn-gold:focus-visible { outline: 3px solid var(--blue-500, #2F6BFF); outline-offset: 2px; box-shadow: 0 0 0 2px #FFFFFF; }"
+    },
+    {
+      "name": "Paper Primary Button (Crimson Red)",
+      "kind": "button",
+      "refersTo": "button-paper-primary",
+      "description": "Brand red primary CTA used on white and warm Paper surfaces.",
+      "html": "<button class=\"ds-btn-red\">SAVE SETTINGS</button>",
+      "css": ".ds-btn-red { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 20px; border-radius: 14px; border: 2.5px solid var(--red-900, #4F0716); background: var(--red-600, #C4163A); color: #FFFFFF; font-weight: 700; font-size: 14px; box-shadow: 4px 4px 0 var(--red-900, #4F0716); cursor: pointer; transition: transform 150ms ease-out, box-shadow 150ms ease-out, background-color 150ms ease-out; } .ds-btn-red:hover { background: var(--red-700, #A81233); transform: translateY(-2px); box-shadow: 6px 6px 0 var(--red-900, #4F0716); } .ds-btn-red:active { transform: translate(3px, 3px); box-shadow: none; } .ds-btn-red:focus-visible { outline: 3px solid var(--blue-500, #2F6BFF); outline-offset: 2px; box-shadow: 0 0 0 2px #FFFFFF; }"
+    },
+    {
+      "name": "Info Spark Button (White-Buffered Blue)",
+      "kind": "button",
+      "refersTo": "button-info",
+      "description": "Electric blue info/link button with crisp white halo so blue never touches red directly.",
+      "html": "<button class=\"ds-btn-info\">VIEW SCHEDULE</button>",
+      "css": ".ds-btn-info { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 20px; border-radius: 14px; border: 2.5px solid #FFFFFF; background: var(--blue-600, #1F4FD8); color: #FFFFFF; font-weight: 700; font-size: 14px; box-shadow: 0 0 0 2px var(--red-900, #4F0716), 4px 4px 0 var(--red-900, #4F0716); cursor: pointer; transition: transform 150ms ease-out, background-color 150ms ease-out; } .ds-btn-info:hover { background: var(--blue-800, #14327F); transform: translateY(-2px); } .ds-btn-info:active { transform: translate(3px, 3px); box-shadow: 0 0 0 2px var(--red-900, #4F0716); } .ds-btn-info:focus-visible { outline: 3px solid var(--blue-500, #2F6BFF); outline-offset: 2px; }"
+    },
+    {
+      "name": "Sticker Card",
+      "kind": "card",
+      "refersTo": "card-sticker",
+      "description": "Die-cut white sticker card with 2.5px maroon border and hard offset shadow.",
+      "html": "<div class=\"ds-card-sticker\"><strong>Table B · Semi-Final</strong><p>Live 3-player session with animated score chips.</p></div>",
+      "css": ".ds-card-sticker { background: #FFFFFF; color: var(--ink, #2A0A10); border: 2.5px solid var(--red-900, #4F0716); border-radius: 20px; padding: 20px; box-shadow: 4px 4px 0 var(--red-900, #4F0716); } .ds-card-sticker p { margin: 8px 0 0; color: var(--ink-muted, #6B4A50); font-size: 14px; }"
+    },
+    {
+      "name": "Calm Paper Card",
+      "kind": "card",
+      "refersTo": "card-calm",
+      "description": "Low-noise Paper card used across Admin tables, forms, and long reading views.",
+      "html": "<div class=\"ds-card-calm\"><strong>Tournament Settings</strong><p>1px warm border and soft maroon ambient shadow.</p></div>",
+      "css": ".ds-card-calm { background: #FFFFFF; color: var(--ink, #2A0A10); border: 1px solid rgba(79, 7, 22, 0.14); border-radius: 20px; padding: 20px; box-shadow: 0 10px 30px rgba(79, 7, 22, 0.18); } .ds-card-calm p { margin: 8px 0 0; color: var(--ink-muted, #6B4A50); font-size: 14px; }"
+    },
+    {
+      "name": "Paper Form Input",
+      "kind": "input",
+      "refersTo": "input-paper",
+      "description": "Crisp white input field (>= 16px font, 44px height) turning electric blue on focus.",
+      "html": "<input class=\"ds-input\" type=\"text\" value=\"+15\" aria-label=\"Custom Points\" />",
+      "css": ".ds-input { width: 100%; min-height: 44px; padding: 8px 14px; border-radius: 12px; border: 2px solid rgba(79, 7, 22, 0.14); background: #FFFFFF; color: var(--ink, #2A0A10); font-size: 16px; transition: border-color 150ms ease-out; } .ds-input:hover { border-color: rgba(79, 7, 22, 0.35); } .ds-input:focus-visible { outline: 3px solid var(--blue-500, #2F6BFF); outline-offset: 2px; border-color: var(--blue-500, #2F6BFF); }"
+    },
+    {
+      "name": "Casino Score Chip",
+      "kind": "chip",
+      "refersTo": "chip-gold",
+      "description": "Circular dashed-ring casino chip badge for rank markers and +/- point deltas.",
+      "html": "<span class=\"ds-chip-gold\"><span class=\"ds-chip-inner\">★</span></span>",
+      "css": ".ds-chip-gold { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; padding: 5px; border-radius: 9999px; border: 2.5px solid var(--red-900, #4F0716); background: var(--gold-400, #FFC12B); color: var(--red-900, #4F0716); box-shadow: 2px 2px 0 var(--red-900, #4F0716); font-weight: 900; font-variant-numeric: tabular-nums; } .ds-chip-inner { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border-radius: 9999px; border: 2px dashed rgba(79, 7, 22, 0.75); background: var(--gold-200, #FFE899); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Sunburst Game-Show Stage & Paper Studio",
+    "overview": "Bold crimson sunburst Stage sections carry live drama, glossy gold-to-orange sticker lettering, and game-show energy, alternating cleanly with warm off-white Paper sections designed for legible reading, forms, and calm Admin operations.",
+    "keyCharacteristics": [
+      "Red is the stage, white is the page: alternate Stage and Paper bands with angled/zigzag dividers.",
+      "Gold is the star: gold-to-orange gradients with thick maroon outlines mark headlines, primary stage CTAs, and winners.",
+      "Blue is the spark: electric blue marks focus rings, selection, and upcoming/info chips—always white-buffered when on red.",
+      "Sticker energy on Stage, calm clarity in Paper, high-contrast speed on Stage-Dark Scorer Console.",
+      "Bilingual EN (LTR) and AR (RTL) as equals, with mirrored sticker shadows and zero Arabic letter-spacing."
+    ],
+    "rules": [
+      { "name": "The Stage vs Paper Rule", "body": "White text on --red-600 works at any size; gold text on red is reserved for large 24px+ display type; body copy on gold uses --red-900.", "section": "colors" },
+      { "name": "The White-Buffered Blue Rule", "body": "Never place electric blue directly against red; sit blue on Paper or inside a white-bordered chip or focus ring.", "section": "colors" },
+      { "name": "The Sign & Icon Rule", "body": "Positive and negative points never rely on color alone: always pair color with explicit + / - signs and icons.", "section": "colors" },
+      { "name": "The No-Faux-Bold & RTL Tracking Rule", "body": "Disable synthetic font bolding on display faces and keep Arabic letter-spacing at 0.", "section": "typography" }
+    ],
+    "dos": [
+      "Do use CSS variables and Tailwind design tokens rather than ad-hoc hex values.",
+      "Do use logical properties (ms-, me-, ps-, pe-, text-start) and mirror sticker shadows in RTL.",
+      "Do enforce 44px+ minimum touch targets (56px+ on Scorer Console) and 16px+ form inputs."
+    ],
+    "donts": [
+      "Don't use photos of real people, copied show logos/artwork, or real-money gambling imagery.",
+      "Don't use purple-to-blue gradients, default Tailwind blue, or unthemed shadcn defaults.",
+      "Don't place blue elements directly on red backgrounds or use emojis as UI icons."
+    ]
+  }
+}

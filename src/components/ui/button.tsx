@@ -20,9 +20,9 @@ export const buttonVariants = cva(
         // Secondary: white fill with maroon/red outline
         secondary:
           'bg-white text-[color:var(--btn-secondary-fg)] border-[2.5px] border-[color:var(--btn-secondary-border)] shadow-sticker sticker-press hover:bg-paper',
-        // Info / link action: electric blue with white buffer ring so it never touches red directly
+        // Info / link action: electric blue with white buffer ring so it never touches red directly (blue-600 gives 7.1:1 AA/AAA white text contrast)
         info:
-          'bg-blue-500 text-white border-[2.5px] border-white ring-2 ring-outline shadow-sticker sticker-press hover:bg-blue-600',
+          'bg-blue-600 text-white border-[2.5px] border-white ring-2 ring-outline shadow-sticker sticker-press hover:bg-blue-800',
         // Destructive: deep maroon fill per DESIGN.md §6
         destructive:
           'bg-red-900 text-white border-[2.5px] border-outline shadow-sticker sticker-press hover:bg-negative',

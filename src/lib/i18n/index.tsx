@@ -73,7 +73,7 @@ const dictionary = {
       backToHome: 'Back to Pitch Home',
       placeholderBadge: 'RAMADAN 2027 PITCH PROTOTYPE',
       footerTagline: 'A bold, joyful Ramadan trivia & game-show tournament culminating in a Grand Final against Marwan Serry.',
-      footerDisclaimer: 'Pitch prototype — dates, venue, prizes, and sponsor packages are editable placeholders. No real-money gambling.',
+      footerDisclaimer: 'Pitch prototype: dates, venue, prizes, and sponsor packages are editable placeholders. No real-money gambling.',
       phaseShellReady: 'Phase 1 Architecture & App Shell Ready',
     },
   },
@@ -135,9 +135,9 @@ const dictionary = {
       accessRestrictedDesc: 'الحساب التجريبي الحالي لا يملك صلاحية الوصول إلى هذه الصفحة. يمكنك التبديل إلى حساب مصرّح له أدناه.',
       goToLogin: 'تبديل الحساب التجريبي',
       backToHome: 'العودة للصفحة الرئيسية',
-      placeholderBadge: 'نموذج عرض أولي — رمضان ٢٠٢٧',
+      placeholderBadge: 'نموذج عرض أولي: رمضان ٢٠٢٧',
       footerTagline: 'بطولة ترفيهية رمضانية على طراز برامج المسابقات الكبرى تُختتم بمواجهة مروان سري في النهائي.',
-      footerDisclaimer: 'نسخة عرض أولية — جميع المواعيد والمكان والجوائز وفئات الرعاية مبدئية وقابلة للتعديل. مسابقة معلومات وترفيه فقط.',
+      footerDisclaimer: 'نسخة عرض أولية: جميع المواعيد والمكان والجوائز وفئات الرعاية مبدئية وقابلة للتعديل. مسابقة معلومات وترفيه فقط.',
       phaseShellReady: 'اكتمل تأسيس البنية التحتية والهيكل العام (المرحلة الأولى)',
     },
   },
@@ -160,6 +160,12 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
+      const urlLang = new URLSearchParams(window.location.search).get('lang');
+      if (urlLang === 'en' || urlLang === 'ar') {
+        setLangState(urlLang);
+        window.localStorage.setItem(LANG_STORAGE_KEY, urlLang);
+        return;
+      }
       const saved = window.localStorage.getItem(LANG_STORAGE_KEY);
       if (saved === 'en' || saved === 'ar') {
         setLangState(saved);

@@ -34,6 +34,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { FanousIcon } from '@/components/motifs/RamadanMotifs';
 import { RoleGuard } from './RoleGuard';
+import { SkipLink } from './SkipLink';
 
 interface SidebarLinkItem {
   href: string;
@@ -142,6 +143,7 @@ export function StudioSidebarShell({
           : 'theme-paper bg-paper text-ink'
       )}
     >
+      <SkipLink />
       {/* Mobile Drawer & Tablet Expanded Rail Backdrop */}
       {(mobileDrawerOpen || tabletExpanded) && (
         <div
@@ -164,7 +166,15 @@ export function StudioSidebarShell({
 
       {/* Deep Red Sidebar (Right side in RTL via start-0) */}
       <aside
-        aria-label={mode === 'admin' ? 'Admin Navigation' : 'Scorer Navigation'}
+        aria-label={
+          mode === 'admin'
+            ? lang === 'ar'
+              ? 'قائمة إدارة البطولة'
+              : 'Admin Navigation'
+            : lang === 'ar'
+              ? 'قائمة لوحة الحكم'
+              : 'Scorer Navigation'
+        }
         className={cn(
           'fixed inset-y-0 start-0 z-50 flex flex-col border-e-[3px] border-outline pt-safe pb-safe ps-safe text-white transition-all duration-200',
           isScorer ? 'bg-red-800' : 'bg-red-800',
@@ -197,10 +207,10 @@ export function StudioSidebarShell({
                 desktopCollapsed ? 'xl:hidden' : 'xl:block'
               )}
             >
-              <div className="truncate py-0.5 leading-tight font-display text-lg text-gold-sticker">
+              <div className="truncate py-0.5 leading-tight font-display text-lg text-white [text-shadow:0_2px_0_var(--red-900)]">
                 {t.brandName}
               </div>
-              <div className="truncate text-[11px] font-bold uppercase ltr:tracking-wider rtl:tracking-normal text-white/90">
+              <div className="truncate text-xs font-bold uppercase ltr:tracking-wider rtl:tracking-normal text-white/90">
                 {mode === 'admin' ? t.nav.adminArea : t.nav.scorerConsole}
               </div>
             </div>
@@ -211,7 +221,7 @@ export function StudioSidebarShell({
             size="icon"
             onClick={() => setMobileDrawerOpen(false)}
             className="md:hidden"
-            aria-label="Close Sidebar"
+            aria-label={lang === 'ar' ? 'إغلاق القائمة الجانبية' : 'Close Sidebar'}
           >
             <X className="h-5 w-5" />
           </Button>
@@ -222,7 +232,15 @@ export function StudioSidebarShell({
           <button
             type="button"
             onClick={() => setTabletExpanded((prev) => !prev)}
-            aria-label={tabletExpanded ? 'Collapse navigation rail' : 'Expand navigation rail'}
+            aria-label={
+              tabletExpanded
+                ? lang === 'ar'
+                  ? 'طي القائمة'
+                  : 'Collapse navigation rail'
+                : lang === 'ar'
+                  ? 'توسيع القائمة'
+                  : 'Expand navigation rail'
+            }
             className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-button border-2 border-outline bg-white px-2 text-xs font-extrabold text-red-900 shadow-sticker-sm transition-colors hover:bg-paper xl:hidden focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           >
             {tabletExpanded ? (
@@ -238,7 +256,15 @@ export function StudioSidebarShell({
           <button
             type="button"
             onClick={() => setDesktopCollapsed((prev) => !prev)}
-            aria-label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={
+              desktopCollapsed
+                ? lang === 'ar'
+                  ? 'توسيع الشريط الجانبي'
+                  : 'Expand sidebar'
+                : lang === 'ar'
+                  ? 'طي الشريط الجانبي'
+                  : 'Collapse sidebar'
+            }
             className="hidden xl:flex min-h-[44px] w-full items-center justify-center gap-2 rounded-button border-2 border-outline bg-white px-2.5 text-xs font-extrabold text-red-900 shadow-sticker-sm transition-colors hover:bg-paper focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           >
             {desktopCollapsed ? (
@@ -263,6 +289,7 @@ export function StudioSidebarShell({
                 key={item.href}
                 href={item.href}
                 title={item.label}
+                aria-current={active ? 'page' : undefined}
                 onClick={() => {
                   setMobileDrawerOpen(false);
                   setTabletExpanded(false);
@@ -360,7 +387,7 @@ export function StudioSidebarShell({
               size="icon"
               className="md:hidden"
               onClick={() => setMobileDrawerOpen(true)}
-              aria-label="Open Sidebar"
+              aria-label={lang === 'ar' ? 'فتح القائمة الجانبية' : 'Open Sidebar'}
             >
               <Menu className="h-5 w-5" />
             </Button>
@@ -399,7 +426,7 @@ export function StudioSidebarShell({
             <button
               type="button"
               onClick={toggleLang}
-              aria-label="Toggle Language (English / Arabic)"
+              aria-label={lang === 'ar' ? 'تبديل اللغة إلى الإنجليزية' : 'Switch language to Arabic'}
               className={cn(
                 'inline-flex min-h-[44px] min-w-[44px] h-11 shrink-0 items-center justify-center gap-1.5 rounded-pill border-2 border-outline px-3 sm:px-3.5 text-xs font-extrabold shadow-sticker-sm sticker-press focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
                 isScorer
@@ -419,7 +446,11 @@ export function StudioSidebarShell({
           </div>
         )}
 
-        <main className="flex-1 px-3 py-4 xs:px-4 md:p-6 xl:p-8 pb-[calc(5.25rem+env(safe-area-inset-bottom))] md:pb-8">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="flex-1 px-3 py-4 xs:px-4 md:p-6 xl:p-8 pb-[calc(5.25rem+env(safe-area-inset-bottom))] md:pb-8 outline-none"
+        >
           <div className="mx-auto w-full max-w-content-wide">
             <RoleGuard>{children}</RoleGuard>
           </div>
@@ -428,7 +459,15 @@ export function StudioSidebarShell({
 
       {/* Mobile Bottom Navigation Bar (< md) */}
       <nav
-        aria-label={mode === 'admin' ? 'Mobile Admin Bar' : 'Mobile Scorer Bar'}
+        aria-label={
+          mode === 'admin'
+            ? lang === 'ar'
+              ? 'شريط تنقل الإدارة'
+              : 'Mobile Admin Bar'
+            : lang === 'ar'
+              ? 'شريط تنقل الحكم'
+              : 'Mobile Scorer Bar'
+        }
         className="fixed inset-x-0 bottom-0 z-40 border-t-[3px] border-outline bg-red-800 pb-safe text-white md:hidden [@media(max-height:460px)]:hidden"
       >
         <div className="grid grid-flow-col auto-cols-fr gap-1 px-2 py-1.5">
@@ -439,6 +478,7 @@ export function StudioSidebarShell({
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={active ? 'page' : undefined}
                 className={cn(
                   'flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-button px-1 py-1 text-[11px] font-bold transition-colors',
                   active
@@ -456,7 +496,7 @@ export function StudioSidebarShell({
             type="button"
             onClick={() => setMobileDrawerOpen(true)}
             className="flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-button px-1 py-1 text-[11px] font-bold text-white/90 hover:bg-red-700 hover:text-white"
-            aria-label="More navigation links"
+            aria-label={lang === 'ar' ? 'المزيد من الروابط' : 'More navigation links'}
           >
             <Menu className="h-4 w-4 shrink-0" />
             <span>{lang === 'ar' ? 'المزيد' : 'More'}</span>

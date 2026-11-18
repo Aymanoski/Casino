@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-11-18T20:06:59.257Z",
+        "reason": "DESIGN.md section 3 and ASSUMPTIONS.md #16 specify Inter for English Body/UI paired with Lilita One, Bebas Neue, Lalezar, and Cairo."
+      }
+    ]
+  }
+}
