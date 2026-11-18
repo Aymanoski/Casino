@@ -46,21 +46,25 @@ const TONE_STYLES: Record<ScoreChipTone, { outer: string; inner: string; text: s
 const SIZE_STYLES = {
   sm: {
     outer: 'h-9 w-9 p-1',
+    interactiveOuter: 'h-11 w-11 min-h-[44px] min-w-[44px] p-1',
     text: 'text-xs',
     sub: 'text-[8px]',
   },
   md: {
     outer: 'h-12 w-12 p-1.5',
+    interactiveOuter: 'h-12 w-12 min-h-[44px] min-w-[44px] p-1.5',
     text: 'text-base',
     sub: 'text-[9px]',
   },
   lg: {
     outer: 'h-16 w-16 p-1.5',
+    interactiveOuter: 'h-16 w-16 p-1.5',
     text: 'text-xl',
     sub: 'text-[10px]',
   },
   xl: {
     outer: 'h-20 w-20 p-2',
+    interactiveOuter: 'h-20 w-20 p-2',
     text: 'text-2xl',
     sub: 'text-[10px]',
   },
@@ -69,6 +73,7 @@ const SIZE_STYLES = {
 /**
  * ScoreChip (also exported as ChipBadge for Delighters hook point)
  * Circular poker chip badge with dashed inner ring and tabular number per DESIGN.md §5 & §6.
+ * Enforces 44px minimum touch target whenever interactive or clickable.
  */
 export function ScoreChip({
   value,
@@ -142,7 +147,7 @@ export function ScoreChip({
         onClick={onClick}
         className={cn(
           'group relative inline-flex shrink-0 items-center justify-center rounded-pill border-2 transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
-          dims.outer,
+          dims.interactiveOuter,
           styles.outer,
           className
         )}

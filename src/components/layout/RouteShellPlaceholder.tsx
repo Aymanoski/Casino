@@ -129,29 +129,29 @@ export function RouteShellPlaceholder({
   };
 
   return (
-    <div className="mx-auto max-w-content space-y-8 py-8 px-4 md:px-6">
+    <div className="mx-auto max-w-content-wide space-y-6 sm:space-y-8 py-4 sm:py-8 px-1 xs:px-3 md:px-6">
       <Card premium className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             <PokerChipIcon label="P1" />
             <Badge variant="gold">{t.common.phaseShellReady}</Badge>
           </div>
-          <Badge variant="live">
-            <Radio className="h-3 w-3 animate-pulse" />
-            <span>{lastRtEvent}</span>
+          <Badge variant="live" className="max-w-full truncate">
+            <Radio className="h-3 w-3 shrink-0 animate-pulse" />
+            <span className="truncate">{lastRtEvent}</span>
           </Badge>
         </div>
 
         <div className="space-y-2">
-          <h1 className="font-display text-3xl font-bold text-gold-gradient md:text-5xl">
+          <h1 className="font-display text-fluid-3xl font-bold text-gold-gradient">
             {localizeText(lang, titleEn, titleAr)}
           </h1>
-          <p className="max-w-3xl text-base text-text-muted">
+          <p className="max-w-3xl text-fluid-base text-text-muted">
             {localizeText(lang, subtitleEn, subtitleAr)}
           </p>
         </div>
 
-        <div className="rounded-input border border-border bg-surface-2 p-4 text-xs text-gold-100">
+        <div className="rounded-input border border-border bg-surface-2 p-4 text-xs sm:text-sm text-gold-100">
           <span className="font-semibold text-gold-300">
             {lang === 'ar' ? 'حالة المرحلة الحالية: ' : 'Phase Roadmap Note: '}
           </span>
@@ -160,52 +160,66 @@ export function RouteShellPlaceholder({
 
         {/* Live Repository Layer Verification Grid */}
         {stats && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-input border border-border bg-bg-raised p-4">
-              <div className="flex items-center justify-between text-xs text-text-muted">
+              <div className="flex items-center justify-between gap-2 text-xs text-text-muted">
                 <span>{lang === 'ar' ? 'اللاعبون (playerRepo)' : 'Seeded Players (playerRepo)'}</span>
-                <Users className="h-4 w-4 text-gold-500" />
+                <Users className="h-4 w-4 shrink-0 text-gold-500" />
               </div>
-              <div className="mt-2 font-score text-3xl text-ivory tabular-nums">
+              <div className="mt-2 font-score text-2xl sm:text-3xl text-ivory tabular-nums">
                 {formatNumber(stats.playerCount, {
                   useArabicIndicDigits: stats.useArabicIndic,
                 })}{' '}
-                <span className="text-sm text-gold-300">+ Marwan Serry</span>
-              </div>
-            </div>
-
-            <div className="rounded-input border border-border bg-bg-raised p-4">
-              <div className="flex items-center justify-between text-xs text-text-muted">
-                <span>{lang === 'ar' ? 'المباريات (gameRepo)' : 'Tournament Games (gameRepo)'}</span>
-                <Activity className="h-4 w-4 text-gold-500" />
-              </div>
-              <div className="mt-2 font-score text-3xl text-ivory tabular-nums">
-                {stats.finishedGames} Done ·{' '}
-                <span className="text-live">{stats.liveGames} Live</span> ·{' '}
-                {stats.scheduledGames} Sched
-              </div>
-            </div>
-
-            <div className="rounded-input border border-border bg-bg-raised p-4">
-              <div className="flex items-center justify-between text-xs text-text-muted">
-                <span>{lang === 'ar' ? 'فقرات البرنامج (segmentRepo)' : 'Show Segments (segmentRepo)'}</span>
-                <Database className="h-4 w-4 text-gold-500" />
-              </div>
-              <div className="mt-2 font-score text-3xl text-ivory tabular-nums">
-                {stats.segmentCount}{' '}
-                <span className="text-sm text-text-muted">
-                  ({stats.roundCount} Rounds)
+                <span className="text-sm text-gold-300">
+                  {lang === 'ar' ? '+ مروان سري' : '+ Marwan Serry'}
                 </span>
               </div>
             </div>
 
             <div className="rounded-input border border-border bg-bg-raised p-4">
-              <div className="flex items-center justify-between text-xs text-text-muted">
-                <span>{lang === 'ar' ? 'الأحداث والسجل (scoreRepo)' : 'Events & Audit (scoreRepo)'}</span>
-                <CheckCircle2 className="h-4 w-4 text-positive" />
+              <div className="flex items-center justify-between gap-2 text-xs text-text-muted">
+                <span>{lang === 'ar' ? 'المباريات (gameRepo)' : 'Tournament Games (gameRepo)'}</span>
+                <Activity className="h-4 w-4 shrink-0 text-gold-500" />
               </div>
-              <div className="mt-2 font-score text-3xl text-ivory tabular-nums">
-                {stats.scoreEventCount} Scores · {stats.auditCount} Audits
+              <div className="mt-2 font-score text-xl sm:text-2xl text-ivory tabular-nums">
+                {lang === 'ar' ? (
+                  <>
+                    {stats.finishedGames} منتهية ·{' '}
+                    <span className="text-live">{stats.liveGames} مباشر</span> ·{' '}
+                    {stats.scheduledGames} مجدولة
+                  </>
+                ) : (
+                  <>
+                    {stats.finishedGames} Done ·{' '}
+                    <span className="text-live">{stats.liveGames} Live</span> ·{' '}
+                    {stats.scheduledGames} Sched
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-input border border-border bg-bg-raised p-4">
+              <div className="flex items-center justify-between gap-2 text-xs text-text-muted">
+                <span>{lang === 'ar' ? 'فقرات البرنامج (segmentRepo)' : 'Show Segments (segmentRepo)'}</span>
+                <Database className="h-4 w-4 shrink-0 text-gold-500" />
+              </div>
+              <div className="mt-2 font-score text-2xl sm:text-3xl text-ivory tabular-nums">
+                {stats.segmentCount}{' '}
+                <span className="text-sm text-text-muted">
+                  ({stats.roundCount} {lang === 'ar' ? 'جولات' : 'Rounds'})
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-input border border-border bg-bg-raised p-4">
+              <div className="flex items-center justify-between gap-2 text-xs text-text-muted">
+                <span>{lang === 'ar' ? 'الأحداث والسجل (scoreRepo)' : 'Events & Audit (scoreRepo)'}</span>
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-positive" />
+              </div>
+              <div className="mt-2 font-score text-xl sm:text-2xl text-ivory tabular-nums">
+                {lang === 'ar'
+                  ? `${stats.scoreEventCount} نتيجة · ${stats.auditCount} سجل`
+                  : `${stats.scoreEventCount} Scores · ${stats.auditCount} Audits`}
               </div>
             </div>
           </div>
@@ -215,7 +229,7 @@ export function RouteShellPlaceholder({
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="primary" size="sm" onClick={handleTestScorePing}>
-              <Sparkles className="h-4 w-4" />
+              <Sparkles className="h-4 w-4 shrink-0" />
               <span>
                 {lang === 'ar'
                   ? 'اختبار البث المباشر (+٥ نقاط لطاولة ب)'
@@ -223,29 +237,29 @@ export function RouteShellPlaceholder({
               </span>
             </Button>
             <Button variant="secondary" size="sm" onClick={handleReset}>
-              <RotateCcw className="h-4 w-4" />
+              <RotateCcw className="h-4 w-4 shrink-0" />
               <span>{t.common.resetDemoData}</span>
             </Button>
           </div>
 
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <Link
               href="/login"
-              className="text-gold-300 underline hover:text-gold-100"
+              className="inline-flex min-h-[44px] items-center text-gold-300 underline hover:text-gold-100"
             >
               {t.nav.login}
             </Link>
-            <span className="text-text-faint">·</span>
+            <span className="text-text-faint" aria-hidden="true">·</span>
             <Link
               href="/scorer/game-11"
-              className="text-gold-300 underline hover:text-gold-100"
+              className="inline-flex min-h-[44px] items-center text-gold-300 underline hover:text-gold-100"
             >
               {t.nav.scorerConsole}
             </Link>
-            <span className="text-text-faint">·</span>
+            <span className="text-text-faint" aria-hidden="true">·</span>
             <Link
               href="/admin"
-              className="text-gold-300 underline hover:text-gold-100"
+              className="inline-flex min-h-[44px] items-center text-gold-300 underline hover:text-gold-100"
             >
               {t.nav.adminArea}
             </Link>

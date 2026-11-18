@@ -94,25 +94,25 @@ export default function LoginPage() {
   ];
 
   return (
-    <div className="flex min-h-screen flex-col bg-night-gradient">
+    <div className="flex min-h-dvh flex-col bg-night-gradient">
       <PublicHeader />
 
-      <main className="mx-auto w-full max-w-content flex-1 px-4 py-12 md:px-6 md:py-16">
-        <div className="mx-auto max-w-3xl text-center space-y-4 mb-12">
-          <div className="inline-flex items-center gap-2 rounded-pill border border-border-strong bg-surface px-4 py-1.5 text-xs font-semibold text-gold-300">
-            <CrescentStarIcon className="h-4 w-4" />
+      <main className="mx-auto w-full max-w-content-wide flex-1 px-safe py-8 sm:py-12 md:py-16">
+        <div className="mx-auto mb-8 sm:mb-12 max-w-3xl space-y-4 text-center">
+          <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-pill border border-border-strong bg-surface px-3.5 sm:px-4 py-1.5 text-xs font-semibold text-gold-300">
+            <CrescentStarIcon className="h-4 w-4 shrink-0" />
             <span>
               {lang === 'ar'
                 ? 'نظام الدخول التجريبي وتبديل الصلاحيات'
                 : 'Mock Role-Based Authentication & Demo Account Picker'}
             </span>
           </div>
-          <h1 className="font-display text-4xl font-bold text-gold-gradient md:text-5xl">
+          <h1 className="font-display text-fluid-4xl font-bold text-gold-gradient ltr:leading-[1.12] rtl:leading-[1.35]">
             {lang === 'ar'
               ? 'اختر دورك في بطولة كازينو الألعاب'
               : 'Select a Demo Role to Explore the Platform'}
           </h1>
-          <p className="text-base text-text-muted">
+          <p className="text-fluid-base text-text-muted">
             {lang === 'ar'
               ? 'اختر أي حساب تجريبي أدناه لاختبار الصلاحيات المخصصة لكل مدير أو حكم أو لاعب، تماماً كما ستعمل في النسخة الإنتاجية.'
               : 'Switch effortlessly between Super Admin, Table Scorers, Check-In Staff, Content Manager, Contestants, or Public Visitor.'}
@@ -120,14 +120,20 @@ export default function LoginPage() {
         </div>
 
         {/* Active Session Banner */}
-        <Card premium className="mb-10 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <PokerChipIcon label={user ? user.role.slice(0, 2).toUpperCase() : 'VS'} />
-            <div>
+        <Card
+          premium
+          className="mb-8 sm:mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex min-w-0 items-center gap-3.5 sm:gap-4">
+            <PokerChipIcon
+              className="shrink-0"
+              label={user ? user.role.slice(0, 2).toUpperCase() : 'VS'}
+            />
+            <div className="min-w-0">
               <div className="text-xs uppercase tracking-wider text-text-muted">
                 {lang === 'ar' ? 'الحساب النشط حالياً' : 'Currently Signed In As'}
               </div>
-              <div className="font-display text-2xl font-bold text-ivory">
+              <div className="truncate font-display text-fluid-xl font-bold text-ivory">
                 {user
                   ? `${localizeText(lang, user.name, user.nameAr)} — ${t.roles[user.role]}`
                   : t.roles.visitor}
@@ -135,7 +141,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col xs:flex-row flex-wrap items-stretch xs:items-center gap-2">
             {user && (
               <>
                 <Button
@@ -146,7 +152,7 @@ export default function LoginPage() {
                   {lang === 'ar' ? 'الذهاب إلى لوحة الدور' : 'Open Role Workspace'}
                 </Button>
                 <Button variant="secondary" size="sm" onClick={logout}>
-                  <LogOut className="h-4 w-4" />
+                  <LogOut className="h-4 w-4 shrink-0" />
                   <span>
                     {lang === 'ar' ? 'التبديل لوضع الزائر العام' : 'Switch to Public Visitor'}
                   </span>
@@ -154,8 +160,8 @@ export default function LoginPage() {
               </>
             )}
             {!user && (
-              <Badge variant="muted">
-                <Eye className="h-3.5 w-3.5" />
+              <Badge variant="muted" className="min-h-[44px] justify-center">
+                <Eye className="h-3.5 w-3.5 shrink-0" />
                 <span>
                   {lang === 'ar' ? 'وضع المشاهد العام فقط' : 'Public Spectator Mode'}
                 </span>
@@ -165,7 +171,7 @@ export default function LoginPage() {
         </Card>
 
         {/* Role Groups */}
-        <div className="space-y-8">
+        <div className="space-y-6 sm:space-y-8">
           {rolesOrder.map((roleKey) => {
             const meta = ROLE_META[roleKey];
             const Icon = meta.icon;
@@ -174,18 +180,18 @@ export default function LoginPage() {
             return (
               <Card key={roleKey} className="space-y-5">
                 <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-4">
-                  <div className="flex items-start gap-3.5">
+                  <div className="flex min-w-0 items-start gap-3.5">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-button border border-border-strong bg-surface-2 text-gold-300">
                       <Icon className="h-5 w-5" />
                     </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h2 className="font-display text-2xl font-bold text-ivory">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="font-display text-fluid-xl font-bold text-ivory">
                           {t.roles[roleKey]}
                         </h2>
                         <Badge variant="gold">{accounts.length}</Badge>
                       </div>
-                      <p className="text-xs text-positive">
+                      <p className="text-xs sm:text-sm text-positive">
                         ✓ {localizeText(lang, meta.canEn, meta.canAr)}
                       </p>
                       <p className="text-xs text-text-faint">
@@ -195,36 +201,36 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4">
                   {accounts.map((acc) => {
                     const isSelected = user?.id === acc.id;
                     return (
                       <div
                         key={acc.id}
                         className={cn(
-                          'flex flex-col justify-between rounded-input border p-4 transition-all',
+                          'flex min-w-0 flex-col justify-between rounded-input border p-4 transition-all',
                           isSelected
                             ? 'border-gold-500 bg-gold-500/15 shadow-glow-gold'
                             : 'border-border bg-surface-2 hover:border-border-strong'
                         )}
                       >
-                        <div className="space-y-1 mb-4">
+                        <div className="mb-4 min-w-0 space-y-1">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="font-semibold text-ivory">
+                            <span className="truncate font-semibold text-ivory">
                               {localizeText(lang, acc.name, acc.nameAr)}
                             </span>
                             {isSelected && (
                               <CheckCircle2 className="h-4 w-4 text-gold-300 shrink-0" />
                             )}
                           </div>
-                          <div className="text-xs text-gold-300">
+                          <div className="truncate text-xs text-gold-300">
                             {localizeText(
                               lang,
                               acc.titleEn ?? t.roles[acc.role],
                               acc.titleAr
                             )}
                           </div>
-                          <div className="text-[11px] text-text-faint font-mono">
+                          <div className="truncate text-[11px] text-text-faint font-mono">
                             {acc.email}
                           </div>
                         </div>

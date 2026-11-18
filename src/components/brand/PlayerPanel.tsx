@@ -33,8 +33,8 @@ export interface PlayerPanelProps {
 
 /**
  * PlayerPanel (Delighters hook point per AGENTS.md §12 & DESIGN.md §6)
- * Displays avatar in gold ring, name, nickname in muted text, big tabular score,
- * rank pill, and "BUZZED" glow state (pulsing gold ring).
+ * Container-query responsive panel displaying avatar in gold ring, name, nickname,
+ * fluid tabular score, rank pill, "BUZZED" glow state, and 56px+ scorer actions.
  */
 export function PlayerPanel({
   name,
@@ -58,7 +58,6 @@ export function PlayerPanel({
   const { lang } = useI18n();
   const prefersReducedMotion = useReducedMotion();
 
-  // Track score deltas automatically when score changes
   const prevScoreRef = useRef<number>(score);
   const [flashDelta, setFlashDelta] = useState<{ id: number; delta: number } | null>(
     null
@@ -114,7 +113,7 @@ export function PlayerPanel({
           : undefined
       }
       className={cn(
-        'relative flex flex-col justify-between overflow-hidden rounded-card border p-6 transition-all duration-300 shadow-card-inner',
+        '@container relative flex min-w-0 flex-col justify-between overflow-hidden rounded-card border p-4 @xs:p-5 @md:p-6 transition-all duration-300 shadow-card-inner',
         isHost || variant === 'finalBoss'
           ? 'border-gold-300 bg-gradient-to-b from-[#241B0B] via-surface to-bg shadow-glow-gold-lg'
           : isBuzzed
@@ -149,6 +148,7 @@ export function PlayerPanel({
           <Badge
             variant={rank === 1 || isHost ? 'gold' : 'muted'}
             className={cn(
+              'max-w-full truncate',
               (rank === 1 || isHost) &&
                 'border-gold-300/70 bg-gold-500/20 text-gold-100 font-semibold'
             )}
@@ -160,7 +160,7 @@ export function PlayerPanel({
           <span />
         )}
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {isWinner && (
             <Badge variant="positive" className="font-bold">
               {lang === 'ar' ? 'الفائز ★' : 'WINNER ★'}
@@ -171,15 +171,15 @@ export function PlayerPanel({
               variant="gold"
               className="border-gold-100 bg-gold-gradient text-bg font-bold shadow-glow-gold"
             >
-              <Zap className="h-3.5 w-3.5 fill-current" />
+              <Zap className="h-3.5 w-3.5 fill-current shrink-0" />
               <span>{buzzedLabel}</span>
             </Badge>
           )}
         </div>
       </div>
 
-      {/* Middle Row: Avatar + Name + Nickname */}
-      <div className="relative z-10 my-5 flex items-center gap-4">
+      {/* Middle Row: Avatar + Name + Nickname (adapts smoothly to container width) */}
+      <div className="relative z-10 my-4 @sm:my-5 flex items-center gap-3 @sm:gap-4">
         <PlayerAvatar
           name={name}
           avatarSeed={avatarSeed}
@@ -187,20 +187,25 @@ export function PlayerPanel({
           isHost={isHost}
           buzzed={isBuzzed}
           rank={rank}
+          className={cn(
+            !isLargeScreen && 'h-12 w-12 @xs:h-14 @xs:w-14 @md:h-16 @md:w-16'
+          )}
         />
 
         <div className="min-w-0 flex-1">
           <h3
             className={cn(
-              'truncate font-display font-bold tracking-tight',
-              isLargeScreen ? 'text-2xl md:text-3xl' : 'text-xl md:text-2xl',
+              'truncate font-display font-bold ltr:tracking-tight rtl:tracking-normal',
+              isLargeScreen
+                ? 'text-[clamp(1.35rem,6cqi,2.25rem)]'
+                : 'text-[clamp(1.15rem,5.5cqi,1.65rem)]',
               isHost ? 'text-gold-gradient' : 'text-ivory'
             )}
           >
             {name}
           </h3>
           {nickname && (
-            <p className="truncate text-sm font-medium text-text-muted">
+            <p className="truncate text-xs @sm:text-sm font-medium text-text-muted">
               “{nickname}”
             </p>
           )}
@@ -208,12 +213,12 @@ export function PlayerPanel({
       </div>
 
       {/* Score Section with Animated Counter & Floating Delta Flash */}
-      <div className="relative z-10 flex items-baseline justify-between border-t border-border/80 pt-4">
-        <span className="text-xs font-semibold uppercase tracking-widest text-text-muted">
+      <div className="relative z-10 flex flex-wrap items-baseline justify-between gap-2 border-t border-border/80 pt-3.5 @sm:pt-4">
+        <span className="text-[11px] @sm:text-xs font-semibold uppercase tracking-widest text-text-muted">
           {lang === 'ar' ? 'إجمالي النقاط' : 'TOTAL POINTS'}
         </span>
 
-        <div className="relative flex items-baseline gap-2">
+        <div className="relative ms-auto flex items-baseline gap-2">
           <AnimatePresence>
             {flashDelta && (
               <motion.span
@@ -226,12 +231,12 @@ export function PlayerPanel({
                 animate={
                   prefersReducedMotion
                     ? { opacity: 1, y: 0 }
-                    : { opacity: 1, y: flashDelta.delta > 0 ? -12 : 10, scale: 1 }
+                    : { opacity: 1, y: flashDelta.delta > 0 ? -10 : 8, scale: 1 }
                 }
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.35, ease: 'easeOut' }}
                 className={cn(
-                  'font-score text-xl md:text-2xl font-bold tabular-nums px-2 py-0.5 rounded-pill border',
+                  'font-score text-lg @sm:text-2xl font-bold tabular-nums px-2 py-0.5 rounded-pill border',
                   flashDelta.delta > 0
                     ? 'border-positive/50 bg-positive/15 text-positive'
                     : 'border-negative/50 bg-negative/15 text-negative'
@@ -251,17 +256,17 @@ export function PlayerPanel({
             className={cn(
               'font-score font-bold leading-none tracking-wider',
               isLargeScreen
-                ? 'text-6xl md:text-7xl text-gold-gradient'
-                : 'text-5xl text-gold-100'
+                ? 'text-[clamp(2.5rem,13cqi,5rem)] text-gold-gradient'
+                : 'text-[clamp(2.25rem,11cqi,3.5rem)] text-gold-100'
             )}
           />
         </div>
       </div>
 
-      {/* Optional Scorer Console Action Target (Big "Buzzed First" button + Preset Chips) */}
+      {/* Scorer Console Action Targets: minimum 56px tall touch targets */}
       {(onBuzz || (presetPoints && onApplyPreset)) && (
         <div
-          className="relative z-10 mt-4 space-y-3 border-t border-border pt-4"
+          className="relative z-10 mt-4 space-y-2.5 border-t border-border pt-4"
           onClick={(e) => e.stopPropagation()}
         >
           {onBuzz && (
@@ -269,7 +274,7 @@ export function PlayerPanel({
               type="button"
               onClick={onBuzz}
               className={cn(
-                'flex min-h-[56px] w-full items-center justify-center gap-2 rounded-button border px-4 py-3 text-base font-bold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
+                'flex min-h-[56px] w-full items-center justify-center gap-2 rounded-button border px-4 py-3 text-base font-bold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 active:scale-[0.99]',
                 isBuzzed
                   ? 'border-gold-100 bg-gold-gradient text-bg shadow-glow-gold'
                   : 'border-border-strong bg-surface-2 text-ivory hover:border-gold-500 hover:bg-gold-500/15'
@@ -277,7 +282,7 @@ export function PlayerPanel({
             >
               <Zap
                 className={cn(
-                  'h-5 w-5',
+                  'h-5 w-5 shrink-0',
                   isBuzzed ? 'fill-current text-bg' : 'text-gold-500'
                 )}
               />
@@ -301,7 +306,7 @@ export function PlayerPanel({
                   type="button"
                   onClick={() => onApplyPreset(pts)}
                   className={cn(
-                    'flex min-h-[52px] items-center justify-center rounded-button border font-score text-xl font-bold tabular-nums transition-all duration-150 active:scale-95',
+                    'flex min-h-[56px] items-center justify-center rounded-button border font-score text-xl font-bold tabular-nums transition-all duration-150 active:scale-95',
                     pts > 0
                       ? 'border-positive/60 bg-positive/15 text-positive hover:bg-positive hover:text-bg'
                       : 'border-negative/60 bg-negative/15 text-negative hover:bg-negative hover:text-ivory'

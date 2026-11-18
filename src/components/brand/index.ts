@@ -12,6 +12,7 @@ export * from './PlayerAvatar';
 export * from './PlayerPanel';
 export * from './ScoreboardRow';
 export * from './TimerRing';
+export * from './BracketNode';
 export { EmptyState } from '@/components/ui/empty-state';
 export {
   Skeleton,

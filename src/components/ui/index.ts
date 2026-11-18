@@ -4,6 +4,7 @@ export * from './badge';
 export * from './input';
 export * from './textarea';
 export * from './select';
+export * from './form-grid';
 export * from './dialog';
 export * from './toast';
 export * from './tabs';
@@ -20,6 +21,8 @@ export {
   PlayerPanel,
   ScoreboardRow,
   TimerRing,
+  BracketNode,
+  BracketTrack,
   SectionHeading,
   GoldDivider,
   Lantern,

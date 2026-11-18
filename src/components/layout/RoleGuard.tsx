@@ -18,7 +18,7 @@ export function RoleGuard({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center p-8">
+      <div className="flex min-h-[50dvh] items-center justify-center p-8">
         <div className="h-10 w-10 animate-spin rounded-pill border-2 border-gold-500 border-t-transparent" />
       </div>
     );
@@ -29,7 +29,7 @@ export function RoleGuard({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-16">
+    <div className="mx-auto max-w-2xl px-3 py-8 sm:px-4 sm:py-16">
       <Card premium className="space-y-6 text-center">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-pill border border-border-strong bg-gold-500/15 text-gold-300">
           <ShieldAlert className="h-7 w-7" />
@@ -39,7 +39,7 @@ export function RoleGuard({ children }: { children: React.ReactNode }) {
           <Badge variant="gold">
             {user ? t.roles[user.role] : t.roles.visitor}
           </Badge>
-          <h1 className="font-display text-3xl font-bold text-ivory">
+          <h1 className="font-display text-fluid-2xl font-bold text-ivory">
             {t.common.accessRestricted}
           </h1>
           <p className="text-sm text-text-muted">
@@ -47,28 +47,28 @@ export function RoleGuard({ children }: { children: React.ReactNode }) {
           </p>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2 text-start">
+        <div className="grid gap-2.5 sm:grid-cols-2 text-start">
           {demoUsers.map((demoAcc) => (
             <button
               key={demoAcc.id}
               type="button"
               onClick={() => loginAs(demoAcc.id)}
-              className="flex items-center justify-between rounded-input border border-border bg-surface-2 p-3 transition-all hover:border-gold-500 hover:bg-gold-500/10"
+              className="flex min-h-[52px] items-center justify-between gap-2 rounded-input border border-border bg-surface-2 p-3 transition-all hover:border-gold-500 hover:bg-gold-500/10"
             >
-              <div>
-                <div className="text-sm font-semibold text-ivory">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-ivory">
                   {localizeText(lang, demoAcc.name, demoAcc.nameAr)}
                 </div>
-                <div className="text-xs text-gold-300">
+                <div className="truncate text-xs text-gold-300">
                   {t.roles[demoAcc.role]}
                 </div>
               </div>
-              <UserCheck className="h-4 w-4 text-gold-500" />
+              <UserCheck className="h-4 w-4 shrink-0 text-gold-500" />
             </button>
           ))}
         </div>
 
-        <div className="flex justify-center gap-3 pt-2">
+        <div className="flex flex-col xs:flex-row flex-wrap justify-center gap-3 pt-2">
           <Button asChild variant="secondary">
             <Link href="/login">{t.common.goToLogin}</Link>
           </Button>

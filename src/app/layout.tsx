@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import {
   Bebas_Neue,
   Cairo,
@@ -52,6 +52,13 @@ export const metadata: Metadata = {
     'A luxury Ramadan trivia & game-show tournament culminating in a Grand Final against Marwan Serry.',
 };
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#070B1A',
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -64,7 +71,7 @@ export default function RootLayout({
       className={`${cormorant.variable} ${bebas.variable} ${inter.variable} ${reemKufi.variable} ${cairo.variable}`}
       suppressHydrationWarning
     >
-      <body className="min-h-screen bg-bg text-ivory antialiased selection:bg-gold-500 selection:text-bg">
+      <body className="min-h-dvh bg-bg text-ivory antialiased selection:bg-gold-500 selection:text-bg">
         <I18nProvider>
           <AuthProvider>
             <ToastProvider>{children}</ToastProvider>

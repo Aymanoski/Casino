@@ -23,6 +23,8 @@ import type { Player, Segment } from '@/lib/schemas';
 import { localizeText } from '@/lib/utils';
 import {
   Badge,
+  BracketNode,
+  BracketTrack,
   Button,
   Card,
   CardContent,
@@ -41,6 +43,7 @@ import {
   DialogTitle,
   DialogTrigger,
   EmptyState,
+  FormGrid,
   Input,
   PlayerPanelSkeleton,
   SelectField,
@@ -100,9 +103,10 @@ export default function StyleguidePage() {
   );
   const [urgentRemaining, setUrgentRemaining] = useState<number>(4);
 
-  // Form states
+  // Form & Table filter states
   const [customPoints, setCustomPoints] = useState<string>('15');
   const [selectedCategory, setSelectedCategory] = useState<string>('music');
+  const [tableCategoryFilter, setTableCategoryFilter] = useState<string>('all');
   const [scorerNote, setScorerNote] = useState<string>(
     'Guessed the reversed Amr Diab chorus in 3 seconds!'
   );
@@ -161,7 +165,7 @@ export default function StyleguidePage() {
       ]);
       if (!mounted) return;
       setSeededPlayers(allPlayers.slice(0, 8));
-      setSegments(allSegments.slice(0, 6));
+      setSegments(allSegments.slice(0, 8));
       setUseArabicIndic(settings.useArabicIndicDigits);
     };
     loadFromRepos();
@@ -207,28 +211,33 @@ export default function StyleguidePage() {
 
   const sortedSandbox = [...sandboxPlayers].sort((a, b) => b.score - a.score);
 
+  const visibleSegments =
+    tableCategoryFilter === 'all'
+      ? segments
+      : segments.filter((s) => s.category === tableCategoryFilter);
+
   return (
-    <div className="min-h-screen pb-24">
-      {/* Sticky Styleguide Inspector & Direction Switcher Bar */}
-      <div className="sticky top-16 sm:top-20 z-40 border-b border-border-strong bg-bg-raised/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-content flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-6">
-          <div className="flex items-center gap-2.5">
-            <ScoreChip value="P2" size="sm" />
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-display text-base font-bold text-gold-gradient">
+    <div className="min-h-dvh pb-24">
+      {/* Styleguide Inspector Bar: sticky only on md+ tall viewports so phones/landscape/zoomed screens keep screen space */}
+      <div className="relative md:sticky md:top-header-h [@media(max-height:740px)]:static z-30 border-b border-border-strong bg-bg-raised/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-content-wide 3xl:max-w-stage flex-col gap-3 px-safe py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <ScoreChip value="P2" size="sm" className="shrink-0" />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="truncate font-display text-fluid-lg font-bold text-gold-gradient">
                   {lang === 'ar'
                     ? 'دليل نظام التصميم — ليالي كازينو رمضان'
                     : 'Ramadan Casino Night — Design System & Styleguide'}
                 </span>
-                <Badge variant="gold" className="hidden sm:inline-flex">
-                  DESIGN.md v2.0
+                <Badge variant="gold" className="hidden sm:inline-flex shrink-0">
+                  DESIGN.md v2.1
                 </Badge>
               </div>
-              <p className="text-xs text-text-muted">
+              <p className="truncate text-xs text-text-muted">
                 {lang === 'ar'
                   ? 'جميع المكونات في /components/ui و /components/brand (يدعم العربية RTL والإنجليزية LTR)'
-                  : 'Complete component library in /components/ui & /components/brand (EN/LTR + AR/RTL verified)'}
+                  : 'Complete responsive component library in /components/ui & /components/brand (320px–2560px)'}
               </p>
             </div>
           </div>
@@ -243,7 +252,7 @@ export default function StyleguidePage() {
               <button
                 type="button"
                 onClick={() => setLang('en')}
-                className={`rounded-pill px-3 py-1 text-xs font-semibold transition-all ${
+                className={`min-h-[44px] rounded-pill px-3.5 py-1.5 text-xs font-semibold transition-all ${
                   lang === 'en'
                     ? 'bg-gold-gradient text-bg shadow-glow-gold'
                     : 'text-text-muted hover:text-ivory'
@@ -254,7 +263,7 @@ export default function StyleguidePage() {
               <button
                 type="button"
                 onClick={() => setLang('ar')}
-                className={`rounded-pill px-3 py-1 text-xs font-semibold transition-all ${
+                className={`min-h-[44px] rounded-pill px-3.5 py-1.5 text-xs font-semibold transition-all ${
                   lang === 'ar'
                     ? 'bg-gold-gradient text-bg shadow-glow-gold'
                     : 'text-text-muted hover:text-ivory'
@@ -268,13 +277,13 @@ export default function StyleguidePage() {
             <button
               type="button"
               onClick={() => setUseArabicIndic((prev) => !prev)}
-              className={`inline-flex h-8 items-center gap-1.5 rounded-pill border px-3 text-xs font-semibold transition-colors ${
+              className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-pill border px-3.5 text-xs font-semibold transition-colors ${
                 useArabicIndic
                   ? 'border-gold-500 bg-gold-500/20 text-gold-100'
                   : 'border-border bg-surface text-text-muted hover:text-ivory'
               }`}
             >
-              <Hash className="h-3.5 w-3.5 text-gold-500" />
+              <Hash className="h-3.5 w-3.5 shrink-0 text-gold-500" />
               <span>{useArabicIndic ? '١٢٣ (هندي)' : '123 (Western)'}</span>
             </button>
 
@@ -282,13 +291,13 @@ export default function StyleguidePage() {
             <button
               type="button"
               onClick={() => setBilingualPreview((prev) => !prev)}
-              className={`inline-flex h-8 items-center gap-1.5 rounded-pill border px-3 text-xs font-semibold transition-colors ${
+              className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-pill border px-3.5 text-xs font-semibold transition-colors ${
                 bilingualPreview
                   ? 'border-gold-500 bg-gold-500/20 text-gold-100'
                   : 'border-border bg-surface text-text-muted hover:text-ivory'
               }`}
             >
-              <Globe className="h-3.5 w-3.5 text-gold-500" />
+              <Globe className="h-3.5 w-3.5 shrink-0 text-gold-500" />
               <span>
                 {lang === 'ar'
                   ? 'معاينة ثنائية (EN + AR)'
@@ -299,13 +308,13 @@ export default function StyleguidePage() {
         </div>
       </div>
 
-      {/* 1. HERO SHOWCASE: Spotlight + ArabesqueBackground + Lanterns + SectionHeading + MarqueeBulbs */}
+      {/* 1. HERO SHOWCASE: Spotlight + ArabesqueBackground + Lanterns + SectionHeading */}
       <Spotlight intensity="dramatic" beams="triple" className="border-b border-border">
-        <ArabesqueBackground className="py-12 md:py-16">
-          <div className="mx-auto max-w-content space-y-10 px-4 md:px-6">
+        <ArabesqueBackground className="py-section-y">
+          <div className="mx-auto max-w-content-wide 3xl:max-w-stage space-y-8 sm:space-y-10 px-safe">
             {/* Hanging Lanterns Row */}
             <div className="flex flex-col items-center justify-between gap-4 sm:flex-row sm:items-start">
-              <LanternCluster />
+              <LanternCluster className="scale-90 sm:scale-100" />
               <div className="flex flex-col items-center gap-2 sm:pt-4">
                 <LiveBadge
                   size="lg"
@@ -326,8 +335,8 @@ export default function StyleguidePage() {
               align="center"
               eyebrow={
                 lang === 'ar'
-                  ? 'المرحلة الثانية · نظام التصميم المتكامل'
-                  : 'PHASE 2 · COMPLETE DESIGN SYSTEM'
+                  ? 'المرحلة الثانية · نظام التصميم المتجاوب'
+                  : 'PHASE 2 · RESPONSIVE DESIGN SYSTEM'
               }
               title={
                 lang === 'ar'
@@ -337,16 +346,16 @@ export default function StyleguidePage() {
               goldKeyword={lang === 'ar' ? 'كازينو الألعاب' : 'Casino'}
               subtitle={
                 lang === 'ar'
-                  ? 'تم بناء جميع المكونات بدقة وفق ملف DESIGN.md: أزرار الحكم، البطاقات المضيئة، الفوانيس المتحركة، عدادات النقاط، وحلقات المؤقت.'
-                  : 'Every UI and Brand primitive crafted to DESIGN.md: midnight depths, precious gold gradients, swaying lanterns, poker chips, and broadcast scoreboards.'
+                  ? 'تم بناء جميع المكونات بدقة وفق ملف DESIGN.md: أزرار الحكم، البطاقات المضيئة، الفوانيس المتحركة، عدادات النقاط، وحلقات المؤقت عبر جميع المقاسات.'
+                  : 'Every UI and Brand primitive crafted to DESIGN.md: midnight depths, fluid clamp() typography, container queries, bottom-sheet dialogs, and broadcast scoreboards.'
               }
             />
 
             {/* Side-by-Side EN (LTR) & AR (RTL) Typography & Heading Specimen */}
             {bilingualPreview && (
-              <div className="grid gap-6 lg:grid-cols-2">
+              <div className="grid gap-grid-gap lg:grid-cols-2">
                 <Card dir="ltr" lang="en" className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <Badge variant="gold">ENGLISH · LTR SPECIMEN</Badge>
                     <span className="text-xs text-text-muted">
                       Cormorant Garamond + Bebas Neue + Inter
@@ -362,7 +371,7 @@ export default function StyleguidePage() {
                 </Card>
 
                 <Card dir="rtl" lang="ar" className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <Badge variant="gold">العربية · نموذج RTL</Badge>
                     <span className="text-xs text-text-muted">
                       Reem Kufi + Cairo (Tabular)
@@ -391,7 +400,7 @@ export default function StyleguidePage() {
         </ArabesqueBackground>
       </Spotlight>
 
-      <div className="mx-auto max-w-content space-y-16 px-4 pt-12 md:px-6">
+      <div className="mx-auto max-w-content-wide 3xl:max-w-stage space-y-12 sm:space-y-16 px-safe pt-10 sm:pt-12">
         {/* 2. PLAYER PANELS, SCOREBOARD ROWS, SCORE CHIPS & TIMER RING */}
         <section className="space-y-8" aria-labelledby="section-game-components">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -422,7 +431,7 @@ export default function StyleguidePage() {
                 size="sm"
                 onClick={() => applySandboxDelta(buzzedPlayerId, 10)}
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-4 w-4 shrink-0" />
                 <span>
                   {lang === 'ar'
                     ? '+١٠ للاعب الضاغط'
@@ -443,8 +452,8 @@ export default function StyleguidePage() {
             </div>
           </div>
 
-          {/* 3-Player Panel Grid (Final Night Preview: 2 Finalists + Marwan Serry Boss Seat) */}
-          <div className="grid gap-6 lg:grid-cols-3">
+          {/* 3-Player Panel Grid (1-col phone -> 2-col tablet -> 3-col xl+) */}
+          <div className="grid grid-cols-1 gap-grid-gap md:grid-cols-2 xl:grid-cols-3">
             {sandboxPlayers.map((p) => {
               const rank =
                 sortedSandbox.findIndex((item) => item.id === p.id) + 1;
@@ -489,11 +498,11 @@ export default function StyleguidePage() {
           </div>
 
           {/* ScoreboardRow + TimerRing Showcase */}
-          <div className="grid gap-8 lg:grid-cols-12">
+          <div className="grid gap-6 lg:grid-cols-12">
             {/* Live Reordering Scoreboard Rows */}
             <div className="space-y-4 lg:col-span-7">
-              <div className="flex items-center justify-between">
-                <h3 className="font-display text-2xl font-bold text-gold-100">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-display text-fluid-xl font-bold text-gold-100">
                   {lang === 'ar'
                     ? 'صفوف لوحة الصدارة (ScoreboardRow)'
                     : 'Animated Scoreboard Rows (ScoreboardRow)'}
@@ -537,8 +546,8 @@ export default function StyleguidePage() {
             {/* TimerRing Showcase (Standard Gold + Last-5-Seconds Ruby Pulse) */}
             <Card premium className="flex flex-col justify-between lg:col-span-5">
               <div>
-                <div className="flex items-center justify-between">
-                  <h3 className="font-display text-2xl font-bold text-gold-100">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="font-display text-fluid-xl font-bold text-gold-100">
                     {lang === 'ar'
                       ? 'حلقة المؤقت (TimerRing)'
                       : 'Segment Timer Ring (TimerRing)'}
@@ -549,12 +558,12 @@ export default function StyleguidePage() {
                 </div>
                 <p className="mt-1 text-xs text-text-muted">
                   {lang === 'ar'
-                    ? 'حلقة تقدم ذهبية تتحول إلى اللون الياقوتي وتنبض في آخر ٥ ثوانٍ.'
-                    : 'Circular gold progress ring; turns casino ruby and pulses in the final 5 seconds.'}
+                    ? 'حلقة تقدم ذهبية تتدرج مقاساتها وتتحول إلى اللون الياقوتي وتنبض في آخر ٥ ثوانٍ.'
+                    : 'Fluid clamp() circular progress ring; turns casino ruby and pulses in the final 5 seconds.'}
                 </p>
               </div>
 
-              <div className="my-6 flex flex-wrap items-center justify-around gap-6">
+              <div className="my-6 flex flex-wrap items-start justify-around gap-6">
                 <div className="flex flex-col items-center gap-2">
                   <TimerRing
                     durationSec={30}
@@ -604,29 +613,157 @@ export default function StyleguidePage() {
           ornament="crescent"
           label={
             lang === 'ar'
-              ? '٢. فيشات النقاط والشارات والصور الرمزية'
-              : '2. POKER SCORE CHIPS, BADGES & GENERATED AVATARS'
+              ? '٢. عقدة شجرة البطولة المتجاوبة (BracketNode)'
+              : '2. RESPONSIVE TOURNAMENT BRACKET NODES'
+          }
+        />
+
+        {/* BRACKET NODE & BRACKET TRACK SHOWCASE */}
+        <section className="space-y-6">
+          <SectionHeading
+            size="md"
+            eyebrow={lang === 'ar' ? 'شجرة البطولة' : 'TOURNAMENT BRACKET PRIMITIVES'}
+            title={
+              lang === 'ar'
+                ? 'عقد المباريات (BracketNode) مع التكبير والتمرير'
+                : 'Bracket Nodes & Horizontal Zoom Track'
+            }
+            goldKeyword={lang === 'ar' ? 'المباريات' : 'Bracket'}
+            subtitle={
+              lang === 'ar'
+                ? 'بطاقات مرنة لـ ٣ لاعبين تتكيف مع شاشات الهواتف وتتضمن عقدة النهائي المضيئة لمروان سري.'
+                : 'Container-query 3-player game nodes highlighting winners, LIVE tables, and Marwan Serry’s Golden Seat Final Boss node inside a zoomable pan track.'
+            }
+          />
+
+          <BracketTrack
+            title={
+              lang === 'ar'
+                ? 'معاينة مسار الأدوار الإقصائية (اسحب أفقياً أو كبّر)'
+                : 'Knockout Path Preview (Pan Horizontally & Zoom on Mobile)'
+            }
+          >
+            <div className="grid min-w-[260px] grid-cols-1 gap-6 lg:min-w-[820px] lg:grid-cols-3 lg:items-center">
+              <BracketNode
+                roundLabel={lang === 'ar' ? 'ربع النهائي · طاولة أ' : 'QUARTER-FINAL · TABLE A'}
+                tableName={lang === 'ar' ? 'طاولة أ (مكتملة)' : 'Table A (Finished)'}
+                status="finished"
+                useArabicIndicDigits={useArabicIndic}
+                players={[
+                  {
+                    id: 'p1',
+                    name: lang === 'ar' ? 'عمر حسن' : 'Omar Hassan',
+                    nickname: lang === 'ar' ? 'الثعلب' : 'The Fox',
+                    avatarSeed: 'omar',
+                    score: 85,
+                    isWinner: true,
+                    isAdvancing: true,
+                  },
+                  {
+                    id: 'p2',
+                    name: lang === 'ar' ? 'يوسف عادل' : 'Youssef Adel',
+                    nickname: lang === 'ar' ? 'جو' : 'Joe',
+                    avatarSeed: 'joe',
+                    score: 60,
+                  },
+                  {
+                    id: 'p3',
+                    name: lang === 'ar' ? 'مصطفى جمال' : 'Mostafa Gamal',
+                    nickname: lang === 'ar' ? 'توفا' : 'Tofa',
+                    avatarSeed: 'tofa',
+                    score: 45,
+                  },
+                ]}
+              />
+
+              <BracketNode
+                roundLabel={lang === 'ar' ? 'ربع النهائي · طاولة ب' : 'QUARTER-FINAL · TABLE B'}
+                tableName={lang === 'ar' ? 'طاولة ب (مباشر الآن)' : 'Table B (Live Now)'}
+                status="live"
+                useArabicIndicDigits={useArabicIndic}
+                players={[
+                  {
+                    id: 'p4',
+                    name: lang === 'ar' ? 'سلمى رضا' : 'Salma Reda',
+                    nickname: lang === 'ar' ? 'سلسبيل' : 'Salsabeel',
+                    avatarSeed: 'salma',
+                    score: 55,
+                    isAdvancing: true,
+                  },
+                  {
+                    id: 'p5',
+                    name: lang === 'ar' ? 'كريم نبيل' : 'Karim Nabil',
+                    nickname: lang === 'ar' ? 'كيه ناب' : 'K-Nab',
+                    avatarSeed: 'karim',
+                    score: 50,
+                  },
+                  {
+                    id: 'p6',
+                    name: lang === 'ar' ? 'أحمد سمير' : 'Ahmed Samir',
+                    nickname: lang === 'ar' ? 'سمورة' : 'Sammoora',
+                    avatarSeed: 'ahmed',
+                    score: 35,
+                  },
+                ]}
+              />
+
+              <BracketNode
+                isFinal
+                roundLabel={lang === 'ar' ? 'النهائي الكبير · ليلة الحسم' : 'GRAND FINAL · GOLDEN SEAT'}
+                tableName={lang === 'ar' ? 'مواجهة مروان سري' : 'Final vs Marwan Serry'}
+                status="scheduled"
+                useArabicIndicDigits={useArabicIndic}
+                players={[
+                  {
+                    id: 'p-marwan',
+                    name: lang === 'ar' ? 'مروان سري' : 'Marwan Serry',
+                    nickname: lang === 'ar' ? 'المضيف' : 'The Host',
+                    avatarSeed: 'marwan-host',
+                    isHost: true,
+                  },
+                  {
+                    id: 'sf-1',
+                    name: lang === 'ar' ? 'المتأهل الأول' : 'Finalist #1 (SF Top)',
+                    isPlaceholder: true,
+                  },
+                  {
+                    id: 'sf-2',
+                    name: lang === 'ar' ? 'المتأهل الثاني' : 'Finalist #2 (SF 2nd)',
+                    isPlaceholder: true,
+                  },
+                ]}
+              />
+            </div>
+          </BracketTrack>
+        </section>
+
+        <GoldDivider
+          ornament="crescent"
+          label={
+            lang === 'ar'
+              ? '٣. فيشات النقاط والشارات والصور الرمزية'
+              : '3. POKER SCORE CHIPS, BADGES & GENERATED AVATARS'
           }
         />
 
         {/* 3. SCORE CHIPS, BADGES, LIVE BADGE & PLAYER AVATARS */}
-        <section className="grid gap-8 lg:grid-cols-2">
+        <section className="grid gap-6 lg:grid-cols-2">
           {/* ScoreChip & Badges */}
           <Card className="space-y-6">
             <div>
-              <h3 className="font-display text-2xl font-bold text-gold-100">
+              <h3 className="font-display text-fluid-xl font-bold text-gold-100">
                 {lang === 'ar'
                   ? 'فيشات النقاط (ScoreChip) والشارات (Badge / LiveBadge)'
                   : 'ScoreChip (Poker Chip), Badge & LiveBadge'}
               </h3>
               <p className="mt-1 text-sm text-text-muted">
                 {lang === 'ar'
-                  ? 'فيشات دائرية بحلقة متقطعة وأرقام ثابتة العرض، ملونة حسب الحالة.'
-                  : 'Circular poker chips with dashed inner ring, tabular numerals, and status coding.'}
+                  ? 'فيشات دائرية بحلقة متقطعة وأرقام ثابتة العرض، بمساحة لمس ٤٤ بكسل عند التفاعل.'
+                  : 'Circular poker chips with dashed inner ring, tabular numerals, and 44px+ interactive targets.'}
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-4">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4">
               <ScoreChip
                 value={10}
                 tone="positive"
@@ -674,7 +811,7 @@ export default function StyleguidePage() {
                   ? 'جميع حالات الشارات (Badge & LiveBadge)'
                   : 'All Badge & LiveBadge Variants'}
               </span>
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2">
                 <LiveBadge size="sm" />
                 <LiveBadge
                   size="md"
@@ -692,7 +829,7 @@ export default function StyleguidePage() {
           {/* PlayerAvatar Geometric Patterns */}
           <Card className="space-y-6">
             <div>
-              <h3 className="font-display text-2xl font-bold text-gold-100">
+              <h3 className="font-display text-fluid-xl font-bold text-gold-100">
                 {lang === 'ar'
                   ? 'الصور الرمزية المولّدة هندسياً (PlayerAvatar)'
                   : 'Generated Geometric Avatars (PlayerAvatar)'}
@@ -704,7 +841,7 @@ export default function StyleguidePage() {
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-5">
+            <div className="flex flex-wrap items-center gap-4 sm:gap-5">
               <div className="flex flex-col items-center gap-1.5">
                 <PlayerAvatar
                   name="Marwan Serry"
@@ -772,8 +909,8 @@ export default function StyleguidePage() {
           ornament="crescent"
           label={
             lang === 'ar'
-              ? '٣. الأزرار والبطاقات القياسية والفاخرة'
-              : '3. BUTTONS & CARDS (STANDARD + PREMIUM MARQUEE)'
+              ? '٤. الأزرار والبطاقات القياسية والفاخرة'
+              : '4. BUTTONS & CARDS (STANDARD + PREMIUM MARQUEE)'
           }
         />
 
@@ -781,22 +918,22 @@ export default function StyleguidePage() {
         <section className="space-y-8">
           <Card className="space-y-6">
             <div>
-              <h3 className="font-display text-2xl font-bold text-gold-100">
+              <h3 className="font-display text-fluid-xl font-bold text-gold-100">
                 {lang === 'ar'
-                  ? 'الأزرار (Button — جميع الأحجام والحالات)'
-                  : 'Buttons (Primary, Secondary, Destructive, Large Scorer 56px+)'}
+                  ? 'الأزرار (Button — ٤٤ بكسل كحد أدنى، ٥٦ بكسل للحكم)'
+                  : 'Buttons (44px+ Min Touch Target, 56px+ Scorer Console)'}
               </h3>
               <p className="mt-1 text-sm text-text-muted">
                 {lang === 'ar'
                   ? 'تدرج ذهبي للأزرار الرئيسية، إطار ذهبي للثانوية، ياقوتي للحذف، وحجم كبير خاص بلوحة الحكم (٥٦ بكسل على الأقل).'
-                  : '14px radius, 2px gold focus ring with offset, soft gold glow on hover, and 56px+ tall scorer console touch targets.'}
+                  : '14px radius, 2px gold focus ring with offset, hover effects gated under (hover: hover), and 56px+ tall scorer console touch targets.'}
               </p>
             </div>
 
             {/* Variants */}
             <div className="flex flex-wrap items-center gap-3">
               <Button variant="primary">
-                <Sparkles className="h-4 w-4" />
+                <Sparkles className="h-4 w-4 shrink-0" />
                 <span>
                   {lang === 'ar' ? 'زر رئيسي ذهبي' : 'Primary Gold Gradient'}
                 </span>
@@ -809,14 +946,14 @@ export default function StyleguidePage() {
               </Button>
 
               <Button variant="destructive">
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-4 w-4 shrink-0" />
                 <span>
                   {lang === 'ar' ? 'حذف / إجراء خطر' : 'Destructive Ruby Outline'}
                 </span>
               </Button>
 
               <Button variant="destructiveSolid">
-                <Flame className="h-4 w-4" />
+                <Flame className="h-4 w-4 shrink-0" />
                 <span>
                   {lang === 'ar' ? 'تأكيد الحذف النهائي' : 'Destructive Confirm Fill'}
                 </span>
@@ -839,12 +976,12 @@ export default function StyleguidePage() {
             <div className="space-y-3 border-t border-border pt-4">
               <span className="block text-xs font-semibold uppercase tracking-wider text-gold-300">
                 {lang === 'ar'
-                  ? 'مقاسات الأزرار (بما في ذلك حجم لوحة الحكم Scorer ≥ 56px)'
-                  : 'Button Sizes (sm, md, lg, scorer ≥ 56px)'}
+                  ? 'مقاسات الأزرار (جميعها ≥ 44px وحجم الحكم ≥ 56px)'
+                  : 'Button Sizes (all ≥ 44px, Scorer ≥ 56px)'}
               </span>
               <div className="flex flex-wrap items-center gap-3">
                 <Button variant="secondary" size="sm">
-                  Small (36px)
+                  Small (44px)
                 </Button>
                 <Button variant="secondary" size="md">
                   Medium (44px)
@@ -852,8 +989,8 @@ export default function StyleguidePage() {
                 <Button variant="secondary" size="lg">
                   Large (48px)
                 </Button>
-                <Button variant="primary" size="scorer">
-                  <Zap className="h-5 w-5 fill-current" />
+                <Button variant="primary" size="scorer" className="w-full sm:w-auto">
+                  <Zap className="h-5 w-5 shrink-0 fill-current" />
                   <span>
                     {lang === 'ar'
                       ? 'حجم لوحة الحكم الكبير (56px+)'
@@ -879,7 +1016,7 @@ export default function StyleguidePage() {
                 <CardDescription>
                   {lang === 'ar'
                     ? 'حواف دائرية ٢٠ بكسل، إضاءة علوية داخلية ناعمة، وتوهج ذهبي خفيف عند التمرير.'
-                    : '20px corner radius, 1px gold-tinted border (--border), soft top inner highlight, and subtle gold hover glow.'}
+                    : '20px corner radius, 1px gold-tinted border (--border), soft top inner highlight, and fluid padding.'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -890,7 +1027,7 @@ export default function StyleguidePage() {
                 </p>
               </CardContent>
               <CardFooter>
-                <span className="text-xs text-text-muted">24px–32px padding</span>
+                <span className="text-xs text-text-muted">Fluid clamp() padding</span>
                 <Button variant="secondary" size="sm">
                   {lang === 'ar' ? 'استكشاف' : 'Explore'}
                 </Button>
@@ -899,7 +1036,7 @@ export default function StyleguidePage() {
 
             <Card premium marquee="perimeter" bulbCount={12}>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <Badge variant="gold">PREMIUM MARQUEE CARD</Badge>
                   <CrescentStar size="sm" glow />
                 </div>
@@ -915,14 +1052,14 @@ export default function StyleguidePage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <MarqueeBulbs variant="strip" bulbCount={14} />
+                <MarqueeBulbs variant="strip" bulbCount={12} />
               </CardContent>
               <CardFooter>
                 <span className="text-xs text-gold-300">
                   Respects prefers-reduced-motion
                 </span>
                 <Button variant="primary" size="sm">
-                  <Trophy className="h-4 w-4" />
+                  <Trophy className="h-4 w-4 shrink-0" />
                   <span>{lang === 'ar' ? 'المقعد الذهبي' : 'Golden Seat'}</span>
                 </Button>
               </CardFooter>
@@ -934,29 +1071,29 @@ export default function StyleguidePage() {
           ornament="crescent"
           label={
             lang === 'ar'
-              ? '٤. النماذج والحقول والنوافذ المنبثقة والتنبيهات'
-              : '4. FORMS (INPUT / SELECT / TEXTAREA), DIALOG & TOAST'
+              ? '٥. النماذج والحقول والنوافذ المنبثقة (Bottom Sheet على الهاتف)'
+              : '5. FORMS (16px+ INPUTS), BOTTOM-SHEET DIALOGS & TOASTS'
           }
         />
 
         {/* 5. FORMS, DIALOGS & TOASTS */}
-        <section className="grid gap-8 lg:grid-cols-12">
-          {/* Form Controls: Input, Select, Textarea */}
+        <section className="grid gap-6 lg:grid-cols-12">
+          {/* Form Controls: Input, Select, Textarea inside single-col-on-phone FormGrid */}
           <Card className="space-y-5 lg:col-span-7">
             <div>
-              <h3 className="font-display text-2xl font-bold text-gold-100">
+              <h3 className="font-display text-fluid-xl font-bold text-gold-100">
                 {lang === 'ar'
-                  ? 'حقول الإدخال والاختيار (Input, Select, Textarea)'
-                  : 'Form Controls (Input, Select, Textarea)'}
+                  ? 'حقول الإدخال والاختيار (عمود واحد على الهاتف)'
+                  : 'Form Controls (16px Min Font · 1-Col on Phones)'}
               </h3>
               <p className="mt-1 text-sm text-text-muted">
                 {lang === 'ar'
-                  ? 'خلفية surface-2، إطار تركيز ذهبي، ورسائل تحقق باللون الياقوتي.'
-                  : 'Surface-2 background, 12px radius, gold focus ring, and inline ruby validation.'}
+                  ? 'خلفية surface-2، خط بحجم ١٦ بكسل على الأقل لمنع تكبير iOS التلقائي، وعمود واحد على الشاشات الصغيرة.'
+                  : 'Surface-2 background, 16px+ font size to prevent iOS Safari zoom, and FormGrid single-column stacking on phones.'}
               </p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <FormGrid columns={2}>
               <Input
                 label={lang === 'ar' ? 'نقاط مخصصة (حكم الطاولة)' : 'Custom Points Delta'}
                 value={customPoints}
@@ -1009,7 +1146,7 @@ export default function StyleguidePage() {
                   },
                 ]}
               />
-            </div>
+            </FormGrid>
 
             <Input
               label={
@@ -1045,15 +1182,15 @@ export default function StyleguidePage() {
           <Card className="flex flex-col justify-between space-y-6 lg:col-span-5">
             <div className="space-y-4">
               <div>
-                <h3 className="font-display text-2xl font-bold text-gold-100">
+                <h3 className="font-display text-fluid-xl font-bold text-gold-100">
                   {lang === 'ar'
-                    ? 'النوافذ الحوارية (Dialog) والتنبيهات (Toast)'
-                    : 'Dialogs & Toast Notifications'}
+                    ? 'النوافذ الحوارية (Bottom Sheet على الهواتف) والتنبيهات'
+                    : 'Dialogs (Bottom Sheet on Phones) & Toasts'}
                 </h3>
                 <p className="mt-1 text-sm text-text-muted">
                   {lang === 'ar'
-                    ? 'نوافذ منتصف الليل بإطار ذهبي، مع زر تأكيد ياقوتي صريح للإجراءات الخطرة.'
-                    : 'Midnight surface with gold border. Destructive confirmations require an explicit ruby confirm button.'}
+                    ? 'تفتح النوافذ كلوحة سفلية على الهواتف ووسط الشاشة على التابلت والديسكتوب، مع زر تأكيد ياقوتي صريح.'
+                    : 'Dialogs slide up as a bottom sheet with safe-area padding on phones (< 640px) and center on sm+.'}
                 </p>
               </div>
 
@@ -1061,8 +1198,8 @@ export default function StyleguidePage() {
               <div className="flex flex-wrap gap-3">
                 <Dialog>
                   <DialogTrigger asChild>
-                    <Button variant="secondary">
-                      <Wand2 className="h-4 w-4 text-gold-500" />
+                    <Button variant="secondary" className="w-full xs:w-auto">
+                      <Wand2 className="h-4 w-4 shrink-0 text-gold-500" />
                       <span>
                         {lang === 'ar' ? 'فتح نافذة قياسية' : 'Open Standard Dialog'}
                       </span>
@@ -1115,8 +1252,8 @@ export default function StyleguidePage() {
                 <ConfirmDialog
                   destructive
                   trigger={
-                    <Button variant="destructive">
-                      <RotateCcw className="h-4 w-4" />
+                    <Button variant="destructive" className="w-full xs:w-auto">
+                      <RotateCcw className="h-4 w-4 shrink-0" />
                       <span>
                         {lang === 'ar'
                           ? 'نافذة تأكيد خطرة (Ruby)'
@@ -1162,7 +1299,7 @@ export default function StyleguidePage() {
                   ? 'تجربة التنبيهات الفورية (Toast Variants)'
                   : 'Trigger Toast Notifications'}
               </span>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                 <Button
                   variant="surface"
                   size="sm"
@@ -1180,7 +1317,7 @@ export default function StyleguidePage() {
                     })
                   }
                 >
-                  <Bell className="h-3.5 w-3.5 text-gold-500" />
+                  <Bell className="h-3.5 w-3.5 shrink-0 text-gold-500" />
                   <span>Gold Toast</span>
                 </Button>
 
@@ -1199,7 +1336,7 @@ export default function StyleguidePage() {
                     })
                   }
                 >
-                  <CheckCircle2 className="h-3.5 w-3.5 text-positive" />
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-positive" />
                   <span>Emerald Toast</span>
                 </Button>
 
@@ -1218,7 +1355,7 @@ export default function StyleguidePage() {
                     })
                   }
                 >
-                  <Flame className="h-3.5 w-3.5 text-negative" />
+                  <Flame className="h-3.5 w-3.5 shrink-0 text-negative" />
                   <span>Ruby Toast</span>
                 </Button>
 
@@ -1250,8 +1387,8 @@ export default function StyleguidePage() {
           ornament="crescent"
           label={
             lang === 'ar'
-              ? '٥. التبويبات والجداول وحالات الفراغ والتحميل'
-              : '5. TABS, ADMIN DATA TABLE, EMPTY STATE & SKELETONS'
+              ? '٦. التبويبات والجداول المتجاوبة وحالات الفراغ والتحميل'
+              : '6. TABS, RESPONSIVE DATA TABLE (CARDS + STICKY COL), EMPTY & SKELETONS'
           }
         />
 
@@ -1261,11 +1398,11 @@ export default function StyleguidePage() {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <TabsList>
                 <TabsTrigger value="table">
-                  <Layers className="h-4 w-4 text-gold-500" />
+                  <Layers className="h-4 w-4 shrink-0 text-gold-500" />
                   <span>
                     {lang === 'ar'
-                      ? 'جدول البيانات (DataTable)'
-                      : 'Sortable Admin Table'}
+                      ? 'جدول البيانات المتجاوب'
+                      : 'Responsive DataTable'}
                   </span>
                 </TabsTrigger>
                 <TabsTrigger value="empty">
@@ -1291,7 +1428,7 @@ export default function StyleguidePage() {
               >
                 {showTableEmpty
                   ? lang === 'ar'
-                    ? 'إظهار بيانات الجدول (٦ فقرات)'
+                    ? 'إظهار بيانات الجدول (٨ فقرات)'
                     : 'Populate Table Rows'
                   : lang === 'ar'
                     ? 'معاينة الجدول الفارغ'
@@ -1301,17 +1438,41 @@ export default function StyleguidePage() {
 
             <TabsContent value="table" className="mt-6">
               <DataTable
-                data={showTableEmpty ? [] : segments}
+                data={showTableEmpty ? [] : visibleSegments}
                 getRowKey={(seg) => seg.id}
                 searchPlaceholder={
                   lang === 'ar'
                     ? 'ابحث في فقرات البرنامج بالاسم أو الفئة...'
-                    : 'Search show segments by English/Arabic title or category...'
+                    : 'Search show segments by title or category...'
                 }
                 searchFilter={(seg, q) =>
                   seg.nameEn.toLowerCase().includes(q) ||
                   seg.nameAr.toLowerCase().includes(q) ||
                   seg.category.toLowerCase().includes(q)
+                }
+                filterLabel={lang === 'ar' ? 'تصفية الفئة' : 'Filter Category'}
+                filterSlot={
+                  <div className="w-full md:w-52">
+                    <SelectField
+                      value={tableCategoryFilter}
+                      onValueChange={setTableCategoryFilter}
+                      dir={lang === 'ar' ? 'rtl' : 'ltr'}
+                      options={[
+                        {
+                          value: 'all',
+                          label: lang === 'ar' ? 'جميع الفئات' : 'All Categories',
+                        },
+                        {
+                          value: 'music',
+                          label: lang === 'ar' ? 'موسيقى وغناء' : 'Music & Singing',
+                        },
+                        {
+                          value: 'wordplay',
+                          label: lang === 'ar' ? 'كلمات وسرعة' : 'Wordplay & Speed',
+                        },
+                      ]}
+                    />
+                  </div>
                 }
                 emptyTitle={
                   lang === 'ar'
@@ -1326,8 +1487,9 @@ export default function StyleguidePage() {
                 columns={[
                   {
                     key: 'order',
-                    header: lang === 'ar' ? '#' : '#',
+                    header: '#',
                     sortable: true,
+                    mobileRole: 'badge',
                     sortAccessor: (seg) => seg.order,
                     render: (seg) => (
                       <ScoreChip
@@ -1342,9 +1504,10 @@ export default function StyleguidePage() {
                     header:
                       lang === 'ar' ? 'اسم الفقرة (EN / AR)' : 'Segment Title (EN / AR)',
                     sortable: true,
+                    mobileRole: 'title',
                     sortAccessor: (seg) => seg.nameEn,
                     render: (seg) => (
-                      <div>
+                      <div className="min-w-[150px]">
                         <div className="font-semibold text-ivory">
                           {localizeText(lang, seg.nameEn, seg.nameAr)}
                         </div>
@@ -1369,7 +1532,7 @@ export default function StyleguidePage() {
                     key: 'presets',
                     header: lang === 'ar' ? 'النقاط المسبقة' : 'Preset Points',
                     render: (seg) => (
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         {seg.presetPoints.map((pt) => (
                           <Badge
                             key={pt}
@@ -1412,7 +1575,7 @@ export default function StyleguidePage() {
                       })
                     }
                   >
-                    <Play className="h-4 w-4 fill-current" />
+                    <Play className="h-4 w-4 shrink-0 fill-current" />
                     <span>
                       {lang === 'ar'
                         ? 'تشغيل مباراة تجريبية'
@@ -1424,7 +1587,7 @@ export default function StyleguidePage() {
             </TabsContent>
 
             <TabsContent value="skeletons" className="mt-6 space-y-6">
-              <div className="grid gap-6 md:grid-cols-3">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
                 <PlayerPanelSkeleton />
                 <PlayerPanelSkeleton />
                 <PlayerPanelSkeleton />
@@ -1434,10 +1597,10 @@ export default function StyleguidePage() {
                 <TableRowSkeleton columns={4} />
                 <TableRowSkeleton columns={4} />
               </div>
-              <div className="flex items-center gap-4">
-                <Skeleton shape="pill" className="h-12 w-12" />
-                <Skeleton className="h-11 w-48" />
-                <Skeleton shape="card" className="h-16 flex-1" />
+              <div className="flex flex-wrap items-center gap-4">
+                <Skeleton shape="pill" className="h-12 w-12 shrink-0" />
+                <Skeleton className="h-11 w-full max-w-[12rem]" />
+                <Skeleton shape="card" className="h-16 min-w-[140px] flex-1" />
               </div>
             </TabsContent>
           </Tabs>
@@ -1447,8 +1610,8 @@ export default function StyleguidePage() {
           ornament="suits"
           label={
             lang === 'ar'
-              ? '٦. الزخارف الرمضانية وعناصر الهوية البصرية'
-              : '6. SIGNATURE RAMADAN & CASINO MOTIFS'
+              ? '٧. الزخارف الرمضانية وعناصر الهوية البصرية'
+              : '7. SIGNATURE RAMADAN & CASINO MOTIFS'
           }
         />
 
@@ -1492,7 +1655,7 @@ export default function StyleguidePage() {
             </div>
           </Card>
 
-          <ArabesqueBackground className="rounded-card border border-border-strong bg-bg-raised p-6 flex flex-col justify-between text-center">
+          <ArabesqueBackground className="flex flex-col justify-between rounded-card border border-border-strong bg-bg-raised p-card-pad text-center">
             <div className="space-y-1">
               <Badge variant="gold">ARABESQUE + MARQUEE</Badge>
               <h3 className="font-display text-xl font-bold text-ivory">

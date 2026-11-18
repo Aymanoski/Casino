@@ -99,12 +99,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      {/* Toast Viewport */}
+      {/* Toast Viewport — clears mobile bottom bar & safe-area inset */}
       <div
         role="region"
         aria-label="Notifications"
         aria-live="polite"
-        className="pointer-events-none fixed bottom-4 end-4 z-[60] flex w-full max-w-sm flex-col gap-2.5 px-4 sm:px-0"
+        className="pointer-events-none fixed inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-[60] flex w-auto flex-col gap-2.5 sm:inset-x-auto sm:bottom-4 sm:end-4 sm:w-full sm:max-w-sm"
       >
         <AnimatePresence mode="popLayout">
           {toasts.map((item) => {
@@ -127,7 +127,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.22, ease: 'easeOut' }}
                 className={cn(
-                  'pointer-events-auto relative flex items-start gap-3 rounded-card border bg-surface p-4 text-ivory shadow-card-inner',
+                  'pointer-events-auto relative flex items-start gap-3 rounded-card border bg-surface p-3.5 sm:p-4 text-ivory shadow-card-inner',
                   v.border
                 )}
               >
@@ -146,9 +146,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   type="button"
                   onClick={() => dismissToast(item.id)}
                   aria-label="Dismiss notification"
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-pill text-text-muted hover:bg-surface-2 hover:text-ivory"
+                  className="-m-2 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-pill text-text-muted hover:bg-surface-2 hover:text-ivory"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="h-4 w-4" />
                 </button>
               </motion.div>
             );

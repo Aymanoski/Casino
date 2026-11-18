@@ -4,7 +4,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 export const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-button text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:pointer-events-none disabled:opacity-50 active:scale-[0.99]',
+  'inline-flex max-w-full items-center justify-center gap-2 whitespace-normal text-center leading-snug sm:whitespace-nowrap rounded-button text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:pointer-events-none disabled:opacity-50 active:scale-[0.99]',
   {
     variants: {
       variant: {
@@ -22,11 +22,12 @@ export const buttonVariants = cva(
           'text-text-muted hover:text-ivory hover:bg-surface/60',
       },
       size: {
-        sm: 'h-9 px-3.5 text-xs',
-        md: 'h-11 px-5 text-sm',
-        lg: 'h-12 px-6 text-base',
-        scorer: 'min-h-[56px] px-7 py-3.5 text-base md:text-lg font-bold tracking-wide',
-        icon: 'h-10 w-10 shrink-0',
+        sm: 'min-h-[44px] px-4 py-2 text-xs sm:text-sm',
+        md: 'min-h-[44px] px-5 py-2.5 text-sm',
+        lg: 'min-h-[48px] px-6 py-3 text-base',
+        scorer:
+          'min-h-[56px] px-5 sm:px-7 py-3.5 text-base md:text-lg font-bold tracking-wide',
+        icon: 'h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 p-0',
       },
     },
     defaultVariants: {

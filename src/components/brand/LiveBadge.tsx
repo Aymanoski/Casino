@@ -25,13 +25,13 @@ export function LiveBadge({
   const sizeStyles = {
     sm: 'px-2.5 py-0.5 text-[11px] gap-1.5',
     md: 'px-3 py-1 text-xs gap-2',
-    lg: 'px-4 py-1.5 text-sm gap-2',
+    lg: 'px-3.5 sm:px-4 py-1.5 text-xs sm:text-sm gap-2',
   }[size];
 
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-pill border border-live/60 bg-live/15 font-bold uppercase tracking-wider text-live shadow-[0_0_16px_rgba(255,77,77,0.28)]',
+        'inline-flex max-w-full items-center justify-center rounded-[18px] sm:rounded-pill border border-live/60 bg-live/15 text-center font-bold uppercase tracking-wider text-live shadow-[0_0_16px_rgba(255,77,77,0.28)]',
         sizeStyles,
         className
       )}

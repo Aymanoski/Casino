@@ -4,9 +4,9 @@ import { RouteShellPlaceholder } from '@/components/layout/RouteShellPlaceholder
 
 export default function BigScreenLeaderboardPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-night-gradient">
+    <div className="flex min-h-dvh flex-col bg-night-gradient">
       <PublicHeader />
-      <main className="flex-1">
+      <main className="flex-1 min-w-0 mx-auto w-full max-w-stage px-safe">
         <RouteShellPlaceholder
           titleEn="Venue Big Screen — Live Tournament Standings"
           titleAr="شاشة العرض العملاقة — الترتيب العام المباشر"

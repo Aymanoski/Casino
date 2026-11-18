@@ -12,9 +12,10 @@ export interface InputProps
 
 /**
  * Input
- * Per DESIGN.md §4 & §6:
+ * Per DESIGN.md §4 & §6 and AGENTS.md §13:
  * surface-2 background, 12px radius (rounded-input), gold focus border,
- * clear labels, inline validation in casino ruby (--negative), helper text in muted.
+ * minimum 16px font size (text-base) to prevent iOS Safari auto-zoom,
+ * minimum 44px touch height (min-h-[44px]), inline validation in casino ruby (--negative).
  */
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
   (
@@ -35,7 +36,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     const inputId = id ?? generatedId;
 
     return (
-      <div className="w-full space-y-1.5">
+      <div className="w-full min-w-0 space-y-1.5">
         {label && (
           <label
             htmlFor={inputId}
@@ -65,7 +66,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
                   : undefined
             }
             className={cn(
-              'flex h-11 w-full rounded-input border bg-surface-2 px-3.5 py-2 text-sm text-ivory placeholder:text-text-faint transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50',
+              'flex min-h-[44px] h-11 w-full min-w-0 rounded-input border bg-surface-2 px-3.5 py-2 text-base leading-normal text-ivory placeholder:text-text-faint transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50',
               error
                 ? 'border-negative focus-visible:border-negative focus-visible:ring-negative'
                 : 'border-border hover:border-border-strong focus-visible:border-gold-500',

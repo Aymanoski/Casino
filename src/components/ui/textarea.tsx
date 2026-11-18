@@ -14,7 +14,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
     const textareaId = id ?? generatedId;
 
     return (
-      <div className="w-full space-y-1.5">
+      <div className="w-full min-w-0 space-y-1.5">
         {label && (
           <label
             htmlFor={textareaId}
@@ -36,7 +36,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
                 : undefined
           }
           className={cn(
-            'flex min-h-[104px] w-full rounded-input border bg-surface-2 px-3.5 py-2.5 text-sm text-ivory placeholder:text-text-faint transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50',
+            'flex min-h-[112px] w-full min-w-0 rounded-input border bg-surface-2 px-3.5 py-2.5 text-base leading-relaxed text-ivory placeholder:text-text-faint transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50',
             error
               ? 'border-negative focus-visible:border-negative focus-visible:ring-negative'
               : 'border-border hover:border-border-strong focus-visible:border-gold-500',

@@ -82,4 +82,16 @@
 ### 14. Bonus Idea: Interactive Broadcast Table Sandbox & Dual EN/AR Specimen Inspector in `/styleguide`
 - **Built in Phase 2:** Instead of a static component gallery, `/styleguide` includes a sticky **Inspector Bar** (`EN · LTR` / `عربي · RTL` toggle, Western `123` vs. Arabic-Indic `١٢٣` numeral toggle, and a **Dual EN/AR Specimen** side-by-side preview) plus a live **Broadcast Table Sandbox** where clicking `+10`, `+5`, `-5`, or `Buzzed First` on any `PlayerPanel` updates `ScoreboardRow` animated counters, triggers floating emerald/ruby delta flashes, reorders ranks with Framer Motion layout animations, and fires themed `Toast` notifications.
 
+---
+
+## Responsive Retrofit Decisions (2026-11-18)
+
+### 15. Built-In Container Queries, Hover Gating & `overflow-x: clip`
+- **Context:** `AGENTS.md §13` requires mobile-first breakpoints including a `1920px+` tier, container queries, hover effects gated under `@media (hover: hover)`, `44px+` (`56px+` scorer) touch targets, `16px+` inputs, and zero horizontal page scroll.
+- **Decisions:**
+  - Configured strict ascending `theme.screens` (`xs: 360px` through `3xl: 1920px`), `future: { hoverOnlyWhenSupported: true }`, and an inline zero-dependency container-query Tailwind plugin (`@container`, `@2xs`..`@3xl`) in `tailwind.config.ts`.
+  - Replaced `body { overflow-x: hidden }` with `html, body { overflow-x: clip }` in `globals.css` so `position: sticky` headers and sticky table first-columns work reliably without masking layout regressions.
+  - Added `BracketNode` and `BracketTrack` (`src/components/brand/BracketNode.tsx`) alongside `FormGrid` (`src/components/ui/form-grid.tsx`) so responsive bracket trees (pan + zoom + mobile round stack) and single-column-on-phone forms are ready for Phases 3–9 by default.
+  - **Bonus Idea:** Added an on-device mobile `Cards | Table` view switcher and bottom-sheet `filterSlot` inside `DataTable`, allowing admins on phones to browse either stacked cards or the full sticky-first-column scrollable table with a single tap.
+
 

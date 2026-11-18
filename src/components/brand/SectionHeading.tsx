@@ -20,10 +20,10 @@ export interface SectionHeadingProps
 }
 
 const SIZE_STYLES = {
-  sm: 'text-2xl md:text-3xl',
-  md: 'text-3xl md:text-4xl',
-  lg: 'text-4xl md:text-5xl',
-  xl: 'text-4xl sm:text-5xl md:text-6xl',
+  sm: 'text-fluid-xl',
+  md: 'text-fluid-2xl',
+  lg: 'text-fluid-3xl',
+  xl: 'text-fluid-hero',
 };
 
 export function SectionHeading({
@@ -73,8 +73,8 @@ export function SectionHeading({
   return (
     <div
       className={cn(
-        'space-y-3',
-        align === 'center' ? 'text-center mx-auto max-w-3xl' : 'text-start',
+        'min-w-0 space-y-3',
+        align === 'center' ? 'mx-auto max-w-3xl text-center' : 'text-start',
         className
       )}
       {...props}
@@ -82,12 +82,12 @@ export function SectionHeading({
       {eyebrow && (
         <div
           className={cn(
-            'inline-flex items-center gap-2 rounded-pill border border-border-strong bg-surface/90 px-3.5 py-1 text-xs font-semibold uppercase tracking-widest text-gold-300 shadow-card-inner',
+            'inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-[18px] sm:rounded-pill border border-border-strong bg-surface/90 px-3 sm:px-3.5 py-1 text-[11px] sm:text-xs font-semibold uppercase tracking-widest text-gold-300 shadow-card-inner',
             align === 'center' && 'mx-auto'
           )}
         >
           <CrescentStar size="sm" />
-          <span>{eyebrow}</span>
+          <span className="break-words">{eyebrow}</span>
           <span className="text-[10px] text-gold-500/70" aria-hidden="true">
             ♠
           </span>
@@ -96,7 +96,7 @@ export function SectionHeading({
 
       <HeadingTag
         className={cn(
-          'font-display font-bold text-ivory ltr:tracking-tight ltr:leading-[1.15] rtl:tracking-normal rtl:leading-[1.38]',
+          'font-display font-bold text-ivory break-words ltr:tracking-tight ltr:leading-[1.14] rtl:tracking-normal rtl:leading-[1.38]',
           SIZE_STYLES[size]
         )}
       >
@@ -106,7 +106,7 @@ export function SectionHeading({
       {subtitle && (
         <p
           className={cn(
-            'text-base md:text-lg text-text-muted leading-relaxed',
+            'text-fluid-base text-text-muted leading-relaxed',
             align === 'center' ? 'mx-auto max-w-2xl' : 'max-w-2xl'
           )}
         >

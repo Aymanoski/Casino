@@ -28,7 +28,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
       <div
         ref={ref}
         className={cn(
-          'relative overflow-hidden rounded-card border bg-surface p-6 md:p-8 shadow-card-inner transition-all duration-200',
+          '@container relative min-w-0 overflow-hidden rounded-card border bg-surface p-card-pad shadow-card-inner transition-all duration-200',
           premium
             ? 'border-border-strong shadow-glow-gold bg-gradient-to-b from-surface-2/80 via-surface to-surface'
             : 'border-border hover:border-border-strong hover:shadow-[0_0_20px_rgba(232,184,75,0.12)]',
@@ -60,7 +60,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
 
         {/* Top Marquee Strip if marquee === 'strip' */}
         {marquee === 'strip' && (
-          <div className="mb-5">
+          <div className="mb-4 sm:mb-5">
             <MarqueeBulbs variant="strip" bulbCount={bulbCount} />
           </div>
         )}
@@ -101,7 +101,7 @@ export const CardTitle = React.forwardRef<
   <h3
     ref={ref}
     className={cn(
-      'font-display text-2xl font-bold leading-tight tracking-tight text-ivory',
+      'font-display text-fluid-xl font-bold leading-tight ltr:tracking-tight rtl:tracking-normal text-ivory',
       className
     )}
     {...props}
@@ -136,7 +136,7 @@ export const CardFooter = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      'flex items-center justify-between gap-3 border-t border-border pt-4 mt-4',
+      'flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 mt-4',
       className
     )}
     {...props}

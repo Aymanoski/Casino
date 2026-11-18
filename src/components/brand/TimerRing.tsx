@@ -12,6 +12,8 @@ export interface TimerRingProps {
   status?: 'idle' | 'running' | 'paused';
   size?: 'sm' | 'md' | 'lg' | 'xl';
   showControls?: boolean;
+  /** 'standard' enforces 44px touch targets; 'scorer' enforces 56px+ scorer touch targets */
+  controlSize?: 'standard' | 'scorer';
   useArabicIndicDigits?: boolean;
   onStart?: () => void;
   onPause?: () => void;
@@ -20,17 +22,29 @@ export interface TimerRingProps {
 }
 
 const SIZE_CONFIG = {
-  sm: { px: 88, stroke: 5, text: 'text-2xl', sub: 'text-[9px]' },
-  md: { px: 124, stroke: 6, text: 'text-4xl', sub: 'text-[10px]' },
-  lg: { px: 164, stroke: 8, text: 'text-5xl', sub: 'text-xs' },
-  xl: { px: 210, stroke: 10, text: 'text-6xl', sub: 'text-xs' },
+  sm: {
+    fluidWidth: 'w-[clamp(76px,22vw,96px)]',
+    stroke: 10,
+  },
+  md: {
+    fluidWidth: 'w-[clamp(104px,28vw,136px)]',
+    stroke: 9,
+  },
+  lg: {
+    fluidWidth: 'w-[clamp(132px,34vw,176px)]',
+    stroke: 8.5,
+  },
+  xl: {
+    fluidWidth: 'w-[clamp(156px,38vw,228px)]',
+    stroke: 8,
+  },
 };
 
 /**
  * TimerRing
- * Per DESIGN.md §6:
- * Large numeric with a circular gold progress ring;
- * turns casino ruby (--negative) and pulses in the last 5 seconds.
+ * Fluid, container-query scaled circular timer per DESIGN.md §6 & AGENTS.md §13.
+ * Uses a normalized 160x160 viewBox + clamp() sizing so it scales cleanly from 320px phones
+ * up to 4K big screens, with 44px+ (or 56px scorer) control buttons.
  */
 export function TimerRing({
   durationSec,
@@ -38,6 +52,7 @@ export function TimerRing({
   status = 'idle',
   size = 'md',
   showControls = false,
+  controlSize = 'standard',
   useArabicIndicDigits = false,
   onStart,
   onPause,
@@ -48,7 +63,8 @@ export function TimerRing({
   const prefersReducedMotion = useReducedMotion();
 
   const cfg = SIZE_CONFIG[size];
-  const radius = (cfg.px - cfg.stroke * 2) / 2;
+  const viewSize = 160;
+  const radius = (viewSize - cfg.stroke * 2) / 2;
   const circumference = 2 * Math.PI * radius;
 
   const safeDuration = Math.max(1, durationSec);
@@ -69,8 +85,10 @@ export function TimerRing({
         )}`
       : `${formatNumber(secs, { useArabicIndicDigits })}s`;
 
+  const btnMinH = controlSize === 'scorer' ? 'min-h-[56px] px-4 text-sm' : 'min-h-[44px] px-3.5 text-xs';
+
   return (
-    <div className={cn('inline-flex flex-col items-center gap-3', className)}>
+    <div className={cn('inline-flex max-w-full flex-col items-center gap-3', className)}>
       <motion.div
         animate={
           isUrgent && !prefersReducedMotion
@@ -83,27 +101,25 @@ export function TimerRing({
             : undefined
         }
         className={cn(
-          'relative inline-flex items-center justify-center rounded-pill bg-bg-raised/90',
+          '@container relative inline-flex aspect-square max-w-full items-center justify-center rounded-pill bg-bg-raised/90',
+          cfg.fluidWidth,
           isUrgent
             ? 'shadow-[0_0_28px_rgba(214,51,76,0.45)]'
             : 'shadow-glow-gold'
         )}
-        style={{ width: cfg.px, height: cfg.px }}
         role="timer"
         aria-live="polite"
         aria-label={`${clampedRemaining} seconds remaining`}
       >
         <svg
-          width={cfg.px}
-          height={cfg.px}
-          viewBox={`0 0 ${cfg.px} ${cfg.px}`}
-          className="-rotate-90 transform"
+          viewBox={`0 0 ${viewSize} ${viewSize}`}
+          className="h-full w-full -rotate-90 transform"
           aria-hidden="true"
         >
           {/* Background Track */}
           <circle
-            cx={cfg.px / 2}
-            cy={cfg.px / 2}
+            cx={viewSize / 2}
+            cy={viewSize / 2}
             r={radius}
             fill="transparent"
             stroke="rgba(232, 184, 75, 0.16)"
@@ -111,8 +127,8 @@ export function TimerRing({
           />
           {/* Progress Ring */}
           <circle
-            cx={cfg.px / 2}
-            cy={cfg.px / 2}
+            cx={viewSize / 2}
+            cy={viewSize / 2}
             r={radius}
             fill="transparent"
             stroke={isUrgent || isExpired ? 'var(--negative)' : 'var(--gold-500)'}
@@ -124,12 +140,11 @@ export function TimerRing({
           />
         </svg>
 
-        {/* Center Numerals */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+        {/* Center Numerals scaled by container width */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-2 text-center">
           <span
             className={cn(
-              'font-score font-bold leading-none tracking-wider tabular-nums',
-              cfg.text,
+              'font-score text-[clamp(1.25rem,26cqi,3.5rem)] font-bold leading-none tracking-wider tabular-nums',
               isUrgent || isExpired ? 'text-negative' : 'text-gold-100'
             )}
           >
@@ -137,8 +152,7 @@ export function TimerRing({
           </span>
           <span
             className={cn(
-              'mt-1 font-semibold uppercase tracking-widest',
-              cfg.sub,
+              'mt-1 font-semibold uppercase tracking-widest text-[clamp(0.55rem,7.2cqi,0.8rem)] leading-tight',
               isUrgent
                 ? 'text-negative'
                 : status === 'running'
@@ -169,34 +183,43 @@ export function TimerRing({
         </div>
       </motion.div>
 
-      {/* Optional Start / Pause / Reset Controls */}
+      {/* Optional Start / Pause / Reset Controls (44px+ minimum touch target) */}
       {showControls && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2">
           {status === 'running' ? (
             <button
               type="button"
               onClick={onPause}
-              className="inline-flex h-9 items-center gap-1.5 rounded-button border border-border-strong bg-surface-2 px-3 text-xs font-semibold text-gold-300 hover:border-gold-500"
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-button border border-border-strong bg-surface-2 font-semibold text-gold-300 hover:border-gold-500',
+                btnMinH
+              )}
             >
-              <Pause className="h-3.5 w-3.5" />
+              <Pause className="h-3.5 w-3.5 shrink-0" />
               <span>{lang === 'ar' ? 'إيقاف' : 'Pause'}</span>
             </button>
           ) : (
             <button
               type="button"
               onClick={onStart}
-              className="inline-flex h-9 items-center gap-1.5 rounded-button bg-gold-gradient px-3 text-xs font-semibold text-bg shadow-glow-gold"
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-button bg-gold-gradient font-semibold text-bg shadow-glow-gold',
+                btnMinH
+              )}
             >
-              <Play className="h-3.5 w-3.5 fill-current" />
+              <Play className="h-3.5 w-3.5 shrink-0 fill-current" />
               <span>{lang === 'ar' ? 'بدء' : 'Start'}</span>
             </button>
           )}
           <button
             type="button"
             onClick={onReset}
-            className="inline-flex h-9 items-center gap-1.5 rounded-button border border-border bg-surface px-3 text-xs font-medium text-text-muted hover:border-border-strong hover:text-ivory"
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-button border border-border bg-surface font-medium text-text-muted hover:border-border-strong hover:text-ivory',
+              btnMinH
+            )}
           >
-            <RotateCcw className="h-3.5 w-3.5" />
+            <RotateCcw className="h-3.5 w-3.5 shrink-0" />
             <span>{lang === 'ar' ? 'إعادة' : 'Reset'}</span>
           </button>
         </div>

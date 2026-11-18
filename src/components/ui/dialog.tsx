@@ -37,7 +37,10 @@ export const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 grid w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-5 rounded-card border bg-surface p-6 md:p-8 text-ivory shadow-card-inner duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+        // Bottom sheet on phones (< sm), centered dialog on sm+ (AGENTS.md §13)
+        'fixed inset-x-0 bottom-0 top-auto z-50 grid w-full max-h-[88dvh] overflow-y-auto gap-4 rounded-t-[24px] rounded-b-none border-t border-x border-b-0 bg-surface px-4 pt-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] text-ivory shadow-card-inner duration-200',
+        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom',
+        'sm:inset-auto sm:left-[50%] sm:top-[50%] sm:w-[calc(100%-2rem)] sm:max-w-lg sm:max-h-[90dvh] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:gap-5 sm:rounded-card sm:border sm:p-6 md:p-8 sm:data-[state=closed]:slide-out-to-bottom-0 sm:data-[state=open]:slide-in-from-bottom-0 sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95',
         destructive
           ? 'border-negative/70 shadow-[0_0_36px_rgba(214,51,76,0.32)]'
           : 'border-border-strong shadow-glow-gold',
@@ -45,6 +48,12 @@ export const DialogContent = React.forwardRef<
       )}
       {...props}
     >
+      {/* Mobile Bottom Sheet Handle Indicator */}
+      <span
+        className="mx-auto -mt-1.5 mb-0.5 block h-1.5 w-12 rounded-pill bg-gold-500/40 sm:hidden"
+        aria-hidden="true"
+      />
+
       {/* Top Hairline Accent */}
       <span
         className={cn(
@@ -60,7 +69,7 @@ export const DialogContent = React.forwardRef<
 
       <DialogPrimitive.Close
         aria-label="Close Dialog"
-        className="absolute end-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-pill border border-border bg-surface-2 text-text-muted transition-colors hover:border-gold-500 hover:text-ivory focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
+        className="absolute end-3 top-3 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-pill border border-border bg-surface-2 text-text-muted transition-colors hover:border-gold-500 hover:text-ivory focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
       >
         <X className="h-4 w-4" />
       </DialogPrimitive.Close>
@@ -74,7 +83,7 @@ export const DialogHeader = ({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
-    className={cn('flex flex-col space-y-2 text-start pe-6', className)}
+    className={cn('flex flex-col space-y-2 text-start pe-12', className)}
     {...props}
   />
 );
@@ -86,7 +95,7 @@ export const DialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      'flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 border-t border-border pt-4',
+      'flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 border-t border-border pt-4 [&>*]:w-full sm:[&>*]:w-auto',
       className
     )}
     {...props}
@@ -101,7 +110,7 @@ export const DialogTitle = React.forwardRef<
   <DialogPrimitive.Title
     ref={ref}
     className={cn(
-      'font-display text-2xl font-bold leading-tight tracking-tight text-gold-100',
+      'font-display text-fluid-xl font-bold leading-tight ltr:tracking-tight rtl:tracking-normal text-gold-100',
       className
     )}
     {...props}
@@ -138,6 +147,7 @@ export interface ConfirmDialogProps {
  * Per DESIGN.md §6:
  * Midnight surface, gold border, concise copy.
  * Destructive confirmations require an explicit ruby confirm button.
+ * Renders as a bottom sheet on phones and centered modal on tablets/desktops.
  */
 export function ConfirmDialog({
   open,
@@ -157,7 +167,7 @@ export function ConfirmDialog({
         <DialogHeader>
           <div className="flex items-center gap-2.5">
             {destructive && (
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-pill border border-negative/50 bg-negative/15 text-negative">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill border border-negative/50 bg-negative/15 text-negative">
                 <AlertTriangle className="h-4 w-4" />
               </span>
             )}

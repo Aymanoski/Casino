@@ -18,7 +18,7 @@ export const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex h-11 w-full items-center justify-between gap-2 rounded-input border bg-surface-2 px-3.5 py-2 text-sm text-ivory placeholder:text-text-faint transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gold-500 focus:ring-offset-1 focus:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
+      'flex min-h-[44px] h-11 w-full min-w-0 items-center justify-between gap-2 rounded-input border bg-surface-2 px-3.5 py-2 text-base leading-normal text-ivory placeholder:text-text-faint transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gold-500 focus:ring-offset-1 focus:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 [&>span]:text-start',
       error
         ? 'border-negative focus:ring-negative'
         : 'border-border hover:border-border-strong focus:border-gold-500',
@@ -43,14 +43,14 @@ export const SelectContent = React.forwardRef<
       ref={ref}
       position={position}
       className={cn(
-        'relative z-50 max-h-80 min-w-[8rem] overflow-hidden rounded-input border border-border-strong bg-surface text-ivory shadow-glow-gold data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+        'relative z-50 max-h-[min(20rem,70dvh)] min-w-[8rem] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-input border border-border-strong bg-surface text-ivory shadow-glow-gold data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
         position === 'popper' &&
           'data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1',
         className
       )}
       {...props}
     >
-      <SelectPrimitive.ScrollUpButton className="flex cursor-default items-center justify-center py-1 text-gold-300">
+      <SelectPrimitive.ScrollUpButton className="flex cursor-default items-center justify-center py-1.5 text-gold-300">
         <ChevronUp className="h-4 w-4" />
       </SelectPrimitive.ScrollUpButton>
       <SelectPrimitive.Viewport
@@ -62,7 +62,7 @@ export const SelectContent = React.forwardRef<
       >
         {children}
       </SelectPrimitive.Viewport>
-      <SelectPrimitive.ScrollDownButton className="flex cursor-default items-center justify-center py-1 text-gold-300">
+      <SelectPrimitive.ScrollDownButton className="flex cursor-default items-center justify-center py-1.5 text-gold-300">
         <ChevronDown className="h-4 w-4" />
       </SelectPrimitive.ScrollDownButton>
     </SelectPrimitive.Content>
@@ -92,12 +92,12 @@ export const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex w-full cursor-pointer select-none items-center rounded-[8px] py-2 ps-8 pe-3 text-sm text-ivory outline-none transition-colors focus:bg-gold-500/15 focus:text-gold-100 data-[state=checked]:bg-gold-500/20 data-[state=checked]:text-gold-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'relative flex min-h-[44px] w-full cursor-pointer select-none items-center rounded-[8px] py-2.5 ps-9 pe-3 text-base sm:text-sm text-ivory outline-none transition-colors focus:bg-gold-500/15 focus:text-gold-100 data-[state=checked]:bg-gold-500/20 data-[state=checked]:text-gold-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className
     )}
     {...props}
   >
-    <span className="absolute start-2.5 flex h-3.5 w-3.5 items-center justify-center">
+    <span className="absolute start-2.5 flex h-4 w-4 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
         <Check className="h-4 w-4 text-gold-500" />
       </SelectPrimitive.ItemIndicator>
@@ -137,7 +137,7 @@ export function SelectField({
 }: SelectFieldProps) {
   const id = React.useId();
   return (
-    <div className={cn('w-full space-y-1.5', className)}>
+    <div className={cn('w-full min-w-0 space-y-1.5', className)}>
       {label && (
         <label
           htmlFor={id}
