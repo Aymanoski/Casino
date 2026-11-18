@@ -140,9 +140,9 @@ export function PlayerPanel({
               isSelected
                 ? 'border-blue-500 ring-[3px] ring-blue-500'
                 : isBuzzed
-                  ? 'border-outline ring-[3px] ring-gold-400 shadow-glow-gold bg-gradient-to-b from-gold-200/35 via-white to-white'
+                  ? 'border-outline ring-[3px] ring-gold-400 shadow-glow-gold bg-gradient-to-b from-gold-200 via-white to-white'
                   : isGoldenSeat
-                    ? 'border-outline bg-gradient-to-b from-gold-200/45 via-paper to-white shadow-sticker-lg'
+                    ? 'border-outline bg-gradient-to-b from-gold-200 via-paper to-white shadow-sticker-lg'
                     : 'border-outline'
             ),
         onSelect && 'cursor-pointer',

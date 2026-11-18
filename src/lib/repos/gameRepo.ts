@@ -1,6 +1,7 @@
 import type { Game, GameTimerState } from '@/lib/schemas';
 import { feedback } from '@/lib/feedback';
 import { realtime } from '@/lib/realtime';
+import { createDemoSeedState } from '@/lib/seed';
 import { storage } from '@/lib/storage';
 import { auditRepo } from './auditRepo';
 import { recomputePlayerStatsInMemory } from './playerRepo';
@@ -17,9 +18,12 @@ export const gameRepo = {
     roundId?: string;
     scorerUserId?: string;
     status?: Game['status'];
+    includeDemo?: boolean;
   }): Promise<Game[]> {
     const db = await storage.readSnapshot();
-    let list = [...db.games];
+    let list = options?.includeDemo
+      ? [...db.games]
+      : db.games.filter((g) => !g.isDemo);
     if (options?.roundId) {
       list = list.filter((g) => g.roundId === options.roundId);
     }
@@ -178,16 +182,18 @@ export const gameRepo = {
     db.games[idx] = updated;
     await storage.writeSnapshot(db);
 
-    await auditRepo.record({
-      actorUserId,
-      action: 'segment.change',
-      entityType: 'game',
-      entityId: id,
-      summary: `Moved "${updated.tableName}" to segment #${clampedIndex + 1} (${seg?.nameEn ?? segId})`,
-      summaryAr: `انتقال "${updated.tableNameAr || updated.tableName}" إلى الفقرة #${clampedIndex + 1} (${seg?.nameAr ?? segId})`,
-      before: { currentSegmentIndex: current.currentSegmentIndex },
-      after: { currentSegmentIndex: clampedIndex, segmentId: segId },
-    });
+    if (!updated.isDemo) {
+      await auditRepo.record({
+        actorUserId,
+        action: 'segment.change',
+        entityType: 'game',
+        entityId: id,
+        summary: `Moved "${updated.tableName}" to segment #${clampedIndex + 1} (${seg?.nameEn ?? segId})`,
+        summaryAr: `انتقال "${updated.tableNameAr || updated.tableName}" إلى الفقرة #${clampedIndex + 1} (${seg?.nameAr ?? segId})`,
+        before: { currentSegmentIndex: current.currentSegmentIndex },
+        after: { currentSegmentIndex: clampedIndex, segmentId: segId },
+      });
+    }
 
     feedback.play('segment.next');
     realtime.publish('segment.changed', {
@@ -197,6 +203,44 @@ export const gameRepo = {
     });
 
     return updated;
+  },
+
+  async resetDemoGame(id = 'game-demo'): Promise<Game | null> {
+    const db = await storage.readSnapshot();
+    const demoSeed = createDemoSeedState();
+    const filteredGames = db.games.filter((g) => g.id !== id);
+    const filteredScores = db.scoreEvents.filter((e) => e.gameId !== id);
+    const filteredBuzzes = db.buzzEvents.filter((b) => b.gameId !== id);
+
+    const resetGame = { ...demoSeed.game, id };
+    db.games = [...filteredGames, resetGame];
+    db.scoreEvents = [
+      ...demoSeed.scoreEvents.map((e) => ({ ...e, gameId: id })),
+      ...filteredScores,
+    ];
+    db.buzzEvents = [
+      ...demoSeed.buzzEvents.map((b) => ({ ...b, gameId: id })),
+      ...filteredBuzzes,
+    ];
+    recomputePlayerStatsInMemory(db);
+    await storage.writeSnapshot(db);
+
+    realtime.publish('score.changed', { gameId: id, reset: true });
+    realtime.publish('buzz.recorded', {
+      gameId: id,
+      playerId: resetGame.activeBuzzPlayerId ?? '',
+      segmentId: resetGame.segmentIds[resetGame.currentSegmentIndex],
+    });
+    realtime.publish('segment.changed', {
+      gameId: id,
+      currentSegmentIndex: resetGame.currentSegmentIndex,
+      segmentId: resetGame.segmentIds[resetGame.currentSegmentIndex],
+    });
+    if (resetGame.timer) {
+      realtime.publish('timer.updated', { gameId: id, timer: resetGame.timer });
+    }
+
+    return resetGame;
   },
 
   async updateTimer(

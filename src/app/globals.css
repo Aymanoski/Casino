@@ -10,6 +10,12 @@
   --red-700:  #A81233;  /* sunburst dark rays */
   --red-800:  #7E0D26;
   --red-900:  #4F0716;  /* deep maroon: outlines, ink on gold, dark surfaces */
+  --red-100-rgb: 253 231 235;
+  --red-400-rgb: 229 64 92;
+  --red-600-rgb: 196 22 58;
+  --red-700-rgb: 168 18 51;
+  --red-800-rgb: 126 13 38;
+  --red-900-rgb: 79 7 22;
 
   /* Gold / orange (the star) */
   --gold-200: #FFE899;
@@ -17,11 +23,18 @@
   --gold-400: #FFC12B;  /* logo-like yellow */
   --gold-500: #FF9F1C;  /* orange */
   --gold-600: #E8740C;
+  --gold-200-rgb: 255 232 153;
+  --gold-300-rgb: 255 213 74;
+  --gold-400-rgb: 255 193 43;
+  --gold-500-rgb: 255 159 28;
+  --gold-600-rgb: 232 116 12;
 
   /* White (primary surface and text color) */
   --white:    #FFFFFF;
   --paper:    #FFF9F0;  /* warm off-white page background */
   --paper-2:  #FBEFE0;  /* subtle section or table zebra */
+  --paper-rgb:   255 249 240;
+  --paper-2-rgb: 251 239 224;
 
   /* Blue (the hint, use where it fits) */
   --blue-100: #E6EEFF;
@@ -29,11 +42,19 @@
   --blue-500: #2F6BFF;  /* electric blue accent */
   --blue-600: #1F4FD8;
   --blue-800: #14327F;
+  --blue-100-rgb: 230 238 255;
+  --blue-300-rgb: 127 168 255;
+  --blue-500-rgb: 47 107 255;
+  --blue-600-rgb: 31 79 216;
+  --blue-800-rgb: 20 50 127;
 
   /* Ink (text on white/paper) */
   --ink:       #2A0A10;
   --ink-muted: #6B4A50;
   --ink-faint: #9A7C82;
+  --ink-rgb:       42 10 16;
+  --ink-muted-rgb: 107 74 80;
+  --ink-faint-rgb: 154 124 130;
 
   /* Status */
   --positive:      #1FA971;  /* points added */
@@ -42,6 +63,12 @@
   --negative:      #B3001B;  /* points removed (always paired with minus sign/icon) */
   --negative-soft: #FDE7EB;
   --live:          #FFFFFF;  /* LIVE badge: white pill with pulsing red dot on stage */
+  --positive-rgb:      31 169 113;
+  --positive-ink-rgb:  13 106 67;
+  --positive-soft-rgb: 230 248 240;
+  --negative-rgb:      179 0 27;
+  --negative-soft-rgb: 253 231 235;
+  --live-rgb:          255 255 255;
 
   /* Borders and shadows (the sticker look — direction mirrors in RTL) */
   --outline:        var(--red-900);

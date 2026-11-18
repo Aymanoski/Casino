@@ -4,15 +4,20 @@ import { storage } from '@/lib/storage';
 import { auditRepo } from './auditRepo';
 
 export function recomputePlayerStatsInMemory(db: DatabaseSnapshot): void {
+  const tournamentGames = db.games.filter((g) => !g.isDemo);
+  const demoGameIds = new Set(db.games.filter((g) => g.isDemo).map((g) => g.id));
+
   db.players = db.players.map((player) => {
-    const playerEvents = db.scoreEvents.filter((e) => e.playerId === player.id);
+    const playerEvents = db.scoreEvents.filter(
+      (e) => e.playerId === player.id && !demoGameIds.has(e.gameId)
+    );
     const totalPoints = playerEvents.reduce((sum, e) => sum + e.delta, 0);
-    const gamesPlayed = db.games.filter(
+    const gamesPlayed = tournamentGames.filter(
       (g) =>
         (g.status === 'finished' || g.status === 'live') &&
         g.playerIds.includes(player.id)
     ).length;
-    const wins = db.games.filter(
+    const wins = tournamentGames.filter(
       (g) => g.status === 'finished' && g.winnerPlayerId === player.id
     ).length;
 

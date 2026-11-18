@@ -67,8 +67,10 @@ All UI components and pages call async functions in `src/lib/repos/*` and never 
 
 - `src/lib/auth/index.tsx` → calls `userRepo.list()`, `userRepo.get()`
 - `src/components/layout/PublicHeader.tsx` → calls `gameRepo.getLiveGames()` + subscribes to `realtime`
+- `src/components/layout/PublicFooter.tsx` → calls `settingsRepo.get()` + subscribes to `realtime`
 - `src/components/layout/StudioSidebarShell.tsx` → calls `settingsRepo.resetDemoData()`
 - `src/components/layout/RouteShellPlaceholder.tsx` → calls `playerRepo.list()`, `segmentRepo.list()`, `roundRepo.list()`, `gameRepo.list()`, `scoreRepo.list()`, `scoreRepo.applyScore()`, `auditRepo.list()`, `settingsRepo.get()`, `settingsRepo.resetDemoData()`
+- `src/app/(public)/page.tsx` & `src/components/landing/*` → calls `settingsRepo.get()`, `playerRepo.list()` / `playerRepo.get()`, `gameRepo.list()` / `gameRepo.get()` / `gameRepo.changeSegment()` / `gameRepo.updateTimer()` / `gameRepo.resetDemoGame()`, `roundRepo.list()`, `segmentRepo.list()`, `scoreRepo.list()` / `scoreRepo.getGameTotals()` / `scoreRepo.applyScore()` / `scoreRepo.undoLastScore()` / `scoreRepo.recordBuzz()` / `scoreRepo.clearBuzz()`, `sponsorRepo.list()`
 - `src/app/(public)/styleguide/page.tsx` → calls `playerRepo.list()`, `segmentRepo.list()`, `settingsRepo.get()`
 
 ---

@@ -142,3 +142,19 @@
 
 
 
+
+---
+
+## Phase 3 Landing & Pitch Page Decisions (2026-11-18)
+
+### 21. Isolated Exhibition Demo Game (`game-demo`, `isDemo: true`)
+- **Context:** The `/` `LIVE DEMO` section must use the real repositories and `BroadcastChannel` realtime layer with a separate demo game so tapping Buzz, `+10`/`+5`/`−5`, custom `+/-`, Undo, or Timer updates the Mini Big Screen live without skewing the official 27-player tournament leaderboard, bracket, or admin audit history.
+- **Decision:** Extended `GameSchema` with `isDemo: boolean` (default `false`), bumped `SEED_VERSION` to `2`, and seeded `game-demo` (`roundId: "round-demo"`, `isDemo: true`, featuring 3 exhibition contestants across 6 segments). `gameRepo.list`, `gameRepo.getLiveGames`, `scoreRepo.list`, `scoreRepo.getLeaderboard`, and `recomputePlayerStatsInMemory` exclude `isDemo` games by default unless explicitly queried by `gameId: "game-demo"`, while `scoreRepo` skips polluting `auditRepo` on demo-game actions and `gameRepo.resetDemoGame("game-demo")` lets presenters restore the exhibition table in 1 click without wiping admin changes.
+
+### 22. Hero Open Qualifier Seats & Sponsor Placeholder Scope
+- **Decision:**
+  - **Hero 3-Seat Final Card:** Displays 2 open qualifier finalist slots (`Finalist #1 · Semi-Final Winner · Top 2` and `Finalist #2 · Semi-Final Runner-Up · Top 2`) beside Marwan Serry's elevated Golden Seat (name only, no photo), matching the mid-tournament live state where Semi-Final (`game-13`) has not yet concluded.
+  - **Sponsor Tiers:** Uses `sponsorRepo.list()` and `settings.contactEmail` with explicit placeholder badges and `"Contact us"` `mailto:` links instead of prices (no extra inquiry form/modal added at this stage).
+
+### 23. Bonus Idea: Guided 3-Step Live Pitch Strip & Pop-Out Big Screen Window
+- **Built in Phase 3:** Added a guided 3-step live prompt strip (`1. Tap Buzz → 2. Tap +10 / Custom → 3. Watch Screen Sync`) paired with a 1-click **Reset Demo Table** control and a **Pop Out Big Screen Tab** button (`/screen/game-demo` in a second tab) right above the split console so presenters pitching Marwan Serry can either demo single-screen sync in 5 seconds or drag the Big Screen tab onto a second monitor to show real multi-window `BroadcastChannel` synchronization.

@@ -71,7 +71,7 @@ export function BracketNode({
       className={cn(
         '@container relative flex w-full min-w-0 flex-col gap-2.5 rounded-card border-[2.5px] border-outline bg-white p-3.5 @xs:p-4 text-ink transition-all duration-200',
         isFinal
-          ? 'bg-gradient-to-b from-gold-200/50 via-paper to-white shadow-sticker-lg'
+          ? 'bg-gradient-to-b from-gold-200 via-paper to-white shadow-sticker-lg'
           : status === 'live'
             ? 'ring-[3px] ring-red-600 shadow-sticker'
             : 'shadow-sticker',
@@ -100,9 +100,9 @@ export function BracketNode({
               {roundLabel}
             </div>
           )}
-          <div className="flex items-center gap-1.5 truncate font-display text-sm @xs:text-base text-red-900">
-            {isFinal && <Crown className="h-4 w-4 shrink-0 text-gold-600" />}
-            <span className="truncate">{tableName}</span>
+          <div className="flex items-start gap-1.5 font-display text-sm @xs:text-base text-red-900 leading-snug">
+            {isFinal && <Crown className="mt-0.5 h-4 w-4 shrink-0 text-gold-600" />}
+            <span>{tableName}</span>
           </div>
         </div>
 

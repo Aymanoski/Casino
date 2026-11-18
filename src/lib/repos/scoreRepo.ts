@@ -25,12 +25,16 @@ export const scoreRepo = {
     roundId?: string;
     scorerUserId?: string;
     order?: 'newest' | 'oldest';
+    includeDemo?: boolean;
   }): Promise<ScoreEvent[]> {
     const db = await storage.readSnapshot();
+    const demoGameIds = new Set(db.games.filter((g) => g.isDemo).map((g) => g.id));
     let events = [...db.scoreEvents];
 
     if (options?.gameId) {
       events = events.filter((e) => e.gameId === options.gameId);
+    } else if (!options?.includeDemo) {
+      events = events.filter((e) => !demoGameIds.has(e.gameId));
     }
     if (options?.playerId) {
       events = events.filter((e) => e.playerId === options.playerId);
@@ -94,13 +98,15 @@ export const scoreRepo = {
     includeHost?: boolean;
   }): Promise<LeaderboardEntry[]> {
     const db = await storage.readSnapshot();
+    const demoGameIds = new Set(db.games.filter((g) => g.isDemo).map((g) => g.id));
+    const tournamentGames = db.games.filter((g) => !g.isDemo);
     const players = options?.includeHost
       ? db.players
       : db.players.filter((p) => !p.isHost);
 
     const allowedGameIds = options?.roundId
       ? new Set(
-          db.games
+          tournamentGames
             .filter((g) => g.roundId === options.roundId)
             .map((g) => g.id)
         )
@@ -110,16 +116,17 @@ export const scoreRepo = {
       const events = db.scoreEvents.filter(
         (e) =>
           e.playerId === player.id &&
+          !demoGameIds.has(e.gameId) &&
           (!allowedGameIds || allowedGameIds.has(e.gameId))
       );
       const totalPoints = events.reduce((sum, e) => sum + e.delta, 0);
-      const gamesPlayed = db.games.filter(
+      const gamesPlayed = tournamentGames.filter(
         (g) =>
           (!allowedGameIds || allowedGameIds.has(g.id)) &&
           (g.status === 'finished' || g.status === 'live') &&
           g.playerIds.includes(player.id)
       ).length;
-      const wins = db.games.filter(
+      const wins = tournamentGames.filter(
         (g) =>
           (!allowedGameIds || allowedGameIds.has(g.id)) &&
           g.status === 'finished' &&
@@ -173,24 +180,27 @@ export const scoreRepo = {
     recomputePlayerStatsInMemory(db);
     await storage.writeSnapshot(db);
 
+    const game = db.games.find((g) => g.id === input.gameId);
     const player = db.players.find((p) => p.id === input.playerId);
     const signStr = input.delta > 0 ? `+${input.delta}` : `${input.delta}`;
 
-    await auditRepo.record({
-      actorUserId: input.byUserId,
-      action: 'score.add',
-      entityType: 'score',
-      entityId: event.id,
-      summary: `Applied ${signStr} pts to ${player?.fullName ?? input.playerId}${input.note ? ` (${input.note})` : ''}`,
-      summaryAr: `تم احتساب ${signStr} نقطة للاعب ${player?.fullNameAr ?? input.playerId}${input.note ? ` (${input.note})` : ''}`,
-      before: null,
-      after: {
-        gameId: input.gameId,
-        playerId: input.playerId,
-        delta: input.delta,
-        kind: input.kind,
-      },
-    });
+    if (!game?.isDemo) {
+      await auditRepo.record({
+        actorUserId: input.byUserId,
+        action: 'score.add',
+        entityType: 'score',
+        entityId: event.id,
+        summary: `Applied ${signStr} pts to ${player?.fullName ?? input.playerId}${input.note ? ` (${input.note})` : ''}`,
+        summaryAr: `تم احتساب ${signStr} نقطة للاعب ${player?.fullNameAr ?? input.playerId}${input.note ? ` (${input.note})` : ''}`,
+        before: null,
+        after: {
+          gameId: input.gameId,
+          playerId: input.playerId,
+          delta: input.delta,
+          kind: input.kind,
+        },
+      });
+    }
 
     if (input.delta >= 0) {
       feedback.play('score.positive');
@@ -246,18 +256,21 @@ export const scoreRepo = {
     recomputePlayerStatsInMemory(db);
     await storage.writeSnapshot(db);
 
+    const game = db.games.find((g) => g.id === gameId);
     const player = db.players.find((p) => p.id === target.playerId);
 
-    await auditRepo.record({
-      actorUserId: byUserId,
-      action: 'score.undo',
-      entityType: 'score',
-      entityId: undoEvent.id,
-      summary: `Undid ${target.delta > 0 ? `+${target.delta}` : target.delta} pts for ${player?.fullName ?? target.playerId}`,
-      summaryAr: `تم التراجع عن ${target.delta > 0 ? `+${target.delta}` : target.delta} نقطة للاعب ${player?.fullNameAr ?? target.playerId}`,
-      before: { targetEventId: target.id, delta: target.delta },
-      after: { undoEventId: undoEvent.id, delta: undoEvent.delta },
-    });
+    if (!game?.isDemo) {
+      await auditRepo.record({
+        actorUserId: byUserId,
+        action: 'score.undo',
+        entityType: 'score',
+        entityId: undoEvent.id,
+        summary: `Undid ${target.delta > 0 ? `+${target.delta}` : target.delta} pts for ${player?.fullName ?? target.playerId}`,
+        summaryAr: `تم التراجع عن ${target.delta > 0 ? `+${target.delta}` : target.delta} نقطة للاعب ${player?.fullNameAr ?? target.playerId}`,
+        before: { targetEventId: target.id, delta: target.delta },
+        after: { undoEventId: undoEvent.id, delta: undoEvent.delta },
+      });
+    }
 
     feedback.play('score.undo');
     feedback.haptic('light');
@@ -301,17 +314,20 @@ export const scoreRepo = {
 
     await storage.writeSnapshot(db);
 
+    const game = db.games.find((g) => g.id === input.gameId);
     const player = db.players.find((p) => p.id === input.playerId);
-    await auditRepo.record({
-      actorUserId: input.byUserId,
-      action: 'buzz.record',
-      entityType: 'buzz',
-      entityId: buzz.id,
-      summary: `${player?.fullName ?? input.playerId} buzzed first`,
-      summaryAr: `${player?.fullNameAr ?? input.playerId} ضغط الجرس أولاً`,
-      before: null,
-      after: { gameId: input.gameId, playerId: input.playerId, segmentId: input.segmentId },
-    });
+    if (!game?.isDemo) {
+      await auditRepo.record({
+        actorUserId: input.byUserId,
+        action: 'buzz.record',
+        entityType: 'buzz',
+        entityId: buzz.id,
+        summary: `${player?.fullName ?? input.playerId} buzzed first`,
+        summaryAr: `${player?.fullNameAr ?? input.playerId} ضغط الجرس أولاً`,
+        before: null,
+        after: { gameId: input.gameId, playerId: input.playerId, segmentId: input.segmentId },
+      });
+    }
 
     feedback.play('buzz');
     feedback.haptic('buzz');
@@ -332,22 +348,25 @@ export const scoreRepo = {
     if (gameIdx === -1) return;
 
     const prevPlayerId = db.games[gameIdx].activeBuzzPlayerId;
+    const isDemo = db.games[gameIdx].isDemo;
     db.games[gameIdx] = {
       ...db.games[gameIdx],
       activeBuzzPlayerId: null,
     };
     await storage.writeSnapshot(db);
 
-    await auditRepo.record({
-      actorUserId: byUserId,
-      action: 'buzz.clear',
-      entityType: 'buzz',
-      entityId: gameId,
-      summary: `Cleared active buzzer highlight on ${gameId.toUpperCase()}`,
-      summaryAr: `تم مسح إشارة الجرس في المباراة ${gameId.toUpperCase()}`,
-      before: { activeBuzzPlayerId: prevPlayerId },
-      after: { activeBuzzPlayerId: null },
-    });
+    if (!isDemo) {
+      await auditRepo.record({
+        actorUserId: byUserId,
+        action: 'buzz.clear',
+        entityType: 'buzz',
+        entityId: gameId,
+        summary: `Cleared active buzzer highlight on ${gameId.toUpperCase()}`,
+        summaryAr: `تم مسح إشارة الجرس في المباراة ${gameId.toUpperCase()}`,
+        before: { activeBuzzPlayerId: prevPlayerId },
+        after: { activeBuzzPlayerId: null },
+      });
+    }
 
     realtime.publish('buzz.cleared', { gameId });
   },

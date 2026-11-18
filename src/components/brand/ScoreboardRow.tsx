@@ -92,7 +92,7 @@ export function ScoreboardRow({
           ? 'border-[2.5px] border-outline shadow-sticker'
           : 'border border-border-paper shadow-soft',
         isHighlighted || rank === 1
-          ? 'ltr:bg-gradient-to-r rtl:bg-gradient-to-l from-gold-200/45 via-paper to-white text-ink'
+          ? 'ltr:bg-gradient-to-r rtl:bg-gradient-to-l from-gold-200 via-paper to-white text-ink'
           : 'bg-white text-ink hover:bg-paper',
         className
       )}

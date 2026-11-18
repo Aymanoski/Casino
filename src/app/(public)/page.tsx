@@ -1,15 +1,68 @@
-import React from 'react';
-import { RouteShellPlaceholder } from '@/components/layout/RouteShellPlaceholder';
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { playerRepo, settingsRepo } from '@/lib/repos';
+import { realtime } from '@/lib/realtime';
+import type { Player, Settings } from '@/lib/schemas';
+import {
+  ClosingCtaSection,
+  FeaturesSection,
+  HeroFinalSection,
+  HowItWorksSection,
+  LiveDemoSection,
+  SegmentsSection,
+  SponsorsSection,
+} from '@/components/landing';
 
 export default function HomePage() {
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [marwanPlayer, setMarwanPlayer] = useState<Player | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadSharedPitchData = async () => {
+      const [s, host] = await Promise.all([
+        settingsRepo.get(),
+        playerRepo.get('player-marwan'),
+      ]);
+      if (!mounted) return;
+      setSettings(s);
+      setMarwanPlayer(host);
+    };
+
+    loadSharedPitchData();
+    const unsub1 = realtime.subscribe('settings.updated', loadSharedPitchData);
+    const unsub2 = realtime.subscribe('data.reset', loadSharedPitchData);
+
+    return () => {
+      mounted = false;
+      unsub1();
+      unsub2();
+    };
+  }, []);
+
   return (
-    <RouteShellPlaceholder
-      titleEn="Casino El Al3ab — Ramadan Tournament Pitch & Showcase"
-      titleAr="كازينو الألعاب — العرض الرئيسي لبطولة رمضان الكبرى"
-      subtitleEn="App shell, bilingual i18n (EN/AR RTL), Zod schemas, async repositories, localStorage persistence, and BroadcastChannel realtime sync are active."
-      subtitleAr="تم تفعيل الهيكل العام، دعم اللغتين العربية والإنجليزية (RTL/LTR)، نماذج البيانات، المستودعات اللاتزامنية، والمزامنة الفورية."
-      phaseNoteEn="Full Landing & Pitch Showcase (Final Night Hero, Embedded Live Mini Scorer + Big Screen Demo, 4-Step Chip Explainer, and Sponsor Tiers) will be built in its dedicated phase."
-      phaseNoteAr="سيتم بناء محتوى صفحة العرض الرئيسية بالكامل في مرحلتها المخصصة."
-    />
+    <div className="flex flex-col">
+      {/* 1. Final Night Hero (Stage) */}
+      <HeroFinalSection settings={settings} marwanPlayer={marwanPlayer} />
+
+      {/* 2. Embedded Interactive LIVE DEMO (Paper Split: Mini Scorer + Mini Big Screen) */}
+      <LiveDemoSection settings={settings} />
+
+      {/* 3. How the Tournament Works + Live Bracket Preview (Stage) */}
+      <HowItWorksSection settings={settings} />
+
+      {/* 4. The 16 Original Show Segments Grid (Paper) */}
+      <SegmentsSection settings={settings} />
+
+      {/* 5. Platform Operational Features (Stage) */}
+      <FeaturesSection />
+
+      {/* 6. Sponsor Tiers (Paper) */}
+      <SponsorsSection settings={settings} />
+
+      {/* 7. Closing CTA Inviting Marwan Serry to the Golden Seat (Stage) */}
+      <ClosingCtaSection marwanPlayer={marwanPlayer} />
+    </div>
   );
 }

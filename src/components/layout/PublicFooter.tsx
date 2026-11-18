@@ -1,9 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Globe } from 'lucide-react';
+import { Calendar, Globe, Mail, MapPin } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
+import { settingsRepo } from '@/lib/repos';
+import { realtime } from '@/lib/realtime';
+import type { Settings } from '@/lib/schemas';
+import { localizeText } from '@/lib/utils';
 import {
   FanousIcon,
   GoldHairlineDivider,
@@ -12,6 +16,36 @@ import { Badge } from '@/components/ui/badge';
 
 export function PublicFooter() {
   const { lang, t, toggleLang } = useI18n();
+  const [settings, setSettings] = useState<Settings | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadSettings = async () => {
+      const s = await settingsRepo.get();
+      if (mounted) setSettings(s);
+    };
+    loadSettings();
+
+    const unsub1 = realtime.subscribe('settings.updated', loadSettings);
+    const unsub2 = realtime.subscribe('data.reset', loadSettings);
+    return () => {
+      mounted = false;
+      unsub1();
+      unsub2();
+    };
+  }, []);
+
+  const contactEmail = settings?.contactEmail ?? 'partnerships@casinoelal3ab-pitch.com';
+  const venueLabel = settings
+    ? localizeText(lang, settings.venue, settings.venueAr)
+    : lang === 'ar'
+      ? 'استوديو النيل الكبير، القاهرة (موقع مبدئي)'
+      : 'Grand Nile Studio, Cairo (Placeholder Venue)';
+  const datesLabel = settings
+    ? localizeText(lang, settings.eventDates, settings.eventDatesAr)
+    : lang === 'ar'
+      ? 'رمضان ٢٠٢٧ · الليالي ١٤ إلى ١٨ (موعد مبدئي)'
+      : 'Ramadan 2027 · Nights 14–18 (Placeholder)';
 
   return (
     <footer className="theme-stage mt-auto border-t-[3px] border-outline bg-red-800 pt-8 pb-[calc(2.5rem+env(safe-area-inset-bottom))] text-white">
@@ -38,6 +72,26 @@ export function PublicFooter() {
               {t.common.footerTagline}
             </p>
             <Badge variant="gold">{t.common.placeholderBadge}</Badge>
+
+            <ul className="space-y-1.5 pt-2 text-xs text-white/90">
+              <li className="flex items-start gap-2">
+                <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold-300" aria-hidden="true" />
+                <a
+                  href={`mailto:${contactEmail}`}
+                  className="underline decoration-gold-300/70 underline-offset-4 hover:text-gold-200 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white rounded-highlight"
+                >
+                  {contactEmail}
+                </a>
+              </li>
+              <li className="flex items-start gap-2">
+                <Calendar className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold-300" aria-hidden="true" />
+                <span>{datesLabel}</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold-300" aria-hidden="true" />
+                <span>{venueLabel}</span>
+              </li>
+            </ul>
           </div>
 
           {/* Public Spectator Pages */}

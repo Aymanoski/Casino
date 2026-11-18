@@ -13,7 +13,142 @@ import type {
   User,
 } from '@/lib/schemas';
 
-export const SEED_VERSION = 1;
+export const SEED_VERSION = 2;
+
+export function createDemoSeedState(): {
+  game: Game;
+  scoreEvents: ScoreEvent[];
+  buzzEvents: BuzzEvent[];
+} {
+  const demoSegments = ['seg-1', 'seg-3', 'seg-6', 'seg-10', 'seg-13', 'seg-15'];
+  const baseMs = new Date('2026-11-18T21:00:00.000Z').getTime();
+
+  const game: Game = {
+    id: 'game-demo',
+    roundId: 'round-demo',
+    tableName: 'Pitch Live Table — Exhibition Showcase',
+    tableNameAr: 'طاولة العرض المباشر — تجربة البث',
+    scheduledAt: '2026-11-18T21:00:00.000Z',
+    startedAt: '2026-11-18T21:01:00.000Z',
+    status: 'live',
+    scorerUserId: 'user-scorer-1',
+    playerIds: ['player-1', 'player-19', 'player-4'],
+    currentSegmentIndex: 2,
+    segmentIds: demoSegments,
+    isFinal: false,
+    isDemo: true,
+    activeBuzzPlayerId: 'player-19',
+    timer: {
+      status: 'paused',
+      durationSec: 45,
+      remainingSec: 32,
+      endsAt: null,
+    },
+  };
+
+  const scoreEvents: ScoreEvent[] = [
+    {
+      id: 'score-demo-7',
+      gameId: 'game-demo',
+      segmentId: 'seg-6',
+      playerId: 'player-19',
+      delta: 10,
+      note: 'Reversed Arabic proverb on first buzz',
+      kind: 'preset',
+      byUserId: 'user-scorer-1',
+      createdAt: new Date(baseMs + 7 * 60_000).toISOString(),
+    },
+    {
+      id: 'score-demo-6',
+      gameId: 'game-demo',
+      segmentId: 'seg-3',
+      playerId: 'player-4',
+      delta: 5,
+      note: 'Quick bonus lyric save',
+      kind: 'preset',
+      byUserId: 'user-scorer-1',
+      createdAt: new Date(baseMs + 6 * 60_000).toISOString(),
+    },
+    {
+      id: 'score-demo-5',
+      gameId: 'game-demo',
+      segmentId: 'seg-3',
+      playerId: 'player-1',
+      delta: 10,
+      note: 'Put the word in a Ramadan anthem',
+      kind: 'preset',
+      byUserId: 'user-scorer-1',
+      createdAt: new Date(baseMs + 5 * 60_000).toISOString(),
+    },
+    {
+      id: 'score-demo-4',
+      gameId: 'game-demo',
+      segmentId: 'seg-3',
+      playerId: 'player-19',
+      delta: 10,
+      note: 'First buzz lyric match',
+      kind: 'preset',
+      byUserId: 'user-scorer-1',
+      createdAt: new Date(baseMs + 4 * 60_000).toISOString(),
+    },
+    {
+      id: 'score-demo-3',
+      gameId: 'game-demo',
+      segmentId: 'seg-1',
+      playerId: 'player-4',
+      delta: 10,
+      note: 'Classic track answered fast',
+      kind: 'preset',
+      byUserId: 'user-scorer-1',
+      createdAt: new Date(baseMs + 3 * 60_000).toISOString(),
+    },
+    {
+      id: 'score-demo-2',
+      gameId: 'game-demo',
+      segmentId: 'seg-1',
+      playerId: 'player-1',
+      delta: 5,
+      note: 'Encore chorus line bonus',
+      kind: 'preset',
+      byUserId: 'user-scorer-1',
+      createdAt: new Date(baseMs + 2 * 60_000).toISOString(),
+    },
+    {
+      id: 'score-demo-1',
+      gameId: 'game-demo',
+      segmentId: 'seg-1',
+      playerId: 'player-1',
+      delta: 10,
+      note: 'Opening buzz winner',
+      kind: 'preset',
+      byUserId: 'user-scorer-1',
+      createdAt: new Date(baseMs + 60_000).toISOString(),
+    },
+  ];
+
+  const buzzEvents: BuzzEvent[] = [
+    {
+      id: 'buzz-demo-2',
+      gameId: 'game-demo',
+      segmentId: 'seg-6',
+      playerId: 'player-19',
+      byUserId: 'user-scorer-1',
+      cleared: false,
+      createdAt: new Date(baseMs + 7 * 60_000).toISOString(),
+    },
+    {
+      id: 'buzz-demo-1',
+      gameId: 'game-demo',
+      segmentId: 'seg-3',
+      playerId: 'player-1',
+      byUserId: 'user-scorer-1',
+      cleared: false,
+      createdAt: new Date(baseMs + 5 * 60_000).toISOString(),
+    },
+  ];
+
+  return { game, scoreEvents, buzzEvents };
+}
 
 const RAW_PLAYERS: Array<{
   id: string;
@@ -645,10 +780,13 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       currentSegmentIndex: 0,
       segmentIds: finalSegments,
       isFinal: true,
+      isDemo: false,
       podOrder: 1,
       timer: { status: 'idle', durationSec: 45, remainingSec: 45 },
     },
   ];
+
+  const demoSeed = createDemoSeedState();
 
   // Build realistic ScoreEvents for finished games (G1..G8, G10) + Live Game (G11)
   const scoreEvents: ScoreEvent[] = [];
@@ -1189,9 +1327,9 @@ export function createSeedSnapshot(): DatabaseSnapshot {
     users,
     rounds,
     segments,
-    games,
-    scoreEvents,
-    buzzEvents,
+    games: [...games, demoSeed.game],
+    scoreEvents: [...demoSeed.scoreEvents, ...scoreEvents],
+    buzzEvents: [...demoSeed.buzzEvents, ...buzzEvents],
     auditEntries,
     sponsors,
     contentItems,

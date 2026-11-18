@@ -134,6 +134,7 @@ export const GameSchema = z.object({
   activeBuzzPlayerId: z.string().nullable().optional(),
   timer: GameTimerStateSchema.optional(),
   podOrder: z.number().int().positive().optional(),
+  isDemo: z.boolean().optional(),
 });
 export type Game = z.infer<typeof GameSchema>;
 
