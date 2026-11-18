@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface TextareaProps
@@ -6,10 +7,14 @@ export interface TextareaProps
   label?: string;
   helperText?: string;
   error?: string;
+  labelTone?: 'paper' | 'stage';
 }
 
 export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, label, helperText, error, id, ...props }, ref) => {
+  (
+    { className, label, helperText, error, labelTone = 'paper', id, ...props },
+    ref
+  ) => {
     const generatedId = React.useId();
     const textareaId = id ?? generatedId;
 
@@ -18,7 +23,10 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
         {label && (
           <label
             htmlFor={textareaId}
-            className="block text-xs font-semibold uppercase tracking-wider text-gold-300"
+            className={cn(
+              'block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal',
+              labelTone === 'stage' ? 'text-white' : 'text-ink'
+            )}
           >
             {label}
           </label>
@@ -36,10 +44,10 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
                 : undefined
           }
           className={cn(
-            'flex min-h-[112px] w-full min-w-0 rounded-input border bg-surface-2 px-3.5 py-2.5 text-base leading-relaxed text-ivory placeholder:text-text-faint transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50',
+            'flex min-h-[112px] w-full min-w-0 rounded-input border-2 bg-white px-3.5 py-2.5 text-base leading-relaxed text-ink placeholder:text-ink-faint transition-colors duration-150 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50',
             error
               ? 'border-negative focus-visible:border-negative focus-visible:ring-negative'
-              : 'border-border hover:border-border-strong focus-visible:border-gold-500',
+              : 'border-border-paper hover:border-red-900/35 focus-visible:border-blue-500',
             className
           )}
           {...props}
@@ -49,12 +57,24 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
           <p
             id={`${textareaId}-error`}
             role="alert"
-            className="text-xs font-medium text-negative"
+            className={cn(
+              'inline-flex items-center gap-1.5 text-xs font-bold',
+              labelTone === 'stage'
+                ? 'rounded-pill bg-white px-2.5 py-0.5 text-negative'
+                : 'text-negative'
+            )}
           >
-            {error}
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>{error}</span>
           </p>
         ) : helperText ? (
-          <p id={`${textareaId}-helper`} className="text-xs text-text-muted">
+          <p
+            id={`${textareaId}-helper`}
+            className={cn(
+              'text-xs',
+              labelTone === 'stage' ? 'text-white/90' : 'text-ink-muted'
+            )}
+          >
             {helperText}
           </p>
         ) : null}

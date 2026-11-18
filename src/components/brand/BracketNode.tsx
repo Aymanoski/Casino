@@ -26,7 +26,9 @@ export interface BracketNodeProps {
   roundLabel?: string;
   status: 'scheduled' | 'live' | 'finished';
   isFinal?: boolean;
-  players: [BracketPlayerSlot, BracketPlayerSlot, BracketPlayerSlot] | BracketPlayerSlot[];
+  players:
+    | [BracketPlayerSlot, BracketPlayerSlot, BracketPlayerSlot]
+    | BracketPlayerSlot[];
   useArabicIndicDigits?: boolean;
   onSelect?: () => void;
   className?: string;
@@ -34,10 +36,10 @@ export interface BracketNodeProps {
 
 /**
  * BracketNode
- * Per DESIGN.md §6 & AGENTS.md §13:
- * Container-query responsive 3-player game node.
- * Highlights winners, glows when LIVE, and renders Marwan Serry's Final Boss node
- * with warm chasing marquee bulbs. Scales smoothly inside bracket tracks or stacked mobile cards.
+ * Per DESIGN.md §6:
+ * Mini white sticker card with 3 players, winners highlighted in gold,
+ * live node pulsing, and Marwan's final node a distinct "boss" node with
+ * marquee bulbs and the golden seat.
  */
 export function BracketNode({
   tableName,
@@ -67,43 +69,53 @@ export function BracketNode({
           : undefined
       }
       className={cn(
-        '@container relative flex w-full min-w-0 flex-col gap-2.5 rounded-card border p-3.5 @xs:p-4 transition-all duration-200 shadow-card-inner',
+        '@container relative flex w-full min-w-0 flex-col gap-2.5 rounded-card border-[2.5px] border-outline bg-white p-3.5 @xs:p-4 text-ink transition-all duration-200',
         isFinal
-          ? 'border-gold-300 bg-gradient-to-b from-[#241B0B] via-surface to-bg shadow-glow-gold'
+          ? 'bg-gradient-to-b from-gold-200/50 via-paper to-white shadow-sticker-lg'
           : status === 'live'
-            ? 'border-live/70 bg-surface-2 shadow-[0_0_24px_rgba(255,77,77,0.22)] ring-1 ring-live/40'
-            : status === 'finished'
-              ? 'border-border-strong bg-surface'
-              : 'border-border bg-bg-raised/90',
+            ? 'ring-[3px] ring-red-600 shadow-sticker animate-pulse'
+            : 'shadow-sticker',
         onSelect &&
-          'cursor-pointer hover:border-gold-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
+          'cursor-pointer hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
         className
       )}
     >
+      {/* Final Boss Gold Corner Ribbon */}
+      {isFinal && (
+        <span className="pointer-events-none absolute -top-0.5 end-4 rounded-b-[10px] border-x-2 border-b-2 border-outline bg-gold-gradient px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-red-900 shadow-sticker-sm">
+          ★ {lang === 'ar' ? 'المقعد الذهبي' : 'GOLDEN SEAT'}
+        </span>
+      )}
+
       {/* Node Header */}
-      <div className="flex items-center justify-between gap-2 border-b border-border/80 pb-2">
+      <div
+        className={cn(
+          'flex items-center justify-between gap-2 border-b-2 border-border-paper pb-2',
+          isFinal && 'pt-3'
+        )}
+      >
         <div className="min-w-0">
           {roundLabel && (
-            <div className="truncate text-[10px] font-semibold uppercase tracking-widest text-gold-300">
+            <div className="truncate text-[10px] font-bold uppercase ltr:tracking-wider rtl:tracking-normal text-red-700">
               {roundLabel}
             </div>
           )}
-          <div className="flex items-center gap-1.5 truncate font-display text-sm @xs:text-base font-bold text-ivory">
-            {isFinal && <Crown className="h-3.5 w-3.5 shrink-0 text-gold-300" />}
+          <div className="flex items-center gap-1.5 truncate font-display text-sm @xs:text-base text-red-900">
+            {isFinal && <Crown className="h-4 w-4 shrink-0 text-gold-600" />}
             <span className="truncate">{tableName}</span>
           </div>
         </div>
 
         <div className="shrink-0">
           {status === 'live' ? (
-            <LiveBadge size="sm" />
+            <LiveBadge size="sm" surface="paper" />
           ) : status === 'finished' ? (
-            <Badge variant="positive" className="px-2 py-0.5 text-[10px]">
+            <Badge variant="muted" className="px-2.5 py-0.5 text-[10px]">
               {lang === 'ar' ? 'منتهية' : 'DONE'}
             </Badge>
           ) : (
-            <Badge variant="muted" className="px-2 py-0.5 text-[10px]">
-              {lang === 'ar' ? 'مجدولة' : 'SCHED'}
+            <Badge variant="info" className="px-2.5 py-0.5 text-[10px]">
+              {lang === 'ar' ? 'قادمة' : 'UPCOMING'}
             </Badge>
           )}
         </div>
@@ -117,14 +129,14 @@ export function BracketNode({
             <div
               key={slot.id ?? `slot-${idx}`}
               className={cn(
-                'flex min-h-[44px] items-center justify-between gap-2 rounded-input border px-2.5 py-1.5 transition-colors',
+                'flex min-h-[44px] items-center justify-between gap-2 rounded-input border-2 px-2.5 py-1.5 transition-colors',
                 slot.isHost
-                  ? 'border-gold-300/75 bg-gold-500/15'
+                  ? 'border-outline bg-gold-gradient text-red-900 shadow-sticker-sm'
                   : highlighted
-                    ? 'border-positive/55 bg-positive/12'
+                    ? 'border-outline bg-gold-200/75 text-red-900'
                     : slot.isPlaceholder
-                      ? 'border-dashed border-border bg-bg/50 opacity-75'
-                      : 'border-border bg-surface-2/75'
+                      ? 'border-dashed border-border-paper bg-paper-2/60 opacity-85'
+                      : 'border-border-paper bg-paper text-ink'
               )}
             >
               <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -136,48 +148,46 @@ export function BracketNode({
                   className="hidden @2xs:inline-flex"
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1 truncate text-xs @xs:text-sm font-semibold text-ivory">
+                  <div className="flex items-center gap-1 truncate text-xs @xs:text-sm font-bold">
                     {slot.isHost && (
-                      <span className="text-gold-300" aria-hidden="true">
-                        ♛
-                      </span>
+                      <span aria-hidden="true">♛</span>
                     )}
                     {highlighted && !slot.isHost && (
-                      <Trophy className="h-3 w-3 shrink-0 text-positive" />
+                      <Trophy className="h-3.5 w-3.5 shrink-0 text-red-700" />
                     )}
                     <span
                       className={cn(
                         'truncate',
-                        slot.isHost && 'text-gold-gradient font-bold',
-                        slot.isPlaceholder && 'italic text-text-faint font-normal'
+                        slot.isPlaceholder && 'italic text-ink-muted font-medium'
                       )}
                     >
                       {slot.name}
                     </span>
                   </div>
                   {slot.nickname && !slot.isPlaceholder && (
-                    <div className="hidden @xs:block truncate text-[10px] text-text-muted">
+                    <div
+                      className={cn(
+                        'hidden @xs:block truncate text-[10px]',
+                        slot.isHost ? 'text-red-900/80' : 'text-ink-muted'
+                      )}
+                    >
                       “{slot.nickname}”
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="shrink-0 text-end font-score text-base @xs:text-lg font-bold tabular-nums">
+              <div className="shrink-0 text-end font-score text-base @xs:text-lg font-black tabular-nums">
                 {typeof slot.score === 'number' ? (
                   <span
                     className={cn(
-                      slot.isHost
-                        ? 'text-gold-300'
-                        : highlighted
-                          ? 'text-positive'
-                          : 'text-ivory'
+                      slot.isHost || highlighted ? 'text-red-900' : 'text-ink'
                     )}
                   >
                     {formatNumber(slot.score, { useArabicIndicDigits })}
                   </span>
                 ) : (
-                  <span className="text-xs text-text-faint">—</span>
+                  <span className="text-xs text-ink-muted">—</span>
                 )}
               </div>
             </div>
@@ -206,8 +216,7 @@ export interface BracketTrackProps {
 
 /**
  * BracketTrack
- * Responsive horizontal pan + zoom container for bracket trees on phones & tablets
- * per AGENTS.md §13.
+ * Responsive horizontal pan + zoom container for bracket trees on phones & tablets.
  */
 export function BracketTrack({ children, title, className }: BracketTrackProps) {
   const { lang } = useI18n();
@@ -217,37 +226,37 @@ export function BracketTrack({ children, title, className }: BracketTrackProps) 
     <div className={cn('space-y-3', className)}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         {title ? (
-          <span className="text-xs font-semibold uppercase tracking-wider text-gold-300">
+          <span className="rounded-pill border-2 border-outline bg-white px-3.5 py-1 text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900 shadow-sticker-sm">
             {title}
           </span>
         ) : (
           <span />
         )}
 
-        <div className="inline-flex items-center gap-1 rounded-button border border-border bg-bg-raised p-1">
+        <div className="inline-flex items-center gap-1 rounded-button border-2 border-outline bg-white p-1 shadow-sticker-sm">
           <button
             type="button"
             onClick={() => setZoom((z) => Math.max(0.75, Number((z - 0.15).toFixed(2))))}
             aria-label={lang === 'ar' ? 'تصغير الشجرة' : 'Zoom out bracket'}
-            className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-[10px] text-text-muted hover:bg-surface-2 hover:text-ivory"
+            className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-[10px] text-ink hover:bg-paper-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
           >
             <ZoomOut className="h-4 w-4" />
           </button>
-          <span className="min-w-[48px] text-center text-xs font-semibold tabular-nums text-gold-300">
+          <span className="min-w-[48px] text-center text-xs font-extrabold tabular-nums text-red-900">
             {Math.round(zoom * 100)}%
           </span>
           <button
             type="button"
             onClick={() => setZoom((z) => Math.min(1.25, Number((z + 0.15).toFixed(2))))}
             aria-label={lang === 'ar' ? 'تكبير الشجرة' : 'Zoom in bracket'}
-            className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-[10px] text-text-muted hover:bg-surface-2 hover:text-ivory"
+            className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-[10px] text-ink hover:bg-paper-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
           >
             <ZoomIn className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      <div className="w-full overflow-x-auto overscroll-x-contain rounded-card border border-border bg-bg-raised/60 p-4 sm:p-6">
+      <div className="w-full overflow-x-auto overscroll-x-contain rounded-card border-[2.5px] border-outline bg-paper-2/90 p-4 sm:p-6 shadow-sticker">
         <div
           className="origin-top-start transition-transform duration-200"
           style={

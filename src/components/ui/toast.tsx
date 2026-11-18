@@ -37,26 +37,30 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 const VARIANT_STYLES: Record<
   ToastVariant,
-  { border: string; iconColor: string; Icon: React.ComponentType<{ className?: string }> }
+  {
+    accentBg: string;
+    iconBox: string;
+    Icon: React.ComponentType<{ className?: string }>;
+  }
 > = {
   gold: {
-    border: 'border-border-strong shadow-glow-gold',
-    iconColor: 'text-gold-500',
+    accentBg: 'bg-gold-gradient',
+    iconBox: 'bg-gold-400 text-red-900 border-outline',
     Icon: Sparkles,
   },
   positive: {
-    border: 'border-positive/60 shadow-[0_0_24px_rgba(47,191,143,0.25)]',
-    iconColor: 'text-positive',
+    accentBg: 'bg-positive',
+    iconBox: 'bg-positive-soft text-positive-ink border-positive',
     Icon: CheckCircle2,
   },
   negative: {
-    border: 'border-negative/65 shadow-[0_0_24px_rgba(214,51,76,0.28)]',
-    iconColor: 'text-negative',
+    accentBg: 'bg-negative',
+    iconBox: 'bg-negative text-white border-outline',
     Icon: AlertCircle,
   },
   info: {
-    border: 'border-info/60 shadow-[0_0_24px_rgba(91,140,255,0.25)]',
-    iconColor: 'text-info',
+    accentBg: 'bg-blue-500',
+    iconBox: 'bg-blue-500 text-white border-outline',
     Icon: Info,
   },
 };
@@ -126,18 +130,26 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 }
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.22, ease: 'easeOut' }}
-                className={cn(
-                  'pointer-events-auto relative flex items-start gap-3 rounded-card border bg-surface p-3.5 sm:p-4 text-ivory shadow-card-inner',
-                  v.border
-                )}
+                className="pointer-events-auto relative flex items-start gap-3 overflow-hidden rounded-card border-[2.5px] border-outline bg-white p-3.5 sm:p-4 text-ink shadow-sticker"
               >
-                <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', v.iconColor)} />
+                <span
+                  className={cn('absolute inset-y-0 start-0 w-1.5', v.accentBg)}
+                  aria-hidden="true"
+                />
+                <span
+                  className={cn(
+                    'ms-1 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-pill border-2',
+                    v.iconBox
+                  )}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-ivory">
+                  <p className="text-sm font-bold text-red-900">
                     {item.title}
                   </p>
                   {item.description && (
-                    <p className="mt-0.5 text-xs text-text-muted leading-relaxed">
+                    <p className="mt-0.5 text-xs text-ink-muted leading-relaxed">
                       {item.description}
                     </p>
                   )}
@@ -146,7 +158,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   type="button"
                   onClick={() => dismissToast(item.id)}
                   aria-label="Dismiss notification"
-                  className="-m-2 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-pill text-text-muted hover:bg-surface-2 hover:text-ivory"
+                  className="-m-1 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-pill text-ink-muted hover:bg-paper-2 hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
                 >
                   <X className="h-4 w-4" />
                 </button>

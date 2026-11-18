@@ -23,6 +23,7 @@ import type { Game } from '@/lib/schemas';
 import { cn, localizeText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { LiveBadge } from '@/components/brand/LiveBadge';
 import { FanousIcon } from '@/components/motifs/RamadanMotifs';
 
 export function PublicHeader() {
@@ -54,7 +55,6 @@ export function PublicHeader() {
     };
   }, []);
 
-  // Close drawer / popover on Escape
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -66,7 +66,6 @@ export function PublicHeader() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // Close drawer on route change
   useEffect(() => {
     setMobileMenuOpen(false);
     setRoleMenuOpen(false);
@@ -95,21 +94,21 @@ export function PublicHeader() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 w-full border-b border-border bg-bg/90 pt-safe backdrop-blur-md">
+      <header className="theme-stage sticky top-0 z-50 w-full border-b-[3px] border-outline bg-red-600 pt-safe text-white shadow-soft">
         <div className="mx-auto flex h-header-h max-w-content-wide items-center justify-between gap-1.5 xs:gap-2 px-2.5 xs:px-4 md:px-6">
           {/* Brand Identity */}
           <Link
             href="/"
-            className="group flex min-h-[44px] min-w-0 shrink xl:shrink-0 items-center gap-1.5 xs:gap-2 sm:gap-2.5 py-1 focus-visible:rounded-button"
+            className="group flex min-h-[44px] min-w-0 shrink xl:shrink-0 items-center gap-2 sm:gap-2.5 py-1 rounded-button focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           >
-            <div className="relative flex h-9 w-9 xs:h-10 xs:w-10 shrink-0 items-center justify-center rounded-button border border-border-strong bg-surface shadow-glow-gold transition-transform duration-200 group-hover:scale-105">
+            <div className="relative flex h-9 w-9 xs:h-10 xs:w-10 shrink-0 items-center justify-center rounded-button border-2 border-outline bg-white shadow-sticker-sm transition-transform duration-150 group-hover:scale-105">
               <FanousIcon className="h-5 w-5 xs:h-6 xs:w-6" />
             </div>
             <div className="flex min-w-0 flex-col">
-              <span className="truncate xl:whitespace-nowrap font-display text-sm xs:text-base sm:text-lg font-bold ltr:tracking-tight rtl:tracking-normal text-gold-gradient">
+              <span className="truncate xl:whitespace-nowrap py-0.5 leading-tight font-display text-base xs:text-lg sm:text-xl ltr:tracking-tight rtl:tracking-normal text-gold-sticker">
                 {t.brandName}
               </span>
-              <span className="hidden sm:block truncate xl:whitespace-nowrap text-[10px] uppercase tracking-widest text-text-muted">
+              <span className="hidden sm:block truncate xl:whitespace-nowrap text-[10px] font-bold uppercase ltr:tracking-widest rtl:tracking-normal text-white/90">
                 {t.brandSubtitle}
               </span>
             </div>
@@ -130,38 +129,35 @@ export function PublicHeader() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    'relative inline-flex min-h-[44px] items-center whitespace-nowrap px-2 2xl:px-2.5 py-2 text-xs 2xl:text-sm font-medium transition-colors',
+                    'relative inline-flex min-h-[44px] items-center whitespace-nowrap rounded-button px-2.5 2xl:px-3 py-2 text-xs 2xl:text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
                     isActive
-                      ? 'text-gold-300'
-                      : 'text-text-muted hover:text-ivory'
+                      ? 'text-white'
+                      : 'text-white/90 hover:bg-red-700/65 hover:text-white'
                   )}
                 >
                   {item.label}
                   {isActive && (
-                    <span className="absolute inset-x-2 bottom-0 h-0.5 bg-gold-gradient shadow-glow-gold" />
+                    <span className="absolute inset-x-2 bottom-0 h-1 rounded-pill bg-gold-400 border border-outline" />
                   )}
                 </Link>
               );
             })}
           </nav>
 
-          {/* Right / End Controls: Live Pill, Role Switcher Badge, Language Toggle, Drawer Trigger */}
+          {/* Right / End Controls */}
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-            {/* Live Game Quick-Jump Pill on md+ (also available in mobile drawer) */}
+            {/* Live Game Quick-Jump Pill on md+ */}
             {liveGame && (
               <Link
                 href={`/screen/${liveGame.id}`}
-                className="hidden md:inline-flex min-h-[44px] shrink-0 items-center gap-2 whitespace-nowrap rounded-pill border border-live/50 bg-live/15 px-3 py-1.5 text-xs font-semibold text-ivory transition-all hover:border-live hover:bg-live/25"
+                className="hidden md:inline-flex min-h-[44px] shrink-0 items-center gap-2 whitespace-nowrap rounded-pill focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                 title={localizeText(lang, liveGame.tableName, liveGame.tableNameAr)}
               >
-                <span className="relative flex h-2 w-2 shrink-0">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-pill bg-live opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-pill bg-live" />
-                </span>
-                <span className="text-live">{t.common.live}</span>
-                <span className="hidden 2xl:inline text-ivory/90">
-                  · {t.common.viewLiveGame}
-                </span>
+                <LiveBadge
+                  surface="stage"
+                  size="sm"
+                  label={`${t.common.live} · ${t.common.viewLiveGame}`}
+                />
               </Link>
             )}
 
@@ -175,21 +171,21 @@ export function PublicHeader() {
                 aria-label={`${t.common.switchRoleQuick}: ${
                   user ? localizeText(lang, user.name, user.nameAr) : roleLabel
                 }`}
-                className="inline-flex min-h-[44px] min-w-[44px] h-11 items-center justify-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 xs:px-3 text-xs font-medium text-ivory transition-colors hover:border-gold-500 hover:bg-surface-2"
+                className="inline-flex min-h-[44px] min-w-[44px] h-11 items-center justify-center gap-1.5 rounded-pill border-2 border-outline bg-white px-2.5 xs:px-3.5 text-xs font-extrabold text-red-900 shadow-sticker-sm sticker-press hover:bg-paper focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >
-                <ShieldCheck className="h-4 w-4 shrink-0 text-gold-500" />
+                <ShieldCheck className="h-4 w-4 shrink-0 text-red-600" />
                 <span className="hidden sm:inline max-w-[140px] truncate">
                   {user
                     ? localizeText(lang, user.name, user.nameAr)
                     : roleLabel}
                   {user && (
-                    <span className="hidden md:inline text-text-muted">
+                    <span className="hidden md:inline text-ink-muted font-semibold">
                       {' '}
                       ({roleLabel})
                     </span>
                   )}
                 </span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-muted" />
               </button>
 
               {roleMenuOpen && (
@@ -200,16 +196,16 @@ export function PublicHeader() {
                   />
                   <div
                     role="menu"
-                    className="fixed inset-x-3 top-[calc(var(--header-h)+var(--sat)+0.5rem)] z-50 max-h-[75dvh] overflow-y-auto rounded-card border border-border-strong bg-surface p-3 shadow-glow-gold sm:absolute sm:inset-x-auto sm:end-0 sm:top-full sm:mt-2 sm:w-80"
+                    className="fixed inset-x-3 top-[calc(var(--header-h)+var(--sat)+0.5rem)] z-50 max-h-[75dvh] overflow-y-auto rounded-card border-[2.5px] border-outline bg-white p-3 text-ink shadow-sticker-lg sm:absolute sm:inset-x-auto sm:end-0 sm:top-full sm:mt-2 sm:w-80"
                   >
-                    <div className="mb-2 flex items-center justify-between border-b border-border pb-2 px-1">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-gold-300">
+                    <div className="mb-2 flex items-center justify-between border-b border-border-paper pb-2 px-1">
+                      <span className="text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
                         {t.common.switchRoleQuick}
                       </span>
                       <Link
                         href="/login"
                         onClick={() => setRoleMenuOpen(false)}
-                        className="inline-flex min-h-[44px] items-center px-2 text-xs text-text-muted underline hover:text-gold-300"
+                        className="inline-flex min-h-[44px] items-center px-2 text-xs font-bold text-blue-600 underline hover:text-blue-800"
                       >
                         {t.nav.login}
                       </Link>
@@ -220,33 +216,33 @@ export function PublicHeader() {
                       <Link
                         href="/scorer/game-11"
                         onClick={() => setRoleMenuOpen(false)}
-                        className="flex min-h-[44px] items-center gap-1.5 rounded-input border border-border bg-surface-2 px-2.5 py-2 text-xs text-ivory hover:border-gold-500"
+                        className="flex min-h-[44px] items-center gap-1.5 rounded-input border-2 border-border-paper bg-paper px-2.5 py-2 text-xs font-bold text-ink hover:border-outline"
                       >
-                        <Tablet className="h-3.5 w-3.5 shrink-0 text-gold-500" />
+                        <Tablet className="h-3.5 w-3.5 shrink-0 text-red-600" />
                         <span className="truncate">{t.nav.scorerConsole}</span>
                       </Link>
                       <Link
                         href="/screen/game-11"
                         onClick={() => setRoleMenuOpen(false)}
-                        className="flex min-h-[44px] items-center gap-1.5 rounded-input border border-border bg-surface-2 px-2.5 py-2 text-xs text-ivory hover:border-gold-500"
+                        className="flex min-h-[44px] items-center gap-1.5 rounded-input border-2 border-border-paper bg-paper px-2.5 py-2 text-xs font-bold text-ink hover:border-outline"
                       >
-                        <MonitorPlay className="h-3.5 w-3.5 shrink-0 text-gold-500" />
+                        <MonitorPlay className="h-3.5 w-3.5 shrink-0 text-red-600" />
                         <span className="truncate">{t.nav.bigScreen}</span>
                       </Link>
                       <Link
                         href="/admin"
                         onClick={() => setRoleMenuOpen(false)}
-                        className="flex min-h-[44px] items-center gap-1.5 rounded-input border border-border bg-surface-2 px-2.5 py-2 text-xs text-ivory hover:border-gold-500"
+                        className="flex min-h-[44px] items-center gap-1.5 rounded-input border-2 border-border-paper bg-paper px-2.5 py-2 text-xs font-bold text-ink hover:border-outline"
                       >
-                        <LayoutDashboard className="h-3.5 w-3.5 shrink-0 text-gold-500" />
+                        <LayoutDashboard className="h-3.5 w-3.5 shrink-0 text-red-600" />
                         <span className="truncate">{t.nav.adminArea}</span>
                       </Link>
                       <Link
                         href="/player"
                         onClick={() => setRoleMenuOpen(false)}
-                        className="flex min-h-[44px] items-center gap-1.5 rounded-input border border-border bg-surface-2 px-2.5 py-2 text-xs text-ivory hover:border-gold-500"
+                        className="flex min-h-[44px] items-center gap-1.5 rounded-input border-2 border-border-paper bg-paper px-2.5 py-2 text-xs font-bold text-ink hover:border-outline"
                       >
-                        <UserCheck className="h-3.5 w-3.5 shrink-0 text-gold-500" />
+                        <UserCheck className="h-3.5 w-3.5 shrink-0 text-red-600" />
                         <span className="truncate">{t.nav.playerPortal}</span>
                       </Link>
                     </div>
@@ -260,22 +256,22 @@ export function PublicHeader() {
                             type="button"
                             onClick={() => handleQuickRoleSwitch(demoAcc.id, false)}
                             className={cn(
-                              'flex min-h-[44px] w-full items-center justify-between rounded-input px-2.5 py-2 text-start text-xs transition-colors',
+                              'flex min-h-[44px] w-full items-center justify-between rounded-input border-2 px-2.5 py-2 text-start text-xs transition-colors',
                               isCurrent
-                                ? 'border border-gold-500/50 bg-gold-500/15 text-gold-100'
-                                : 'text-text-muted hover:bg-surface-2 hover:text-ivory'
+                                ? 'border-blue-500 bg-blue-100 text-blue-800'
+                                : 'border-transparent text-ink hover:bg-paper-2'
                             )}
                           >
                             <div className="min-w-0 truncate pe-2">
-                              <div className="truncate font-medium text-ivory">
+                              <div className="truncate font-bold text-ink">
                                 {localizeText(lang, demoAcc.name, demoAcc.nameAr)}
                               </div>
-                              <div className="text-[11px] text-text-faint">
+                              <div className="text-[11px] font-medium text-ink-muted">
                                 {t.roles[demoAcc.role]}
                               </div>
                             </div>
                             {isCurrent && (
-                              <Badge variant="gold" className="shrink-0 px-2 py-0.5 text-[10px]">
+                              <Badge variant="info" className="shrink-0 px-2 py-0.5 text-[10px]">
                                 ✓
                               </Badge>
                             )}
@@ -291,7 +287,7 @@ export function PublicHeader() {
                           logout();
                           setRoleMenuOpen(false);
                         }}
-                        className="mt-2 flex min-h-[44px] w-full items-center justify-center rounded-input border border-border px-2.5 py-2 text-center text-xs text-text-muted hover:border-negative/50 hover:text-negative"
+                        className="mt-2 flex min-h-[44px] w-full items-center justify-center rounded-input border-2 border-border-paper px-2.5 py-2 text-center text-xs font-bold text-negative hover:border-negative hover:bg-negative-soft"
                       >
                         {t.nav.logout}
                       </button>
@@ -301,14 +297,14 @@ export function PublicHeader() {
               )}
             </div>
 
-            {/* Language Toggle (EN | عربي) — Always visible & reachable */}
+            {/* Language Toggle (EN | عربي) — Always reachable */}
             <button
               type="button"
               onClick={toggleLang}
               aria-label="Toggle Language (English / Arabic)"
-              className="inline-flex min-h-[44px] min-w-[44px] h-11 shrink-0 items-center justify-center gap-1.5 rounded-pill border border-border-strong bg-surface-2 px-2.5 xs:px-3.5 text-xs font-semibold text-gold-300 transition-all hover:border-gold-500 hover:bg-gold-500/15"
+              className="inline-flex min-h-[44px] min-w-[44px] h-11 shrink-0 items-center justify-center gap-1.5 rounded-pill border-2 border-outline bg-gold-400 px-3 xs:px-3.5 text-xs font-black text-red-900 shadow-sticker-sm sticker-press hover:bg-gold-300 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             >
-              <Globe className="h-3.5 w-3.5 shrink-0 text-gold-500" />
+              <Globe className="h-3.5 w-3.5 shrink-0 text-red-900" />
               <span>{t.common.switchLanguage}</span>
             </button>
 
@@ -330,19 +326,24 @@ export function PublicHeader() {
 
       {/* Slide-over Navigation Drawer for Phones & Tablets (Mirrors natively in RTL via end-0 / border-s) */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 xl:hidden" role="dialog" aria-modal="true" id="public-nav-drawer">
+        <div
+          className="fixed inset-0 z-50 xl:hidden"
+          role="dialog"
+          aria-modal="true"
+          id="public-nav-drawer"
+        >
           <div
-            className="fixed inset-0 bg-bg/80 backdrop-blur-sm"
+            className="fixed inset-0 bg-red-900/70 backdrop-blur-sm"
             onClick={() => setMobileMenuOpen(false)}
           />
-          <aside className="fixed inset-y-0 end-0 z-50 flex w-[min(88vw,360px)] flex-col border-s border-border-strong bg-bg-raised pt-safe pb-safe pe-safe shadow-glow-gold-lg">
+          <aside className="theme-stage fixed inset-y-0 end-0 z-50 flex w-[min(88vw,360px)] flex-col border-s-[3px] border-outline bg-red-700 pt-safe pb-safe pe-safe text-white shadow-sticker-lg">
             {/* Drawer Header */}
-            <div className="flex h-16 items-center justify-between border-b border-border px-4">
+            <div className="flex h-16 items-center justify-between border-b-2 border-outline bg-red-600 px-4">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-button border border-border-strong bg-surface shadow-glow-gold">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-button border-2 border-outline bg-white shadow-sticker-sm">
                   <FanousIcon className="h-5 w-5" />
                 </div>
-                <span className="truncate font-display text-base font-bold text-gold-gradient">
+                <span className="truncate font-display text-lg text-gold-sticker">
                   {t.brandName}
                 </span>
               </div>
@@ -358,21 +359,14 @@ export function PublicHeader() {
 
             {/* Drawer Body */}
             <div className="flex-1 overflow-y-auto p-4 space-y-5">
-              {/* Live Table Banner */}
               {liveGame && (
                 <Link
                   href={`/screen/${liveGame.id}`}
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex min-h-[48px] items-center justify-between gap-2 rounded-card border border-live/50 bg-live/15 px-4 py-2.5 text-xs font-semibold text-ivory"
+                  className="flex min-h-[48px] items-center justify-between gap-2 rounded-card border-2 border-outline bg-white px-4 py-2.5 text-xs font-extrabold text-ink shadow-sticker-sm"
                 >
-                  <span className="flex items-center gap-2">
-                    <span className="relative flex h-2.5 w-2.5 shrink-0">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-pill bg-live opacity-75" />
-                      <span className="relative inline-flex h-2.5 w-2.5 rounded-pill bg-live" />
-                    </span>
-                    <span className="text-live font-bold">{t.common.liveNow}</span>
-                  </span>
-                  <span className="truncate text-ivory">
+                  <LiveBadge surface="paper" size="sm" label={t.common.liveNow} />
+                  <span className="truncate font-bold text-red-900">
                     {localizeText(lang, liveGame.tableName, liveGame.tableNameAr)}
                   </span>
                 </Link>
@@ -391,10 +385,10 @@ export function PublicHeader() {
                       href={item.href}
                       onClick={() => setMobileMenuOpen(false)}
                       className={cn(
-                        'flex min-h-[44px] items-center rounded-input border px-3.5 py-2.5 text-sm font-medium transition-colors',
+                        'flex min-h-[44px] items-center rounded-input border-2 border-outline px-3.5 py-2.5 text-sm font-extrabold transition-colors shadow-sticker-sm',
                         isActive
-                          ? 'border-gold-500 bg-gold-500/15 text-gold-300 shadow-glow-gold'
-                          : 'border-border bg-surface text-ivory hover:border-border-strong'
+                          ? 'bg-gold-400 text-red-900'
+                          : 'bg-white text-ink hover:bg-paper'
                       )}
                     >
                       {item.label}
@@ -404,49 +398,49 @@ export function PublicHeader() {
               </nav>
 
               {/* Workspace Portals */}
-              <div className="space-y-2 border-t border-border pt-4">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-gold-300">
+              <div className="space-y-2 border-t-2 border-outline/60 pt-4">
+                <div className="inline-block rounded-pill border border-outline bg-white px-2.5 py-0.5 text-[11px] font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
                   {t.nav.adminArea} & {t.nav.scorerConsole}
                 </div>
                 <div className="grid grid-cols-1 gap-2">
                   <Link
                     href="/scorer/game-11"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex min-h-[44px] items-center gap-2.5 rounded-input border border-border-strong bg-surface px-3.5 py-2.5 text-sm font-medium text-gold-300"
+                    className="flex min-h-[44px] items-center gap-2.5 rounded-input border-2 border-outline bg-red-900 px-3.5 py-2.5 text-sm font-bold text-white shadow-sticker-sm"
                   >
-                    <Tablet className="h-4 w-4 shrink-0" />
+                    <Tablet className="h-4 w-4 shrink-0 text-gold-300" />
                     <span>{t.nav.scorerConsole}</span>
                   </Link>
                   <Link
                     href="/screen/game-11"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex min-h-[44px] items-center gap-2.5 rounded-input border border-border-strong bg-surface px-3.5 py-2.5 text-sm font-medium text-gold-300"
+                    className="flex min-h-[44px] items-center gap-2.5 rounded-input border-2 border-outline bg-white px-3.5 py-2.5 text-sm font-bold text-ink shadow-sticker-sm"
                   >
-                    <MonitorPlay className="h-4 w-4 shrink-0" />
+                    <MonitorPlay className="h-4 w-4 shrink-0 text-red-600" />
                     <span>{t.nav.bigScreen}</span>
                   </Link>
                   <Link
                     href="/admin"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex min-h-[44px] items-center gap-2.5 rounded-input border border-border-strong bg-surface px-3.5 py-2.5 text-sm font-medium text-gold-300"
+                    className="flex min-h-[44px] items-center gap-2.5 rounded-input border-2 border-outline bg-white px-3.5 py-2.5 text-sm font-bold text-ink shadow-sticker-sm"
                   >
-                    <LayoutDashboard className="h-4 w-4 shrink-0" />
+                    <LayoutDashboard className="h-4 w-4 shrink-0 text-red-600" />
                     <span>{t.nav.adminArea}</span>
                   </Link>
                   <Link
                     href="/player"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex min-h-[44px] items-center gap-2.5 rounded-input border border-border bg-surface px-3.5 py-2.5 text-sm font-medium text-ivory"
+                    className="flex min-h-[44px] items-center gap-2.5 rounded-input border-2 border-outline bg-white px-3.5 py-2.5 text-sm font-bold text-ink shadow-sticker-sm"
                   >
-                    <UserCheck className="h-4 w-4 shrink-0 text-gold-500" />
+                    <UserCheck className="h-4 w-4 shrink-0 text-red-600" />
                     <span>{t.nav.playerPortal}</span>
                   </Link>
                   <Link
                     href="/login"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex min-h-[44px] items-center gap-2.5 rounded-input border border-border bg-surface px-3.5 py-2.5 text-sm font-medium text-ivory"
+                    className="flex min-h-[44px] items-center gap-2.5 rounded-input border-2 border-outline bg-white px-3.5 py-2.5 text-sm font-bold text-ink shadow-sticker-sm"
                   >
-                    <LogIn className="h-4 w-4 shrink-0 text-gold-500" />
+                    <LogIn className="h-4 w-4 shrink-0 text-red-600" />
                     <span>{t.nav.login}</span>
                   </Link>
                 </div>
@@ -454,13 +448,13 @@ export function PublicHeader() {
             </div>
 
             {/* Drawer Footer with Language Toggle */}
-            <div className="border-t border-border p-4">
+            <div className="border-t-2 border-outline bg-red-800 p-4">
               <button
                 type="button"
                 onClick={toggleLang}
-                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-pill border border-border-strong bg-surface-2 px-4 py-2 text-xs font-semibold text-gold-300 hover:border-gold-500"
+                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-pill border-2 border-outline bg-gold-400 px-4 py-2 text-xs font-black text-red-900 shadow-sticker-sm"
               >
-                <Globe className="h-4 w-4 text-gold-500" />
+                <Globe className="h-4 w-4 text-red-900" />
                 <span>{t.common.switchLanguage}</span>
               </button>
             </div>

@@ -3,72 +3,166 @@
 @tailwind utilities;
 
 :root {
-  /* Base */
-  --bg:            #070B1A;  /* deepest midnight */
-  --bg-raised:     #0C1230;  /* sections */
-  --surface:       #111A3D;  /* cards */
-  --surface-2:     #18234F;  /* elevated cards, inputs */
-  --border:        rgba(232, 184, 75, 0.18);
-  --border-strong: rgba(232, 184, 75, 0.40);
+  /* Brand red (the stage) */
+  --red-100:  #FDE7EB;
+  --red-400:  #E5405C;
+  --red-600:  #C4163A;  /* primary brand red, stage background */
+  --red-700:  #A81233;  /* sunburst dark rays */
+  --red-800:  #7E0D26;
+  --red-900:  #4F0716;  /* deep maroon: outlines, ink on gold, dark surfaces */
 
-  /* Gold (the hero color) */
-  --gold-100:      #FBEBB5;
-  --gold-300:      #F3D27A;
-  --gold-500:      #E8B84B;  /* primary accent */
-  --gold-700:      #B8862B;
-  --gold-900:      #6B4C14;
+  /* Gold / orange (the star) */
+  --gold-200: #FFE899;
+  --gold-300: #FFD54A;
+  --gold-400: #FFC12B;  /* logo-like yellow */
+  --gold-500: #FF9F1C;  /* orange */
+  --gold-600: #E8740C;
 
-  /* Text */
-  --text:          #F6F0E1;  /* ivory */
-  --text-muted:    #A7B0CF;
-  --text-faint:    #6F7AA3;
+  /* White (primary surface and text color) */
+  --white:    #FFFFFF;
+  --paper:    #FFF9F0;  /* warm off-white page background */
+  --paper-2:  #FBEFE0;  /* subtle section or table zebra */
+
+  /* Blue (the hint, use where it fits) */
+  --blue-100: #E6EEFF;
+  --blue-300: #7FA8FF;
+  --blue-500: #2F6BFF;  /* electric blue accent */
+  --blue-600: #1F4FD8;
+  --blue-800: #14327F;
+
+  /* Ink (text on white/paper) */
+  --ink:       #2A0A10;
+  --ink-muted: #6B4A50;
+  --ink-faint: #9A7C82;
 
   /* Status */
-  --positive:      #2FBF8F;  /* points added, emerald */
-  --negative:      #D6334C;  /* points removed, casino ruby */
-  --live:          #FF4D4D;  /* live indicator */
-  --info:          #5B8CFF;
+  --positive:      #1FA971;  /* points added */
+  --positive-ink:  #0D6A43;  /* WCAG AA dark emerald text on white/paper */
+  --positive-soft: #E6F8F0;  /* soft green pill background */
+  --negative:      #B3001B;  /* points removed (always paired with minus sign/icon) */
+  --negative-soft: #FDE7EB;
+  --live:          #FFFFFF;  /* LIVE badge: white pill with pulsing red dot on stage */
 
-  /* Effects */
-  --glow-gold:     0 0 24px rgba(232, 184, 75, 0.35);
-  --glow-gold-lg:  0 0 60px rgba(232, 184, 75, 0.30);
+  /* Borders and shadows (the sticker look — direction mirrors in RTL) */
+  --outline:        var(--red-900);
+  --border-paper:   rgba(79, 7, 22, 0.14);
+  --shadow-x:       4px;
+  --shadow-x-sm:    2px;
+  --shadow-x-lg:    8px;
+  --shadow-x-hover: 6px;
+  --shadow-sticker:       var(--shadow-x) 4px 0 var(--red-900);
+  --shadow-sticker-sm:    var(--shadow-x-sm) 2px 0 var(--red-900);
+  --shadow-sticker-lg:    var(--shadow-x-lg) 8px 0 var(--red-900);
+  --shadow-sticker-hover: var(--shadow-x-hover) 6px 0 var(--red-900);
+  --shadow-soft:    0 10px 30px rgba(79, 7, 22, 0.18);
+  --glow-gold:      0 0 28px rgba(255, 193, 43, 0.55);
+
+  /* Active Surface Theme Tokens (default = Paper) */
+  --theme-mode:          paper;
+  --theme-bg:            var(--paper);
+  --theme-card:          var(--white);
+  --theme-card-2:        var(--paper-2);
+  --theme-fg:            var(--ink);
+  --theme-fg-muted:      var(--ink-muted);
+  --theme-border:        var(--border-paper);
+  --btn-primary-bg:      var(--red-600);
+  --btn-primary-fg:      var(--white);
+  --btn-secondary-fg:    var(--red-700);
+  --btn-secondary-border:var(--red-600);
+  --timer-ring-stroke:   var(--red-600);
 
   /* Active Typography mapping (EN default) */
-  --font-display: var(--font-cormorant);
-  --font-score: var(--font-bebas);
-  --font-body: var(--font-inter);
+  --font-display:  var(--font-lilita);
+  --font-score:    var(--font-bebas);
+  --font-body:     var(--font-inter);
+  --font-ar-display: var(--font-lalezar);
+  --font-ar-score:   var(--font-cairo);
+  --font-ar-body:    var(--font-cairo);
 
-  /* Fluid Typography Scale (320px -> 1920px+) */
+  /* Fluid Typography Scale (320px -> 2560px) */
   --text-fluid-xs:       clamp(0.75rem, 0.72rem + 0.12vw, 0.875rem);
   --text-fluid-sm:       clamp(0.875rem, 0.84rem + 0.16vw, 1rem);
   --text-fluid-base:     clamp(0.9375rem, 0.9rem + 0.22vw, 1.0625rem);
   --text-fluid-lg:       clamp(1.0625rem, 0.98rem + 0.35vw, 1.25rem);
   --text-fluid-xl:       clamp(1.25rem, 1.08rem + 0.7vw, 1.625rem);
-  --text-fluid-2xl:      clamp(1.45rem, 1.15rem + 1.15vw, 2.25rem);
-  --text-fluid-3xl:      clamp(1.7rem, 1.25rem + 1.85vw, 3rem);
-  --text-fluid-4xl:      clamp(1.95rem, 1.35rem + 2.6vw, 3.85rem);
-  --text-fluid-hero:     clamp(2.125rem, 1.35rem + 3.4vw, 4.75rem);
+  --text-fluid-2xl:      clamp(1.5rem, 1.2rem + 1.15vw, 2.25rem);
+  --text-fluid-3xl:      clamp(1.75rem, 1.3rem + 1.85vw, 3rem);
+  --text-fluid-4xl:      clamp(2rem, 1.4rem + 2.6vw, 4rem);
+  --text-fluid-hero:     clamp(2.25rem, 1.45rem + 3.6vw, 5.25rem);
   --text-fluid-score:    clamp(2.25rem, 1.75rem + 2.2vw, 4.25rem);
-  --text-fluid-score-xl: clamp(2.75rem, 1.9rem + 4vw, 6.75rem);
+  --text-fluid-score-xl: clamp(3rem, 2rem + 4.4vw, 7.5rem);
 
-  /* Fluid Spacing & Layout Tokens */
-  --space-section-y: clamp(2.75rem, 5.5vw, 7.5rem);
+  /* Fluid Spacing & Layout Tokens (8px grid) */
+  --space-section-y: clamp(3.5rem, 6vw, 7.5rem);
   --space-card-pad:  clamp(1rem, 2.2vw, 2rem);
   --space-gutter:    clamp(0.75rem, 2.5vw, 2rem);
   --space-grid-gap:  clamp(0.75rem, 2vw, 1.5rem);
   --header-h:        clamp(3.75rem, 4.5vw, 4.75rem);
 
-  /* Safe-area Insets (notches, Dynamic Island, home indicator) */
+  /* Safe-area Insets */
   --sat: env(safe-area-inset-top, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px);
   --sar: env(safe-area-inset-right, 0px);
 }
 
+/* Explicit RTL typography + mirrored hard sticker shadows */
 html[dir="rtl"] {
-  --font-display: var(--font-reem-kufi);
-  --font-score: var(--font-cairo);
-  --font-body: var(--font-cairo);
+  --font-display: var(--font-lalezar);
+  --font-score:   var(--font-cairo);
+  --font-body:    var(--font-cairo);
+  --shadow-x:       -4px;
+  --shadow-x-sm:    -2px;
+  --shadow-x-lg:    -8px;
+  --shadow-x-hover: -6px;
+}
+
+/* Surface Theme: Paper (admin, tables, forms, rules, reading) */
+.theme-paper {
+  --theme-mode:          paper;
+  --theme-bg:            var(--paper);
+  --theme-card:          var(--white);
+  --theme-card-2:        var(--paper-2);
+  --theme-fg:            var(--ink);
+  --theme-fg-muted:      var(--ink-muted);
+  --theme-border:        var(--border-paper);
+  --btn-primary-bg:      var(--red-600);
+  --btn-primary-fg:      var(--white);
+  --btn-secondary-fg:    var(--red-700);
+  --btn-secondary-border:var(--red-600);
+  --timer-ring-stroke:   var(--red-600);
+}
+
+/* Surface Theme: Stage (red sunburst sections, hero, big screen, final night) */
+.theme-stage {
+  --theme-mode:          stage;
+  --theme-bg:            var(--red-600);
+  --theme-card:          var(--white);
+  --theme-card-2:        var(--paper);
+  --theme-fg:            var(--white);
+  --theme-fg-muted:      var(--red-100);
+  --theme-border:        var(--outline);
+  --btn-primary-bg:      linear-gradient(180deg, #FFE066 0%, #FFC12B 40%, #FF9F1C 75%, #E8740C 100%);
+  --btn-primary-fg:      var(--red-900);
+  --btn-secondary-fg:    var(--red-900);
+  --btn-secondary-border:var(--outline);
+  --timer-ring-stroke:   var(--gold-400);
+}
+
+/* Surface Theme: Stage-Dark (scorer console: deep maroon background, white text, high contrast) */
+.theme-stage-dark {
+  --theme-mode:          stageDark;
+  --theme-bg:            var(--red-900);
+  --theme-card:          var(--red-800);
+  --theme-card-2:        var(--red-900);
+  --theme-fg:            var(--white);
+  --theme-fg-muted:      var(--red-100);
+  --theme-border:        rgba(255, 255, 255, 0.22);
+  --btn-primary-bg:      linear-gradient(180deg, #FFE066 0%, #FFC12B 40%, #FF9F1C 75%, #E8740C 100%);
+  --btn-primary-fg:      var(--red-900);
+  --btn-secondary-fg:    var(--red-900);
+  --btn-secondary-border:var(--outline);
+  --timer-ring-stroke:   var(--gold-400);
 }
 
 @media (max-height: 500px) and (orientation: landscape) {
@@ -80,12 +174,12 @@ html[dir="rtl"] {
 
 @layer base {
   * {
-    border-color: var(--border);
+    border-color: var(--border-paper);
   }
 
   html {
-    background-color: var(--bg);
-    color: var(--text);
+    background-color: var(--paper);
+    color: var(--ink);
     font-family: var(--font-body), sans-serif;
     scroll-behavior: smooth;
     overflow-x: clip;
@@ -97,9 +191,23 @@ html[dir="rtl"] {
     line-height: 1.7;
   }
 
+  /* Prevent synthetic bold smearing on single-weight display fonts (Lilita One, Lalezar, Bebas Neue) */
+  .font-display,
+  .font-score {
+    font-synthesis-weight: none;
+  }
+
+  /* Never letter-space Arabic glyphs so cursive ligatures stay crisp */
+  html[dir="rtl"] .tracking-tight,
+  html[dir="rtl"] .tracking-wide,
+  html[dir="rtl"] .tracking-wider,
+  html[dir="rtl"] .tracking-widest {
+    letter-spacing: 0;
+  }
+
   body {
-    background-color: var(--bg);
-    color: var(--text);
+    background-color: var(--paper);
+    color: var(--ink);
     min-height: 100vh;
     min-height: 100svh;
     min-height: 100dvh;
@@ -114,52 +222,146 @@ html[dir="rtl"] {
     font-size: max(16px, 1rem);
   }
 
-  /* Subtle vignette at page edges */
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 40;
-    background: radial-gradient(circle at center, transparent 65%, rgba(4, 6, 15, 0.55) 100%);
-  }
-
-  /* Focus ring: 2px gold with 2px offset on all interactive elements */
+  /* Focus ring: 3px electric blue with 2px white offset on all interactive elements */
   :focus-visible {
-    outline: 2px solid var(--gold-500);
+    outline: 3px solid var(--blue-500);
     outline-offset: 2px;
+    box-shadow: 0 0 0 2px var(--white);
   }
 }
 
 @layer utilities {
-  .text-gold-gradient {
-    background: linear-gradient(135deg, #FBEBB5 0%, #E8B84B 45%, #B8862B 100%);
+  .bg-gold-gradient {
+    background: linear-gradient(180deg, #FFE066 0%, #FFC12B 40%, #FF9F1C 75%, #E8740C 100%);
+  }
+
+  /* Glossy gold-to-orange headline with thick maroon sticker outline */
+  .text-gold-sticker {
+    background: linear-gradient(180deg, #FFE066 0%, #FFC12B 42%, #FF9F1C 76%, #E8740C 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    -webkit-text-stroke: 0.08em var(--red-900);
+    paint-order: stroke fill;
+    text-shadow: none;
+    filter: drop-shadow(var(--shadow-x-sm) 3px 0 var(--red-900));
   }
 
-  .bg-gold-gradient {
-    background: linear-gradient(135deg, #FBEBB5 0%, #E8B84B 45%, #B8862B 100%);
+  .text-gold-sticker-lg {
+    background: linear-gradient(180deg, #FFE066 0%, #FFC12B 42%, #FF9F1C 76%, #E8740C 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    -webkit-text-stroke: 0.095em var(--red-900);
+    paint-order: stroke fill;
+    text-shadow: none;
+    filter: drop-shadow(var(--shadow-x) 4px 0 var(--red-900));
+  }
+
+  /* Crisp white sticker headline with maroon outline (for secondary Stage callouts) */
+  .text-white-sticker {
+    color: var(--white);
+    -webkit-text-stroke: 0.07em var(--red-900);
+    paint-order: stroke fill;
+    filter: drop-shadow(var(--shadow-x-sm) 3px 0 var(--red-900));
+  }
+
+  /* High-contrast Paper keyword highlight (gold underline marker behind maroon ink) */
+  .text-paper-highlight {
+    color: var(--red-900);
+    background: linear-gradient(
+      180deg,
+      transparent 56%,
+      rgba(255, 193, 43, 0.72) 56%,
+      rgba(255, 193, 43, 0.72) 94%,
+      transparent 94%
+    );
+    padding-inline: 0.14em;
+    border-radius: 4px;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  /* Sticker card / button surface utilities */
+  .sticker-outline {
+    border: 2.5px solid var(--outline);
+    box-shadow: var(--shadow-sticker);
+  }
+
+  .sticker-outline-lg {
+    border: 3px solid var(--outline);
+    box-shadow: var(--shadow-sticker-lg);
+  }
+
+  .calm-card {
+    background-color: var(--white);
+    color: var(--ink);
+    border: 1px solid var(--border-paper);
+    box-shadow: var(--shadow-soft);
+  }
+
+  /* Context-aware card surface: calm on Paper, sticker white on Stage, deep maroon on Stage-dark */
+  .card-surface {
+    background-color: var(--white);
+    color: var(--ink);
+    border: 1px solid var(--border-paper);
+    box-shadow: var(--shadow-soft);
+  }
+  .theme-stage .card-surface {
+    background-color: var(--white);
+    color: var(--ink);
+    border: 2.5px solid var(--outline);
+    box-shadow: var(--shadow-sticker);
+  }
+  .theme-stage-dark .card-surface {
+    background-color: var(--red-800);
+    color: var(--white);
+    border: 2.5px solid var(--red-900);
+    box-shadow: var(--shadow-sticker);
+  }
+  .theme-stage-dark .card-surface .card-muted {
+    color: var(--red-100);
+  }
+  .card-muted {
+    color: var(--ink-muted);
   }
 
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
 
-  .arabesque-bg {
-    background-image: radial-gradient(rgba(232, 184, 75, 0.055) 1px, transparent 1px),
-      radial-gradient(rgba(232, 184, 75, 0.04) 1px, transparent 1px);
-    background-size: 32px 32px;
-    background-position: 0 0, 16px 16px;
+  /* Subtle sunburst rays background */
+  .sunburst-bg {
+    background-color: var(--red-600);
+    background-image:
+      radial-gradient(circle at 50% 42%, rgba(255, 232, 153, 0.24) 0%, rgba(255, 193, 43, 0.06) 35%, transparent 65%),
+      radial-gradient(circle at 50% 50%, transparent 48%, rgba(79, 7, 22, 0.42) 100%),
+      repeating-conic-gradient(from 0deg at 50% 50%, #C4163A 0deg 10deg, #B21235 10deg 20deg);
   }
 
-  .gold-hairline {
-    height: 1px;
+  .sunburst-dark-bg {
+    background-color: var(--red-900);
+    background-image:
+      radial-gradient(circle at 50% 25%, rgba(196, 22, 58, 0.24) 0%, transparent 60%),
+      repeating-conic-gradient(from 0deg at 50% 50%, #4F0716 0deg 10deg, #5C091A 10deg 20deg);
+  }
+
+  /* Subtle warm paper dot texture */
+  .paper-pattern {
+    background-color: var(--paper);
+    background-image: radial-gradient(rgba(79, 7, 22, 0.045) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .show-hairline {
+    height: 3px;
+    border-radius: 9999px;
     background: linear-gradient(
       90deg,
       transparent 0%,
-      rgba(232, 184, 75, 0.4) 50%,
+      var(--gold-400) 20%,
+      var(--red-600) 50%,
+      var(--gold-400) 80%,
       transparent 100%
     );
   }
@@ -198,18 +400,46 @@ html[dir="rtl"] {
     scrollbar-width: none;
   }
 
-  /* Touch-safe hover wrapper for non-Tailwind custom hover styles */
-  .hover-gold-lift {
-    transition: transform 200ms ease-out, border-color 200ms ease-out, box-shadow 200ms ease-out;
+  /* Tactile sticker lift & press utilities (hover gated under pointer fine) */
+  .sticker-press {
+    transition: transform 150ms ease-out, box-shadow 150ms ease-out, filter 150ms ease-out;
+  }
+  .sticker-press:active {
+    transform: translate(3px, 3px);
+    box-shadow: none !important;
+  }
+  html[dir="rtl"] .sticker-press:active {
+    transform: translate(-3px, 3px);
+    box-shadow: none !important;
   }
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .hover-gold-lift:hover {
+  .sticker-press:hover {
     transform: translateY(-2px);
-    border-color: var(--border-strong);
-    box-shadow: 0 0 20px rgba(232, 184, 75, 0.14);
+    box-shadow: var(--shadow-sticker-hover);
   }
+  .sticker-press:active {
+    transform: translate(3px, 3px);
+    box-shadow: none !important;
+  }
+  html[dir="rtl"] .sticker-press:active {
+    transform: translate(-3px, 3px);
+    box-shadow: none !important;
+  }
+}
+
+@keyframes sunburst-spin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+.animate-sunburst-slow {
+  animation: sunburst-spin 90s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

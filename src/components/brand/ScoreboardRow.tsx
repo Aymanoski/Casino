@@ -2,10 +2,11 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { Crown, Minus, Plus } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { cn, formatNumber } from '@/lib/utils';
 import { PlayerAvatar } from './PlayerAvatar';
-import { ScoreChip } from './ScoreChip';
+import { ScoreChip, type ScoreChipTone } from './ScoreChip';
 import { AnimatedNumber } from './AnimatedNumber';
 import { Badge } from '@/components/ui/badge';
 
@@ -22,14 +23,16 @@ export interface ScoreboardRowProps {
   isHighlighted?: boolean;
   isHost?: boolean;
   useArabicIndicDigits?: boolean;
+  /** 'sticker' (for Stage) or 'calm' (for Paper tables) */
+  appearance?: 'sticker' | 'calm';
   className?: string;
 }
 
 /**
  * ScoreboardRow
- * Container-query responsive scoreboard row per DESIGN.md §6 & §7 and AGENTS.md §13.
- * Gracefully adapts between ultra-narrow mobile containers (320px) and wide displays (2560px)
- * without crushing player names or wrapping scores awkwardly.
+ * Container-query responsive scoreboard row per DESIGN.md §6 & §7:
+ * Rank casino chip, avatar, name, animated score counter, and floating delta
+ * (+10 in green with Plus icon, −5 in maroon with Minus icon).
  */
 export function ScoreboardRow({
   rank,
@@ -44,6 +47,7 @@ export function ScoreboardRow({
   isHighlighted = false,
   isHost = false,
   useArabicIndicDigits = false,
+  appearance = 'sticker',
   className,
 }: ScoreboardRowProps) {
   const { lang } = useI18n();
@@ -75,31 +79,31 @@ export function ScoreboardRow({
     }
   }, [recentDelta]);
 
-  const isTopThree = rank <= 3;
+  const chipTone: ScoreChipTone =
+    rank === 1 ? 'gold' : rank === 2 ? 'red' : rank === 3 ? 'blue' : 'white';
 
   return (
     <motion.div
       layout={!prefersReducedMotion}
       transition={{ duration: 0.35, ease: 'easeOut' }}
       className={cn(
-        '@container group relative flex flex-wrap @sm:flex-nowrap items-center justify-between gap-2.5 @sm:gap-4 rounded-card border px-3.5 py-3 @sm:px-5 @sm:py-4 transition-all duration-200',
+        '@container group relative flex flex-wrap @sm:flex-nowrap items-center justify-between gap-2.5 @sm:gap-4 rounded-card px-3.5 py-3 @sm:px-5 @sm:py-4 transition-all duration-200',
+        appearance === 'sticker'
+          ? 'border-[2.5px] border-outline shadow-sticker'
+          : 'border border-border-paper shadow-soft',
         isHighlighted || rank === 1
-          ? 'border-border-strong bg-gradient-to-r from-gold-500/15 via-surface to-surface shadow-glow-gold'
-          : 'border-border bg-surface hover:border-border-strong hover:bg-surface-2/80',
+          ? 'bg-gradient-to-r from-gold-200/45 via-paper to-white text-ink'
+          : 'bg-white text-ink hover:bg-paper',
         className
       )}
     >
-      {/* Start: Rank Chip + Avatar + Player Identity */}
+      {/* Start: Rank Casino Chip + Avatar + Identity */}
       <div className="flex min-w-0 flex-1 basis-[190px] items-center gap-2.5 @sm:gap-4">
         <ScoreChip
           value={`#${formatNumber(rank, { useArabicIndicDigits })}`}
-          tone="neutral"
+          tone={chipTone}
           size="sm"
-          className={cn(
-            'shrink-0',
-            rank === 1 && 'border-gold-300 shadow-glow-gold',
-            !isTopThree && 'opacity-80'
-          )}
+          className="shrink-0"
         />
 
         <PlayerAvatar
@@ -111,24 +115,27 @@ export function ScoreboardRow({
         />
 
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {isHost && (
+              <Crown className="h-4 w-4 shrink-0 text-gold-600" aria-hidden="true" />
+            )}
             <span
               className={cn(
-                'truncate font-display text-base @sm:text-xl font-bold',
-                rank === 1 || isHost ? 'text-gold-gradient' : 'text-ivory'
+                'truncate font-display text-base @sm:text-xl',
+                rank === 1 || isHost ? 'text-red-900' : 'text-ink'
               )}
             >
               {name}
             </span>
             {nickname && (
-              <span className="truncate text-xs text-text-muted">
+              <span className="truncate text-xs text-ink-muted">
                 “{nickname}”
               </span>
             )}
             {statusLabel && (
               <Badge
                 variant={rank <= 2 ? 'gold' : 'muted'}
-                className="hidden @md:inline-flex px-2 py-0.5 text-[10px]"
+                className="hidden @md:inline-flex px-2.5 py-0.5 text-[10px]"
               >
                 {statusLabel}
               </Badge>
@@ -136,11 +143,11 @@ export function ScoreboardRow({
           </div>
 
           {(typeof gamesPlayed === 'number' || typeof wins === 'number') && (
-            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-text-muted">
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-muted">
               {typeof gamesPlayed === 'number' && (
                 <span>
                   {lang === 'ar' ? 'المباريات: ' : 'Games: '}
-                  <strong className="text-ivory tabular-nums">
+                  <strong className="text-ink tabular-nums">
                     {formatNumber(gamesPlayed, { useArabicIndicDigits })}
                   </strong>
                 </span>
@@ -148,7 +155,7 @@ export function ScoreboardRow({
               {typeof wins === 'number' && (
                 <span>
                   {lang === 'ar' ? 'الفوز: ' : 'Wins: '}
-                  <strong className="text-gold-300 tabular-nums">
+                  <strong className="text-red-700 tabular-nums">
                     {formatNumber(wins, { useArabicIndicDigits })}
                   </strong>
                 </span>
@@ -158,7 +165,7 @@ export function ScoreboardRow({
         </div>
       </div>
 
-      {/* End: Delta Flash + Animated Score Counter */}
+      {/* End: Delta Flash (+ / - with explicit icon) + Animated Score Counter */}
       <div className="ms-auto flex shrink-0 items-center gap-2 @sm:gap-3">
         <AnimatePresence mode="popLayout">
           {deltaEvent && (
@@ -167,32 +174,32 @@ export function ScoreboardRow({
               initial={
                 prefersReducedMotion
                   ? { opacity: 1, y: 0 }
-                  : {
-                      opacity: 0,
-                      y: deltaEvent.delta > 0 ? 12 : -12,
-                    }
+                  : { opacity: 0, y: deltaEvent.delta > 0 ? 10 : -10 }
               }
               animate={
                 prefersReducedMotion
                   ? { opacity: 1, y: 0 }
-                  : {
-                      opacity: 1,
-                      y: deltaEvent.delta > 0 ? -3 : 3,
-                    }
+                  : { opacity: 1, y: deltaEvent.delta > 0 ? -3 : 3 }
               }
               exit={{ opacity: 0 }}
               transition={{ duration: 0.35, ease: 'easeOut' }}
               className={cn(
-                'inline-flex items-center rounded-pill border px-2 @sm:px-2.5 py-0.5 font-score text-sm @sm:text-lg font-bold tracking-wider tabular-nums',
+                'inline-flex items-center gap-1 rounded-pill border-2 border-outline px-2.5 py-0.5 font-score text-sm @sm:text-base font-black tabular-nums shadow-sticker-sm',
                 deltaEvent.delta > 0
-                  ? 'border-positive/50 bg-positive/15 text-positive shadow-[0_0_12px_rgba(47,191,143,0.25)]'
-                  : 'border-negative/50 bg-negative/15 text-negative shadow-[0_0_12px_rgba(214,51,76,0.25)]'
+                  ? 'bg-positive-soft text-positive-ink'
+                  : 'bg-negative text-white'
               )}
             >
-              {formatNumber(deltaEvent.delta, {
-                sign: true,
-                useArabicIndicDigits,
-              })}
+              {deltaEvent.delta > 0 ? (
+                <Plus className="h-3.5 w-3.5 stroke-[3] shrink-0" aria-hidden="true" />
+              ) : (
+                <Minus className="h-3.5 w-3.5 stroke-[3] shrink-0" aria-hidden="true" />
+              )}
+              <span>
+                {formatNumber(Math.abs(deltaEvent.delta), {
+                  useArabicIndicDigits,
+                })}
+              </span>
             </motion.span>
           )}
         </AnimatePresence>
@@ -202,11 +209,11 @@ export function ScoreboardRow({
             value={score}
             useArabicIndicDigits={useArabicIndicDigits}
             className={cn(
-              'font-score text-[clamp(1.65rem,7cqi,2.5rem)] font-bold leading-none tracking-wider',
-              rank === 1 ? 'text-gold-gradient' : 'text-ivory'
+              'font-score text-[clamp(1.65rem,7cqi,2.5rem)] font-black leading-none tracking-normal',
+              rank === 1 ? 'text-red-600' : 'text-red-900'
             )}
           />
-          <span className="ms-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+          <span className="ms-1 text-[10px] font-bold uppercase ltr:tracking-wider rtl:tracking-normal text-ink-muted">
             {lang === 'ar' ? 'نقطة' : 'PTS'}
           </span>
         </div>

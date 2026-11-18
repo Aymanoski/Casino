@@ -9,7 +9,7 @@ export interface MarqueeBulbsProps {
   variant?: 'strip' | 'perimeter';
   bulbCount?: number;
   chase?: boolean;
-  tone?: 'gold' | 'ruby';
+  tone?: 'gold' | 'red';
   className?: string;
   children?: React.ReactNode;
 }
@@ -40,15 +40,19 @@ export function MarqueeBulbs({
             : undefined
         }
         className={cn(
-          'inline-block h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-pill transition-opacity duration-500',
+          'inline-block h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-pill border border-red-900/70 transition-opacity duration-500',
           tone === 'gold'
-            ? 'bg-gold-100 shadow-[0_0_8px_2px_rgba(251,235,181,0.75)]'
-            : 'bg-live shadow-[0_0_8px_2px_rgba(255,77,77,0.75)]',
+            ? isEven
+              ? 'bg-gold-200 shadow-[0_0_8px_2px_rgba(255,232,153,0.85)]'
+              : 'bg-gold-400 shadow-[0_0_8px_2px_rgba(255,193,43,0.75)]'
+            : isEven
+              ? 'bg-white shadow-[0_0_8px_2px_rgba(255,255,255,0.85)]'
+              : 'bg-red-400 shadow-[0_0_8px_2px_rgba(229,64,92,0.75)]',
           shouldChase
             ? 'animate-pulse'
             : isEven
-              ? 'opacity-95'
-              : 'opacity-70'
+              ? 'opacity-100'
+              : 'opacity-75'
         )}
       />
     );
@@ -58,7 +62,7 @@ export function MarqueeBulbs({
     return (
       <div
         className={cn(
-          'flex items-center justify-between gap-1.5 sm:gap-2 rounded-pill border border-border-strong bg-bg/90 px-3 sm:px-4 py-2',
+          'flex items-center justify-between gap-1.5 sm:gap-2 rounded-pill border-2 border-outline bg-red-900 px-3 sm:px-4 py-2 shadow-sticker-sm',
           className
         )}
         aria-hidden="true"
@@ -70,15 +74,13 @@ export function MarqueeBulbs({
     );
   }
 
-  // Perimeter mode around a card or showcase frame
   const topBottomCount = Math.max(6, Math.min(18, bulbCount));
   const sideCount = Math.max(4, Math.floor(topBottomCount * 0.55));
 
   return (
-    <div className={cn('relative p-3 sm:p-5', className)}>
-      {/* Outer marquee frame track */}
+    <div className={cn('relative p-3.5 sm:p-5', className)}>
       <div
-        className="pointer-events-none absolute inset-0 rounded-[24px] sm:rounded-[26px] border border-border-strong bg-bg-raised/75 shadow-glow-gold"
+        className="pointer-events-none absolute inset-0 rounded-[26px] border-[3px] border-outline bg-red-900 shadow-sticker-lg"
         aria-hidden="true"
       >
         {/* Top bulbs */}
@@ -93,13 +95,13 @@ export function MarqueeBulbs({
             renderBulb(topBottomCount - i, 'bottom')
           )}
         </div>
-        {/* Left / Start bulbs */}
+        {/* Start bulbs */}
         <div className="absolute inset-y-6 start-1.5 flex flex-col items-center justify-between">
           {Array.from({ length: sideCount }).map((_, i) =>
             renderBulb(i + 1, 'start')
           )}
         </div>
-        {/* Right / End bulbs */}
+        {/* End bulbs */}
         <div className="absolute inset-y-6 end-1.5 flex flex-col items-center justify-between">
           {Array.from({ length: sideCount }).map((_, i) =>
             renderBulb(sideCount - i, 'end')

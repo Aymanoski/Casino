@@ -6,7 +6,6 @@ import {
   Activity,
   CheckCircle2,
   Database,
-  Radio,
   RotateCcw,
   Sparkles,
   Users,
@@ -28,6 +27,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PokerChipIcon } from '@/components/motifs/RamadanMotifs';
+import { LiveBadge } from '@/components/brand/LiveBadge';
 
 interface RouteShellPlaceholderProps {
   titleEn: string;
@@ -130,29 +130,31 @@ export function RouteShellPlaceholder({
 
   return (
     <div className="mx-auto max-w-content-wide space-y-6 sm:space-y-8 py-4 sm:py-8 px-1 xs:px-3 md:px-6">
-      <Card premium className="space-y-6">
+      <Card appearance="sticker" className="space-y-6 bg-white text-ink">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5">
-            <PokerChipIcon label="P1" />
+            <PokerChipIcon label="★" tone="gold" />
             <Badge variant="gold">{t.common.phaseShellReady}</Badge>
           </div>
-          <Badge variant="live" className="max-w-full truncate">
-            <Radio className="h-3 w-3 shrink-0 animate-pulse" />
-            <span className="truncate">{lastRtEvent}</span>
-          </Badge>
+          <LiveBadge
+            surface="paper"
+            size="sm"
+            label={lastRtEvent}
+            className="max-w-full truncate"
+          />
         </div>
 
         <div className="space-y-2">
-          <h1 className="font-display text-fluid-3xl font-bold text-gold-gradient">
+          <h1 className="font-display text-fluid-3xl text-red-900">
             {localizeText(lang, titleEn, titleAr)}
           </h1>
-          <p className="max-w-3xl text-fluid-base text-text-muted">
+          <p className="max-w-3xl text-fluid-base text-ink-muted">
             {localizeText(lang, subtitleEn, subtitleAr)}
           </p>
         </div>
 
-        <div className="rounded-input border border-border bg-surface-2 p-4 text-xs sm:text-sm text-gold-100">
-          <span className="font-semibold text-gold-300">
+        <div className="rounded-input border-2 border-border-paper bg-paper-2 p-4 text-xs sm:text-sm text-ink">
+          <span className="font-extrabold text-red-800">
             {lang === 'ar' ? 'حالة المرحلة الحالية: ' : 'Phase Roadmap Note: '}
           </span>
           {localizeText(lang, phaseNoteEn, phaseNoteAr)}
@@ -161,62 +163,62 @@ export function RouteShellPlaceholder({
         {/* Live Repository Layer Verification Grid */}
         {stats && (
           <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-input border border-border bg-bg-raised p-4">
-              <div className="flex items-center justify-between gap-2 text-xs text-text-muted">
+            <div className="rounded-input border-2 border-border-paper bg-paper p-4">
+              <div className="flex items-center justify-between gap-2 text-xs font-bold text-ink-muted">
                 <span>{lang === 'ar' ? 'اللاعبون (playerRepo)' : 'Seeded Players (playerRepo)'}</span>
-                <Users className="h-4 w-4 shrink-0 text-gold-500" />
+                <Users className="h-4 w-4 shrink-0 text-red-600" />
               </div>
-              <div className="mt-2 font-score text-2xl sm:text-3xl text-ivory tabular-nums">
+              <div className="mt-2 font-score text-2xl sm:text-3xl font-black text-red-900 tabular-nums">
                 {formatNumber(stats.playerCount, {
                   useArabicIndicDigits: stats.useArabicIndic,
                 })}{' '}
-                <span className="text-sm text-gold-300">
+                <span className="text-sm font-bold text-red-700">
                   {lang === 'ar' ? '+ مروان سري' : '+ Marwan Serry'}
                 </span>
               </div>
             </div>
 
-            <div className="rounded-input border border-border bg-bg-raised p-4">
-              <div className="flex items-center justify-between gap-2 text-xs text-text-muted">
+            <div className="rounded-input border-2 border-border-paper bg-paper p-4">
+              <div className="flex items-center justify-between gap-2 text-xs font-bold text-ink-muted">
                 <span>{lang === 'ar' ? 'المباريات (gameRepo)' : 'Tournament Games (gameRepo)'}</span>
-                <Activity className="h-4 w-4 shrink-0 text-gold-500" />
+                <Activity className="h-4 w-4 shrink-0 text-red-600" />
               </div>
-              <div className="mt-2 font-score text-xl sm:text-2xl text-ivory tabular-nums">
+              <div className="mt-2 font-score text-xl sm:text-2xl font-black text-red-900 tabular-nums">
                 {lang === 'ar' ? (
                   <>
                     {stats.finishedGames} منتهية ·{' '}
-                    <span className="text-live">{stats.liveGames} مباشر</span> ·{' '}
+                    <span className="text-red-600">{stats.liveGames} مباشر</span> ·{' '}
                     {stats.scheduledGames} مجدولة
                   </>
                 ) : (
                   <>
                     {stats.finishedGames} Done ·{' '}
-                    <span className="text-live">{stats.liveGames} Live</span> ·{' '}
+                    <span className="text-red-600">{stats.liveGames} Live</span> ·{' '}
                     {stats.scheduledGames} Sched
                   </>
                 )}
               </div>
             </div>
 
-            <div className="rounded-input border border-border bg-bg-raised p-4">
-              <div className="flex items-center justify-between gap-2 text-xs text-text-muted">
+            <div className="rounded-input border-2 border-border-paper bg-paper p-4">
+              <div className="flex items-center justify-between gap-2 text-xs font-bold text-ink-muted">
                 <span>{lang === 'ar' ? 'فقرات البرنامج (segmentRepo)' : 'Show Segments (segmentRepo)'}</span>
-                <Database className="h-4 w-4 shrink-0 text-gold-500" />
+                <Database className="h-4 w-4 shrink-0 text-blue-600" />
               </div>
-              <div className="mt-2 font-score text-2xl sm:text-3xl text-ivory tabular-nums">
+              <div className="mt-2 font-score text-2xl sm:text-3xl font-black text-red-900 tabular-nums">
                 {stats.segmentCount}{' '}
-                <span className="text-sm text-text-muted">
+                <span className="text-sm font-bold text-ink-muted">
                   ({stats.roundCount} {lang === 'ar' ? 'جولات' : 'Rounds'})
                 </span>
               </div>
             </div>
 
-            <div className="rounded-input border border-border bg-bg-raised p-4">
-              <div className="flex items-center justify-between gap-2 text-xs text-text-muted">
+            <div className="rounded-input border-2 border-border-paper bg-paper p-4">
+              <div className="flex items-center justify-between gap-2 text-xs font-bold text-ink-muted">
                 <span>{lang === 'ar' ? 'الأحداث والسجل (scoreRepo)' : 'Events & Audit (scoreRepo)'}</span>
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-positive" />
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-positive-ink" />
               </div>
-              <div className="mt-2 font-score text-xl sm:text-2xl text-ivory tabular-nums">
+              <div className="mt-2 font-score text-xl sm:text-2xl font-black text-red-900 tabular-nums">
                 {lang === 'ar'
                   ? `${stats.scoreEventCount} نتيجة · ${stats.auditCount} سجل`
                   : `${stats.scoreEventCount} Scores · ${stats.auditCount} Audits`}
@@ -226,9 +228,9 @@ export function RouteShellPlaceholder({
         )}
 
         {/* Interactive Realtime & Reset Verification Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-paper pt-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="primary" size="sm" onClick={handleTestScorePing}>
+            <Button variant="red" size="sm" onClick={handleTestScorePing}>
               <Sparkles className="h-4 w-4 shrink-0" />
               <span>
                 {lang === 'ar'
@@ -242,24 +244,24 @@ export function RouteShellPlaceholder({
             </Button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-bold">
             <Link
               href="/login"
-              className="inline-flex min-h-[44px] items-center text-gold-300 underline hover:text-gold-100"
+              className="inline-flex min-h-[44px] items-center text-blue-600 underline hover:text-blue-800"
             >
               {t.nav.login}
             </Link>
-            <span className="text-text-faint" aria-hidden="true">·</span>
+            <span className="text-ink-faint" aria-hidden="true">·</span>
             <Link
               href="/scorer/game-11"
-              className="inline-flex min-h-[44px] items-center text-gold-300 underline hover:text-gold-100"
+              className="inline-flex min-h-[44px] items-center text-blue-600 underline hover:text-blue-800"
             >
               {t.nav.scorerConsole}
             </Link>
-            <span className="text-text-faint" aria-hidden="true">·</span>
+            <span className="text-ink-faint" aria-hidden="true">·</span>
             <Link
               href="/admin"
-              className="inline-flex min-h-[44px] items-center text-gold-300 underline hover:text-gold-100"
+              className="inline-flex min-h-[44px] items-center text-blue-600 underline hover:text-blue-800"
             >
               {t.nav.adminArea}
             </Link>

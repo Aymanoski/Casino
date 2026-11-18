@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface InputProps
@@ -8,14 +9,17 @@ export interface InputProps
   error?: string;
   startIcon?: React.ReactNode;
   endIcon?: React.ReactNode;
+  /** Label color mode if placed directly on dark/stage surface */
+  labelTone?: 'paper' | 'stage';
 }
 
 /**
  * Input
- * Per DESIGN.md §4 & §6 and AGENTS.md §13:
- * surface-2 background, 12px radius (rounded-input), gold focus border,
- * minimum 16px font size (text-base) to prevent iOS Safari auto-zoom,
- * minimum 44px touch height (min-h-[44px]), inline validation in casino ruby (--negative).
+ * Per DESIGN.md §4 & §6:
+ * - Crisp white fill, 12px radius (rounded-input), 2px --border-paper that turns electric blue on focus
+ * - Minimum 16px font size (text-base) to prevent iOS Safari auto-zoom
+ * - Minimum 44px touch height
+ * - Inline validation in --negative with AlertCircle icon (never color alone)
  */
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
   (
@@ -27,6 +31,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       error,
       startIcon,
       endIcon,
+      labelTone = 'paper',
       id,
       ...props
     },
@@ -40,7 +45,10 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="block text-xs font-semibold uppercase tracking-wider text-gold-300"
+            className={cn(
+              'block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal',
+              labelTone === 'stage' ? 'text-white' : 'text-ink'
+            )}
           >
             {label}
           </label>
@@ -48,7 +56,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
 
         <div className="relative flex items-center">
           {startIcon && (
-            <span className="pointer-events-none absolute start-3.5 flex items-center text-text-muted">
+            <span className="pointer-events-none absolute start-3.5 flex items-center text-ink-muted">
               {startIcon}
             </span>
           )}
@@ -66,10 +74,10 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
                   : undefined
             }
             className={cn(
-              'flex min-h-[44px] h-11 w-full min-w-0 rounded-input border bg-surface-2 px-3.5 py-2 text-base leading-normal text-ivory placeholder:text-text-faint transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50',
+              'flex min-h-[44px] h-11 w-full min-w-0 rounded-input border-2 bg-white px-3.5 py-2 text-base leading-normal text-ink placeholder:text-ink-faint transition-colors duration-150 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50',
               error
                 ? 'border-negative focus-visible:border-negative focus-visible:ring-negative'
-                : 'border-border hover:border-border-strong focus-visible:border-gold-500',
+                : 'border-border-paper hover:border-red-900/35 focus-visible:border-blue-500',
               startIcon && 'ps-10',
               endIcon && 'pe-10',
               className
@@ -78,7 +86,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           />
 
           {endIcon && (
-            <span className="absolute end-3.5 flex items-center text-text-muted">
+            <span className="absolute end-3.5 flex items-center text-ink-muted">
               {endIcon}
             </span>
           )}
@@ -88,12 +96,24 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           <p
             id={`${inputId}-error`}
             role="alert"
-            className="text-xs font-medium text-negative"
+            className={cn(
+              'inline-flex items-center gap-1.5 text-xs font-bold',
+              labelTone === 'stage'
+                ? 'rounded-pill bg-white px-2.5 py-0.5 text-negative'
+                : 'text-negative'
+            )}
           >
-            {error}
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>{error}</span>
           </p>
         ) : helperText ? (
-          <p id={`${inputId}-helper`} className="text-xs text-text-muted">
+          <p
+            id={`${inputId}-helper`}
+            className={cn(
+              'text-xs',
+              labelTone === 'stage' ? 'text-white/90' : 'text-ink-muted'
+            )}
+          >
             {helperText}
           </p>
         ) : null}

@@ -12,8 +12,16 @@ export * from './table';
 export * from './empty-state';
 export * from './skeleton';
 
-// Re-export brand components that are also commonly imported from @/components/ui
+// Re-export brand components & motifs
 export {
+  SunburstStage,
+  StageDivider,
+  PlayingDice,
+  PlayingCardMotif,
+  PlayingCardFan,
+  SwirlOrnament,
+  ConfettiShapes,
+  StickerBadge,
   LiveBadge,
   ScoreChip,
   ChipBadge,
@@ -25,9 +33,11 @@ export {
   BracketTrack,
   SectionHeading,
   GoldDivider,
+  ShowDivider,
   Lantern,
   LanternCluster,
   CrescentStar,
+  CardSuitWatermark,
   ArabesqueBackground,
   MarqueeBulbs,
   Spotlight,

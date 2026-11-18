@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { Lantern } from '@/components/brand/Lantern';
+import { PlayingCardMotif, PlayingDice } from '@/components/brand/GameMotifs';
 
 export interface EmptyStateProps extends React.HTMLAttributes<HTMLDivElement> {
   title: string;
@@ -13,9 +13,9 @@ export interface EmptyStateProps extends React.HTMLAttributes<HTMLDivElement> {
 
 /**
  * EmptyState
- * Per DESIGN.md §6 & §9:
- * Midnight panel with flat gold line-art swaying Lantern illustration,
- * headline, muted description, and optional CTA.
+ * Per DESIGN.md §6:
+ * Playful original illustration (dice & playing card) on crisp Paper surface,
+ * headline in deep maroon, muted description, and optional primary action.
  */
 export function EmptyState({
   title,
@@ -28,22 +28,29 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center rounded-card border border-dashed border-border-strong bg-surface/65 text-center shadow-card-inner',
+        'flex flex-col items-center justify-center rounded-card border-2 border-dashed border-red-900/25 bg-white text-center text-ink shadow-soft',
         compact ? 'px-5 py-8' : 'px-6 py-12 md:py-16',
         className
       )}
       {...props}
     >
-      <div className="mb-4 flex items-center justify-center rounded-pill border border-border bg-bg-raised/90 p-4 shadow-glow-gold">
-        <Lantern size={compact ? 'sm' : 'md'} chainLength={4} />
+      <div className="mb-4 flex items-center justify-center gap-1 rounded-card border-2 border-outline bg-paper-2 px-5 py-3 shadow-sticker-sm">
+        <PlayingDice value={5} size={compact ? 'sm' : 'md'} tilt={-10} />
+        <PlayingCardMotif
+          suit="star"
+          cornerText="★"
+          tone="gold"
+          size={compact ? 'sm' : 'md'}
+          tilt={8}
+        />
       </div>
 
-      <h3 className="font-display text-xl md:text-2xl font-bold text-gold-100">
+      <h3 className="font-display text-xl md:text-2xl text-red-900">
         {title}
       </h3>
 
       {description && (
-        <p className="mt-1.5 max-w-md text-sm text-text-muted leading-relaxed">
+        <p className="mt-1.5 max-w-md text-sm text-ink-muted leading-relaxed">
           {description}
         </p>
       )}

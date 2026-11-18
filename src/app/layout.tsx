@@ -2,23 +2,23 @@ import type { Metadata, Viewport } from 'next';
 import {
   Bebas_Neue,
   Cairo,
-  Cormorant_Garamond,
   Inter,
-  Reem_Kufi,
+  Lalezar,
+  Lilita_One,
 } from 'next/font/google';
 import './globals.css';
 import { I18nProvider } from '@/lib/i18n';
 import { AuthProvider } from '@/lib/auth';
 import { ToastProvider } from '@/components/ui/toast';
 
-const cormorant = Cormorant_Garamond({
+const lilitaOne = Lilita_One({
   subsets: ['latin'],
-  weight: ['600', '700'],
-  variable: '--font-cormorant',
+  weight: ['400'],
+  variable: '--font-lilita',
   display: 'swap',
 });
 
-const bebas = Bebas_Neue({
+const bebasNeue = Bebas_Neue({
   subsets: ['latin'],
   weight: ['400'],
   variable: '--font-bebas',
@@ -32,16 +32,16 @@ const inter = Inter({
   display: 'swap',
 });
 
-const reemKufi = Reem_Kufi({
+const lalezar = Lalezar({
   subsets: ['arabic', 'latin'],
-  weight: ['600', '700'],
-  variable: '--font-reem-kufi',
+  weight: ['400'],
+  variable: '--font-lalezar',
   display: 'swap',
 });
 
 const cairo = Cairo({
   subsets: ['arabic', 'latin'],
-  weight: ['400', '600', '700'],
+  weight: ['400', '600', '700', '900'],
   variable: '--font-cairo',
   display: 'swap',
 });
@@ -49,14 +49,14 @@ const cairo = Cairo({
 export const metadata: Metadata = {
   title: 'Casino El Al3ab — Ramadan Tournament & Final Night Showcase',
   description:
-    'A luxury Ramadan trivia & game-show tournament culminating in a Grand Final against Marwan Serry.',
+    'A bold, joyful Ramadan trivia & game-show tournament culminating in a Grand Final against Marwan Serry.',
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#070B1A',
+  themeColor: '#C4163A',
 };
 
 export default function RootLayout({
@@ -68,10 +68,10 @@ export default function RootLayout({
     <html
       lang="en"
       dir="ltr"
-      className={`${cormorant.variable} ${bebas.variable} ${inter.variable} ${reemKufi.variable} ${cairo.variable}`}
+      className={`${lilitaOne.variable} ${bebasNeue.variable} ${inter.variable} ${lalezar.variable} ${cairo.variable}`}
       suppressHydrationWarning
     >
-      <body className="min-h-dvh bg-bg text-ivory antialiased selection:bg-gold-500 selection:text-bg">
+      <body className="min-h-dvh theme-paper bg-paper text-ink antialiased selection:bg-gold-400 selection:text-red-900">
         <I18nProvider>
           <AuthProvider>
             <ToastProvider>{children}</ToastProvider>

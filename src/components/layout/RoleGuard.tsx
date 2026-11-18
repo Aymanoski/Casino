@@ -19,7 +19,7 @@ export function RoleGuard({ children }: { children: React.ReactNode }) {
   if (isLoading) {
     return (
       <div className="flex min-h-[50dvh] items-center justify-center p-8">
-        <div className="h-10 w-10 animate-spin rounded-pill border-2 border-gold-500 border-t-transparent" />
+        <div className="h-10 w-10 animate-spin rounded-pill border-4 border-gold-400 border-t-red-600" />
       </div>
     );
   }
@@ -30,8 +30,8 @@ export function RoleGuard({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="mx-auto max-w-2xl px-3 py-8 sm:px-4 sm:py-16">
-      <Card premium className="space-y-6 text-center">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-pill border border-border-strong bg-gold-500/15 text-gold-300">
+      <Card appearance="sticker" className="space-y-6 text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-pill border-2 border-outline bg-red-100 text-red-700 shadow-sticker-sm">
           <ShieldAlert className="h-7 w-7" />
         </div>
 
@@ -39,10 +39,10 @@ export function RoleGuard({ children }: { children: React.ReactNode }) {
           <Badge variant="gold">
             {user ? t.roles[user.role] : t.roles.visitor}
           </Badge>
-          <h1 className="font-display text-fluid-2xl font-bold text-ivory">
+          <h1 className="font-display text-fluid-2xl text-red-900">
             {t.common.accessRestricted}
           </h1>
-          <p className="text-sm text-text-muted">
+          <p className="text-sm text-ink-muted">
             {t.common.accessRestrictedDesc}
           </p>
         </div>
@@ -53,26 +53,26 @@ export function RoleGuard({ children }: { children: React.ReactNode }) {
               key={demoAcc.id}
               type="button"
               onClick={() => loginAs(demoAcc.id)}
-              className="flex min-h-[52px] items-center justify-between gap-2 rounded-input border border-border bg-surface-2 p-3 transition-all hover:border-gold-500 hover:bg-gold-500/10"
+              className="flex min-h-[52px] items-center justify-between gap-2 rounded-input border-2 border-border-paper bg-paper p-3 transition-all hover:border-blue-500 hover:bg-blue-100/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
             >
               <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-ivory">
+                <div className="truncate text-sm font-bold text-ink">
                   {localizeText(lang, demoAcc.name, demoAcc.nameAr)}
                 </div>
-                <div className="truncate text-xs text-gold-300">
+                <div className="truncate text-xs font-semibold text-red-700">
                   {t.roles[demoAcc.role]}
                 </div>
               </div>
-              <UserCheck className="h-4 w-4 shrink-0 text-gold-500" />
+              <UserCheck className="h-4 w-4 shrink-0 text-blue-600" />
             </button>
           ))}
         </div>
 
         <div className="flex flex-col xs:flex-row flex-wrap justify-center gap-3 pt-2">
-          <Button asChild variant="secondary">
+          <Button asChild variant="red">
             <Link href="/login">{t.common.goToLogin}</Link>
           </Button>
-          <Button asChild variant="ghost">
+          <Button asChild variant="secondary">
             <Link href="/">{t.common.backToHome}</Link>
           </Button>
         </div>

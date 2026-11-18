@@ -94,4 +94,34 @@
   - Added `BracketNode` and `BracketTrack` (`src/components/brand/BracketNode.tsx`) alongside `FormGrid` (`src/components/ui/form-grid.tsx`) so responsive bracket trees (pan + zoom + mobile round stack) and single-column-on-phone forms are ready for Phases 3–9 by default.
   - **Bonus Idea:** Added an on-device mobile `Cards | Table` view switcher and bottom-sheet `filterSlot` inside `DataTable`, allowing admins on phones to browse either stacked cards or the full sticky-first-column scrollable table with a single tap.
 
+---
+
+## Bold "Casino El Al3ab" Retheme Decisions (2026-11-18)
+
+### 16. Locked New Typography & Font Synthesis Rules (Supersedes #8)
+- **Context:** `DESIGN.md` §3 replaced the earlier midnight-and-gold editorial fonts (`Cormorant Garamond`, `Reem Kufi`) with bold game-show typography and offered options for Arabic scores (`Lalezar` or `Cairo` 900) and body (`Cairo` or `Tajawal`).
+- **Decisions:**
+  - **English Display / Headlines:** `Lilita One` (weight `400`)
+  - **English Scores / Timers / Big Numerals:** `Bebas Neue` (weight `400`, `tabular-nums`)
+  - **English Body / UI:** `Inter` (weights `400`, `500`, `600`, `700`)
+  - **Arabic Display / Headlines:** `Lalezar` (weight `400`)
+  - **Arabic Scores & Body / UI:** `Cairo` (`400, 600, 700, 900` with `tabular-nums`, using `900` for big numeric scores/timers)
+  - Disabled synthetic bolding (`font-synthesis-weight: none`) on `.font-display` and `.font-score` and enforced `letter-spacing: 0` on RTL tracking utilities so single-weight `Lilita One`/`Lalezar` and connected Arabic ligatures render cleanly without faux-bold smearing.
+
+### 17. Surface Themes (`Stage`, `Stage-Dark`, `Paper`) & RTL Shadow Mirroring
+- **Decisions:**
+  - Implemented explicit semantic CSS theme scopes in `globals.css`: `.theme-paper` (`--paper` `#FFF9F0` / `--white`, `--ink` text, `--red-600` primary buttons, calm `1px` `--border-paper` cards), `.theme-stage` (red sunburst `--red-600`/`#B21235`, white text, glossy gold-to-orange sticker headings, white sticker cards with `2.5px` `--red-900` outline, gold gradient primary buttons), and `.theme-stage-dark` (deep maroon `--red-900` Scorer Console with `--red-800` panels, white text, gold scores, and high-contrast controls).
+  - Mirrored `--shadow-x`, `--shadow-x-sm`, `--shadow-x-lg`, and `--shadow-x-hover` negatively inside `html[dir="rtl"]` (plus `.sticker-press:active` horizontal sink direction) so hard offset sticker shadows flip cleanly in Arabic RTL.
+
+### 18. WCAG AA Contrast & Color Guardrails (`DESIGN.md` §2)
+- **Decisions:**
+  - **Positive status text on Paper:** `--positive` (`#1FA971`) has ~3.0:1 contrast against white/paper for small text. Added `--positive-soft` (`#E6F8F0`) and `--positive-ink` (`#0D6A43`, ~6.1:1 contrast) for Paper badges, delta pills, and preset buttons while keeping `--positive` (`#1FA971`) for borders, chip rims, and accents.
+  - **Blue buffer rule:** Every blue focus ring (`3px` `--blue-500` with `2px` white offset), selected `PlayerPanel` ring on Stage-Dark, `Button variant="info"`, `Badge variant="info" | "upcoming"`, and blue `ScoreChip` includes a crisp white border/halo so electric blue never sits directly against red.
+  - **Gold on red & Paper headlines:** Small labels and body text on red Stage surfaces use `#FFFFFF` (never small gold). Gold gradient sticker lettering is reserved for 24px+ display titles/scores with `--red-900` stroke (`paint-order: stroke fill`), while Paper headlines use `--red-900` with a gold marker underline highlight (`.text-paper-highlight`) rather than gold text on cream.
+  - **Plus / Minus never by color alone:** Every positive/negative badge, score chip, `PlayerPanel` preset button, `ScoreboardRow` delta flash, and toast pairs `+` / `−` signs with Lucide `Plus` / `Minus` icons.
+
+### 19. EmptyState & Secondary Ramadan Motifs
+- **Decisions:** Replaced the midnight lantern illustration inside `EmptyState` with original sticker-style `PlayingDice` + `PlayingCardMotif` artwork per `DESIGN.md` §6, while keeping `Lantern`, `LanternCluster`, and `CrescentStar` rethemed in the new warm gold/maroon sticker style strictly as subtle secondary Ramadan accents.
+- **Bonus Idea:** Built reusable `StageDivider` SVG section transitions (`zigzag`, `angled`, `scallop`) with thick `#4F0716` sticker borders to cleanly separate Stage sunburst bands from Paper bands across `/` and `/styleguide`.
+
 

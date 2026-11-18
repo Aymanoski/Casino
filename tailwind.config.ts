@@ -72,49 +72,73 @@ const config: Config = {
     },
     extend: {
       colors: {
-        bg: {
-          DEFAULT: 'var(--bg)',
-          raised: 'var(--bg-raised)',
-        },
-        surface: {
-          DEFAULT: 'var(--surface)',
-          2: 'var(--surface-2)',
-        },
-        border: {
-          DEFAULT: 'var(--border)',
-          strong: 'var(--border-strong)',
+        red: {
+          100: 'var(--red-100)',
+          400: 'var(--red-400)',
+          600: 'var(--red-600)',
+          700: 'var(--red-700)',
+          800: 'var(--red-800)',
+          900: 'var(--red-900)',
+          DEFAULT: 'var(--red-600)',
         },
         gold: {
-          100: 'var(--gold-100)',
+          200: 'var(--gold-200)',
           300: 'var(--gold-300)',
+          400: 'var(--gold-400)',
           500: 'var(--gold-500)',
-          700: 'var(--gold-700)',
-          900: 'var(--gold-900)',
-          DEFAULT: 'var(--gold-500)',
+          600: 'var(--gold-600)',
+          DEFAULT: 'var(--gold-400)',
         },
-        ivory: {
-          DEFAULT: 'var(--text)',
+        paper: {
+          DEFAULT: 'var(--paper)',
+          2: 'var(--paper-2)',
         },
-        text: {
-          DEFAULT: 'var(--text)',
-          muted: 'var(--text-muted)',
-          faint: 'var(--text-faint)',
+        blue: {
+          100: 'var(--blue-100)',
+          300: 'var(--blue-300)',
+          500: 'var(--blue-500)',
+          600: 'var(--blue-600)',
+          800: 'var(--blue-800)',
+          DEFAULT: 'var(--blue-500)',
         },
-        positive: 'var(--positive)',
-        negative: 'var(--negative)',
+        ink: {
+          DEFAULT: 'var(--ink)',
+          muted: 'var(--ink-muted)',
+          faint: 'var(--ink-faint)',
+        },
+        outline: 'var(--outline)',
+        'border-paper': 'var(--border-paper)',
+        positive: {
+          DEFAULT: 'var(--positive)',
+          ink: 'var(--positive-ink)',
+          soft: 'var(--positive-soft)',
+        },
+        negative: {
+          DEFAULT: 'var(--negative)',
+          soft: 'var(--negative-soft)',
+        },
         live: 'var(--live)',
-        info: 'var(--info)',
+        // Theme-adaptive semantic aliases (switch via .theme-paper / .theme-stage / .theme-stage-dark)
+        canvas: 'var(--theme-bg)',
+        panel: {
+          DEFAULT: 'var(--theme-card)',
+          2: 'var(--theme-card-2)',
+        },
+        'on-canvas': {
+          DEFAULT: 'var(--theme-fg)',
+          muted: 'var(--theme-fg-muted)',
+        },
       },
       fontSize: {
         'fluid-xs': ['var(--text-fluid-xs)', { lineHeight: '1.45' }],
         'fluid-sm': ['var(--text-fluid-sm)', { lineHeight: '1.55' }],
         'fluid-base': ['var(--text-fluid-base)', { lineHeight: '1.6' }],
         'fluid-lg': ['var(--text-fluid-lg)', { lineHeight: '1.55' }],
-        'fluid-xl': ['var(--text-fluid-xl)', { lineHeight: '1.35' }],
-        'fluid-2xl': ['var(--text-fluid-2xl)', { lineHeight: '1.22' }],
-        'fluid-3xl': ['var(--text-fluid-3xl)', { lineHeight: '1.16' }],
-        'fluid-4xl': ['var(--text-fluid-4xl)', { lineHeight: '1.12' }],
-        'fluid-hero': ['var(--text-fluid-hero)', { lineHeight: '1.08' }],
+        'fluid-xl': ['var(--text-fluid-xl)', { lineHeight: '1.3' }],
+        'fluid-2xl': ['var(--text-fluid-2xl)', { lineHeight: '1.2' }],
+        'fluid-3xl': ['var(--text-fluid-3xl)', { lineHeight: '1.14' }],
+        'fluid-4xl': ['var(--text-fluid-4xl)', { lineHeight: '1.1' }],
+        'fluid-hero': ['var(--text-fluid-hero)', { lineHeight: '1.05' }],
         'fluid-score': ['var(--text-fluid-score)', { lineHeight: '1' }],
         'fluid-score-xl': ['var(--text-fluid-score-xl)', { lineHeight: '0.95' }],
       },
@@ -150,21 +174,29 @@ const config: Config = {
         pill: '9999px',
       },
       boxShadow: {
+        sticker: 'var(--shadow-sticker)',
+        'sticker-sm': 'var(--shadow-sticker-sm)',
+        'sticker-lg': 'var(--shadow-sticker-lg)',
+        'sticker-hover': 'var(--shadow-sticker-hover)',
+        soft: 'var(--shadow-soft)',
         'glow-gold': 'var(--glow-gold)',
-        'glow-gold-lg': 'var(--glow-gold-lg)',
-        'card-inner': 'inset 0 1px 0 0 rgba(251, 235, 181, 0.14)',
       },
       fontFamily: {
-        display: ['var(--font-display)', 'serif'],
-        score: ['var(--font-score)', 'sans-serif'],
-        sans: ['var(--font-body)', 'sans-serif'],
+        display: ['var(--font-display)', 'var(--font-ar-display)', 'sans-serif'],
+        score: ['var(--font-score)', 'var(--font-ar-score)', 'sans-serif'],
+        sans: ['var(--font-body)', 'var(--font-ar-body)', 'sans-serif'],
         'ar-display': ['var(--font-ar-display)', 'sans-serif'],
         'ar-body': ['var(--font-ar-body)', 'sans-serif'],
       },
       backgroundImage: {
-        'gold-gradient': 'linear-gradient(135deg, #FBEBB5 0%, #E8B84B 45%, #B8862B 100%)',
-        'night-gradient':
-          'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(232, 184, 75, 0.14) 0%, rgba(17, 26, 61, 0.65) 45%, #070B1A 100%)',
+        'gold-gradient':
+          'linear-gradient(180deg, #FFE066 0%, #FFC12B 40%, #FF9F1C 75%, #E8740C 100%)',
+        sunburst:
+          'repeating-conic-gradient(from 0deg at 50% 50%, #C4163A 0deg 10deg, #B21235 10deg 20deg)',
+        'sunburst-dark':
+          'repeating-conic-gradient(from 0deg at 50% 50%, #4F0716 0deg 10deg, #5F0A1B 10deg 20deg)',
+        'blue-spark':
+          'linear-gradient(135deg, #7FA8FF, #2F6BFF 60%, #1F4FD8)',
       },
       maxWidth: {
         content: '1200px',

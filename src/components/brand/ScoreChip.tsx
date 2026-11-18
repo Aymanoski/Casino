@@ -1,9 +1,20 @@
 'use client';
 
 import React from 'react';
+import { Minus, Plus } from 'lucide-react';
 import { cn, formatNumber } from '@/lib/utils';
 
-export type ScoreChipTone = 'neutral' | 'positive' | 'negative' | 'live';
+export type ScoreChipTone =
+  | 'gold'
+  | 'red'
+  | 'white'
+  | 'blue'
+  | 'positive'
+  | 'negative'
+  | 'neutral'
+  | 'info'
+  | 'plain'
+  | 'live';
 
 export interface ScoreChipProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -16,64 +27,108 @@ export interface ScoreChipProps
   subtitle?: string;
 }
 
-const TONE_STYLES: Record<ScoreChipTone, { outer: string; inner: string; text: string }> = {
+const TONE_STYLES: Record<
+  ScoreChipTone,
+  { outer: string; inner: string; text: string; sub: string }
+> = {
+  gold: {
+    outer: 'border-outline bg-gold-400 shadow-sticker-sm',
+    inner: 'border-dashed border-red-900/75 bg-gold-200',
+    text: 'text-red-900',
+    sub: 'text-red-900/80',
+  },
   neutral: {
-    outer:
-      'border-gold-500/80 bg-surface-2 shadow-[0_0_18px_rgba(232,184,75,0.25)]',
-    inner: 'border-dashed border-gold-300/75 bg-bg-raised/90',
-    text: 'text-gold-100',
+    outer: 'border-outline bg-gold-400 shadow-sticker-sm',
+    inner: 'border-dashed border-red-900/75 bg-gold-200',
+    text: 'text-red-900',
+    sub: 'text-red-900/80',
+  },
+  red: {
+    outer: 'border-outline bg-red-600 shadow-sticker-sm',
+    inner: 'border-dashed border-white/85 bg-red-700',
+    text: 'text-white',
+    sub: 'text-white/90',
+  },
+  white: {
+    outer: 'border-outline bg-white shadow-sticker-sm',
+    inner: 'border-dashed border-red-900/50 bg-paper',
+    text: 'text-ink',
+    sub: 'text-ink-muted',
+  },
+  plain: {
+    outer: 'border-outline bg-white shadow-sticker-sm',
+    inner: 'border-dashed border-red-900/50 bg-paper',
+    text: 'text-ink',
+    sub: 'text-ink-muted',
+  },
+  blue: {
+    outer: 'border-white bg-blue-500 ring-2 ring-outline shadow-sticker-sm',
+    inner: 'border-dashed border-white/85 bg-blue-600',
+    text: 'text-white',
+    sub: 'text-white/90',
+  },
+  info: {
+    outer: 'border-white bg-blue-500 ring-2 ring-outline shadow-sticker-sm',
+    inner: 'border-dashed border-white/85 bg-blue-600',
+    text: 'text-white',
+    sub: 'text-white/90',
   },
   positive: {
-    outer:
-      'border-positive/80 bg-positive/15 shadow-[0_0_18px_rgba(47,191,143,0.28)]',
-    inner: 'border-dashed border-positive/80 bg-bg-raised/90',
-    text: 'text-positive',
+    outer: 'border-outline bg-positive shadow-sticker-sm',
+    inner: 'border-dashed border-positive bg-positive-soft',
+    text: 'text-positive-ink',
+    sub: 'text-positive-ink/85',
   },
   negative: {
-    outer:
-      'border-negative/80 bg-negative/15 shadow-[0_0_18px_rgba(214,51,76,0.28)]',
-    inner: 'border-dashed border-negative/80 bg-bg-raised/90',
-    text: 'text-negative',
+    outer: 'border-outline bg-negative shadow-sticker-sm',
+    inner: 'border-dashed border-white/80 bg-negative',
+    text: 'text-white',
+    sub: 'text-white/90',
   },
   live: {
-    outer:
-      'border-live/80 bg-live/15 shadow-[0_0_18px_rgba(255,77,77,0.30)]',
-    inner: 'border-dashed border-live/80 bg-bg-raised/90',
-    text: 'text-live',
+    outer: 'border-outline bg-white shadow-sticker-sm',
+    inner: 'border-dashed border-white/85 bg-red-600',
+    text: 'text-white',
+    sub: 'text-white/90',
   },
 };
 
 const SIZE_STYLES = {
   sm: {
-    outer: 'h-9 w-9 p-1',
+    outer: 'h-10 w-10 p-1',
     interactiveOuter: 'h-11 w-11 min-h-[44px] min-w-[44px] p-1',
     text: 'text-xs',
     sub: 'text-[8px]',
+    icon: 'h-2.5 w-2.5',
   },
   md: {
     outer: 'h-12 w-12 p-1.5',
     interactiveOuter: 'h-12 w-12 min-h-[44px] min-w-[44px] p-1.5',
     text: 'text-base',
     sub: 'text-[9px]',
+    icon: 'h-3 w-3',
   },
   lg: {
     outer: 'h-16 w-16 p-1.5',
     interactiveOuter: 'h-16 w-16 p-1.5',
     text: 'text-xl',
     sub: 'text-[10px]',
+    icon: 'h-3.5 w-3.5',
   },
   xl: {
     outer: 'h-20 w-20 p-2',
     interactiveOuter: 'h-20 w-20 p-2',
     text: 'text-2xl',
     sub: 'text-[10px]',
+    icon: 'h-4 w-4',
   },
 };
 
 /**
  * ScoreChip (also exported as ChipBadge for Delighters hook point)
- * Circular poker chip badge with dashed inner ring and tabular number per DESIGN.md §5 & §6.
- * Enforces 44px minimum touch target whenever interactive or clickable.
+ * Circular casino chip badge with dashed inner ring, thick maroon outline,
+ * hard offset sticker shadow, and tabular numerals per DESIGN.md §5 & §6.
+ * Classic 4 chip colors (red, white, blue, gold) + positive/negative with explicit +/- icons.
  */
 export function ScoreChip({
   value,
@@ -95,18 +150,28 @@ export function ScoreChip({
         ? 'positive'
         : numericVal < 0
           ? 'negative'
-          : 'neutral'
-      : 'neutral');
+          : 'gold'
+      : 'gold');
 
   const styles = TONE_STYLES[resolvedTone];
   const dims = SIZE_STYLES[size];
 
-  const displayText =
+  const isNegative = resolvedTone === 'negative' || (!Number.isNaN(numericVal) && numericVal < 0);
+  const isPositive = resolvedTone === 'positive' || (!Number.isNaN(numericVal) && numericVal > 0 && showSign);
+
+  // Format numeric values using true typographical minus (\u2212) when negative
+  const rawDisplayText =
     typeof value === 'number'
-      ? formatNumber(value, {
-          sign: showSign,
+      ? formatNumber(Math.abs(value), {
+          sign: false,
           useArabicIndicDigits,
         })
+      : String(value).replace(/^[+-]/, '');
+
+  const signChar = isNegative ? '−' : isPositive ? '+' : '';
+  const displayText =
+    typeof value === 'number' || showSign || isNegative
+      ? `${signChar}${rawDisplayText}`
       : String(value);
 
   const isButton = interactive || Boolean(onClick);
@@ -120,21 +185,24 @@ export function ScoreChip({
     >
       <span
         className={cn(
-          'font-score font-bold tracking-wider tabular-nums',
+          'inline-flex items-center justify-center gap-0.5 font-score font-black tracking-normal tabular-nums',
           dims.text,
           styles.text
         )}
       >
-        {displayText}
+        <span>{displayText}</span>
       </span>
       {subtitle && (
         <span
           className={cn(
-            'mt-0.5 uppercase tracking-widest text-text-muted',
-            dims.sub
+            'mt-0.5 flex items-center gap-0.5 font-bold uppercase ltr:tracking-wider rtl:tracking-normal leading-none',
+            dims.sub,
+            styles.sub
           )}
         >
-          {subtitle}
+          {isPositive && <Plus className="h-2.5 w-2.5 stroke-[3]" aria-hidden="true" />}
+          {isNegative && <Minus className="h-2.5 w-2.5 stroke-[3]" aria-hidden="true" />}
+          <span>{subtitle}</span>
         </span>
       )}
     </span>
@@ -146,7 +214,7 @@ export function ScoreChip({
         type="button"
         onClick={onClick}
         className={cn(
-          'group relative inline-flex shrink-0 items-center justify-center rounded-pill border-2 transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
+          'group relative inline-flex shrink-0 items-center justify-center rounded-pill border-[2.5px] sticker-press focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
           dims.interactiveOuter,
           styles.outer,
           className
@@ -161,7 +229,7 @@ export function ScoreChip({
   return (
     <div
       className={cn(
-        'relative inline-flex shrink-0 items-center justify-center rounded-pill border-2 select-none',
+        'relative inline-flex shrink-0 items-center justify-center rounded-pill border-[2.5px] select-none',
         dims.outer,
         styles.outer,
         className

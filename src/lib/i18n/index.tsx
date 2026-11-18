@@ -72,7 +72,7 @@ const dictionary = {
       goToLogin: 'Switch Demo Account',
       backToHome: 'Back to Pitch Home',
       placeholderBadge: 'RAMADAN 2027 PITCH PROTOTYPE',
-      footerTagline: 'A luxury Ramadan trivia & game-show tournament culminating in a Grand Final against Marwan Serry.',
+      footerTagline: 'A bold, joyful Ramadan trivia & game-show tournament culminating in a Grand Final against Marwan Serry.',
       footerDisclaimer: 'Pitch prototype — dates, venue, prizes, and sponsor packages are editable placeholders. No real-money gambling.',
       phaseShellReady: 'Phase 1 Architecture & App Shell Ready',
     },

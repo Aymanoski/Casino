@@ -13,7 +13,7 @@ export const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      'flex w-full max-w-full items-center justify-start gap-1 overflow-x-auto no-scrollbar rounded-button border border-border bg-bg-raised p-1.5 text-text-muted sm:inline-flex sm:w-auto sm:flex-wrap',
+      'flex w-full max-w-full items-center justify-start gap-1.5 overflow-x-auto no-scrollbar rounded-button border-2 border-outline bg-paper-2 p-1.5 text-ink-muted shadow-sticker-sm sm:inline-flex sm:w-auto sm:flex-wrap',
       className
     )}
     {...props}
@@ -28,7 +28,7 @@ export const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      'inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:border data-[state=active]:border-border-strong data-[state=active]:bg-surface-2 data-[state=active]:text-gold-300 data-[state=active]:shadow-glow-gold hover:text-ivory',
+      'inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] border-2 border-transparent px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-bold transition-all duration-150 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:pointer-events-none disabled:opacity-50 hover:text-red-900 data-[state=active]:border-outline data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sticker-sm',
       className
     )}
     {...props}
@@ -43,7 +43,7 @@ export const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      'mt-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded-card',
+      'mt-4 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 rounded-card',
       className
     )}
     {...props}

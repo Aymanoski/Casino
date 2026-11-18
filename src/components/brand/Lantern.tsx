@@ -21,6 +21,11 @@ const SIZE_MAP = {
   xl: { width: 76, height: 138 },
 };
 
+/**
+ * Lantern (Fanous)
+ * Subtle secondary Ramadan motif per DESIGN.md §5:
+ * gold-to-orange gradient body, deep maroon sticker outline, warm cream flame.
+ */
 export function Lantern({
   size = 'md',
   sway = true,
@@ -39,17 +44,11 @@ export function Lantern({
     <motion.div
       className={cn(
         'inline-flex flex-col items-center select-none',
-        glow && 'drop-shadow-[0_0_18px_rgba(232,184,75,0.42)]',
+        glow && 'drop-shadow-[0_0_18px_rgba(255,193,43,0.45)]',
         className
       )}
       style={{ transformOrigin: 'top center' }}
-      animate={
-        shouldSway
-          ? {
-              rotate: [-2.4, 2.4, -2.4],
-            }
-          : { rotate: 0 }
-      }
+      animate={shouldSway ? { rotate: [-2.4, 2.4, -2.4] } : { rotate: 0 }}
       transition={
         shouldSway
           ? {
@@ -68,29 +67,24 @@ export function Lantern({
         viewBox={`0 0 64 ${110 + chainLength}`}
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className="overflow-visible text-gold-500"
+        className="overflow-visible"
       >
         <defs>
-          <radialGradient
-            id={`lantern-glow-${uid}`}
-            cx="50%"
-            cy="55%"
-            r="50%"
-          >
-            <stop offset="0%" stopColor="#FBEBB5" stopOpacity="0.95" />
-            <stop offset="45%" stopColor="#E8B84B" stopOpacity="0.45" />
-            <stop offset="100%" stopColor="#E8B84B" stopOpacity="0" />
+          <radialGradient id={`lantern-glow-${uid}`} cx="50%" cy="55%" r="50%">
+            <stop offset="0%" stopColor="#FFE899" stopOpacity="0.95" />
+            <stop offset="50%" stopColor="#FFC12B" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#FFC12B" stopOpacity="0" />
           </radialGradient>
           <linearGradient
-            id={`lantern-brass-${uid}`}
+            id={`lantern-gold-${uid}`}
             x1="0%"
             y1="0%"
-            x2="100%"
+            x2="0%"
             y2="100%"
           >
-            <stop offset="0%" stopColor="#FBEBB5" />
-            <stop offset="50%" stopColor="#E8B84B" />
-            <stop offset="100%" stopColor="#B8862B" />
+            <stop offset="0%" stopColor="#FFE899" />
+            <stop offset="45%" stopColor="#FFC12B" />
+            <stop offset="100%" stopColor="#E8740C" />
           </linearGradient>
         </defs>
 
@@ -101,120 +95,105 @@ export function Lantern({
             y1="0"
             x2="32"
             y2={chainLength}
-            stroke={`url(#lantern-brass-${uid})`}
-            strokeWidth="2"
+            stroke="#4F0716"
+            strokeWidth="2.5"
             strokeDasharray="3 2"
           />
         )}
 
         <g transform={`translate(0, ${chainLength})`}>
-          {/* Ambient halo behind glass */}
           {glow && (
-            <circle
-              cx="32"
-              cy="58"
-              r="30"
-              fill={`url(#lantern-glow-${uid})`}
-            />
+            <circle cx="32" cy="58" r="28" fill={`url(#lantern-glow-${uid})`} />
           )}
 
-          {/* Top Suspension Ring & Finial Crescent */}
+          {/* Top Suspension Ring */}
           <circle
             cx="32"
             cy="7"
             r="4.5"
-            stroke={`url(#lantern-brass-${uid})`}
-            strokeWidth="2"
-            fill="rgba(7, 11, 26, 0.8)"
+            stroke="#4F0716"
+            strokeWidth="2.5"
+            fill="#FFE899"
           />
           <path
             d="M28 14C28 11.5 30 10.5 32 10.5C34 10.5 36 11.5 36 14"
-            stroke={`url(#lantern-brass-${uid})`}
-            strokeWidth="1.75"
+            stroke="#4F0716"
+            strokeWidth="2.2"
           />
 
-          {/* Ornate Onion Dome (Qubba) */}
+          {/* Dome */}
           <path
             d="M18 28C18 19.5 25 16.5 32 13.5C39 16.5 46 19.5 46 28H18Z"
-            fill="rgba(232, 184, 75, 0.18)"
-            stroke={`url(#lantern-brass-${uid})`}
-            strokeWidth="1.8"
-          />
-          {/* Dome filigree ribs */}
-          <path
-            d="M25 28C25 21 28.5 17.5 32 14.5C35.5 17.5 39 21 39 28"
-            stroke="currentColor"
-            strokeWidth="1.1"
-            strokeOpacity="0.65"
+            fill={`url(#lantern-gold-${uid})`}
+            stroke="#4F0716"
+            strokeWidth="2.5"
           />
 
-          {/* Upper Crown Cornice with Scallops */}
+          {/* Upper Crown Rim */}
           <path
             d="M12 28H52L47 35H17L12 28Z"
-            fill="rgba(17, 26, 61, 0.9)"
-            stroke={`url(#lantern-brass-${uid})`}
-            strokeWidth="1.8"
+            fill="#C4163A"
+            stroke="#4F0716"
+            strokeWidth="2.5"
             strokeLinejoin="round"
           />
-          <circle cx="22" cy="31.5" r="1.2" fill="#FBEBB5" />
-          <circle cx="32" cy="31.5" r="1.4" fill="#FBEBB5" />
-          <circle cx="42" cy="31.5" r="1.2" fill="#FBEBB5" />
+          <circle cx="22" cy="31.5" r="1.4" fill="#FFE899" />
+          <circle cx="32" cy="31.5" r="1.6" fill="#FFFFFF" />
+          <circle cx="42" cy="31.5" r="1.4" fill="#FFE899" />
 
-          {/* Main Tapered Hexagonal Glass Body */}
+          {/* Main Tapered Glass Body */}
           <path
             d="M17 35H47L51 69H13L17 35Z"
-            fill="rgba(251, 235, 181, 0.10)"
-            stroke={`url(#lantern-brass-${uid})`}
-            strokeWidth="2"
+            fill="#FFF9F0"
+            stroke="#4F0716"
+            strokeWidth="2.8"
             strokeLinejoin="round"
           />
 
-          {/* Internal Brass Lattice / Islamic Arch Panels */}
+          {/* Brass Lattice */}
           <path
             d="M24 35L22 69M40 35L42 69"
-            stroke="currentColor"
-            strokeWidth="1.2"
+            stroke="#E8740C"
+            strokeWidth="1.5"
             strokeOpacity="0.6"
-          />
-          <path
-            d="M23 52C23 44 27.5 40 32 38C36.5 40 41 44 41 52"
-            stroke="currentColor"
-            strokeWidth="1.2"
-            strokeOpacity="0.55"
           />
 
           {/* Glowing Inner Flame */}
           <path
-            d="M32 43C35.5 47.8 37.5 51.2 37.5 54.5C37.5 57.8 35.1 60.2 32 60.2C28.9 60.2 26.5 57.8 26.5 54.5C26.5 51.2 28.5 47.8 32 43Z"
-            fill="#FBEBB5"
+            d="M32 42C36 47.4 38 51 38 54.5C38 58 35.4 60.5 32 60.5C28.6 60.5 26 58 26 54.5C26 51 28 47.4 32 42Z"
+            fill="#FFC12B"
+            stroke="#4F0716"
+            strokeWidth="1.6"
           />
           <path
             d="M32 47.5C34 50.5 35 52.6 35 54.6C35 56.5 33.7 58 32 58C30.3 58 29 56.5 29 54.6C29 52.6 30 50.5 32 47.5Z"
             fill="#FFFFFF"
-            fillOpacity="0.85"
           />
 
           {/* Lower Pedestal Base */}
           <path
             d="M13 69H51L44 79H20L13 69Z"
-            fill="rgba(232, 184, 75, 0.22)"
-            stroke={`url(#lantern-brass-${uid})`}
-            strokeWidth="1.8"
+            fill={`url(#lantern-gold-${uid})`}
+            stroke="#4F0716"
+            strokeWidth="2.5"
             strokeLinejoin="round"
           />
           <path
             d="M17 79H47L45 83H19L17 79Z"
-            fill="rgba(17, 26, 61, 0.95)"
-            stroke={`url(#lantern-brass-${uid})`}
-            strokeWidth="1.5"
+            fill="#C4163A"
+            stroke="#4F0716"
+            strokeWidth="2.2"
           />
 
-          {/* Hanging Bottom Tassel / Finial */}
+          {/* Bottom Finial */}
           <path
             d="M27 83H37L32 91L27 83Z"
-            fill={`url(#lantern-brass-${uid})`}
+            fill="#FFC12B"
+            stroke="#4F0716"
+            strokeWidth="2"
+            strokeLinejoin="round"
           />
-          <circle cx="32" cy="94" r="2" fill="#FBEBB5" />
+          <circle cx="32" cy="94" r="2.2" fill="#FFE899" stroke="#4F0716" strokeWidth="1.5" />
         </g>
       </svg>
     </motion.div>

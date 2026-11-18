@@ -44,11 +44,10 @@ interface SidebarLinkItem {
 
 /**
  * StudioSidebarShell
- * Responsive Admin & Scorer Studio Shell per AGENTS.md §13:
- * - Phones (< 768px): Bottom quick-action bar + logical-start slide-over Drawer
- * - Tablets (768px–1279px): Collapsible Icon Rail (expands to full overlay panel; mirrors in RTL)
- * - Desktops (1280px+): Full docked sidebar (also collapsible to rail for extra data-table room)
- * - Language toggle is always visible and reachable at every width
+ * Per DESIGN.md §6 & §8 and AGENTS.md §13:
+ * - Admin (`mode === 'admin'`): Paper layout (`theme-paper bg-paper text-ink`) with a deep red sidebar (right side in RTL via `start-0`).
+ * - Scorer (`mode === 'scorer'`): Stage-Dark layout (`theme-stage-dark bg-red-900 text-white`), deep maroon background, high contrast.
+ * - Responsive: mobile bottom bar + drawer (< md), collapsible icon rail on tablets (md..xl), docked sidebar on xl+.
  */
 export function StudioSidebarShell({
   mode,
@@ -64,6 +63,8 @@ export function StudioSidebarShell({
   const [tabletExpanded, setTabletExpanded] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
+
+  const isScorer = mode === 'scorer';
 
   useEffect(() => {
     setMobileDrawerOpen(false);
@@ -119,11 +120,7 @@ export function StudioSidebarShell({
       : canAccessPath(user?.role ?? null, item.href)
   );
 
-  // Mobile bottom-bar quick links (3 primary links + More drawer button)
-  const bottomBarLinks =
-    mode === 'scorer'
-      ? visibleLinks.slice(0, 3)
-      : visibleLinks.slice(0, 3);
+  const bottomBarLinks = visibleLinks.slice(0, 3);
 
   const handleResetDemo = async () => {
     await settingsRepo.resetDemoData(user?.id ?? 'user-admin');
@@ -137,12 +134,19 @@ export function StudioSidebarShell({
       : pathname.startsWith(href);
 
   return (
-    <div className="flex min-h-dvh flex-col bg-bg text-ivory md:flex-row">
-      {/* Mobile Drawer Backdrop (< md) & Tablet Expanded Rail Backdrop (md..xl) */}
+    <div
+      className={cn(
+        'flex min-h-dvh flex-col md:flex-row',
+        isScorer
+          ? 'theme-stage-dark bg-red-900 text-white'
+          : 'theme-paper bg-paper text-ink'
+      )}
+    >
+      {/* Mobile Drawer & Tablet Expanded Rail Backdrop */}
       {(mobileDrawerOpen || tabletExpanded) && (
         <div
           className={cn(
-            'fixed inset-0 z-40 bg-bg/75 backdrop-blur-sm',
+            'fixed inset-0 z-40 bg-red-900/70 backdrop-blur-sm',
             mobileDrawerOpen ? 'md:hidden' : 'hidden md:block xl:hidden'
           )}
           onClick={() => {
@@ -152,43 +156,38 @@ export function StudioSidebarShell({
         />
       )}
 
-      {/* Spacer for fixed Tablet Rail when expanded as overlay on md..xl */}
+      {/* Spacer for fixed Tablet Rail */}
       <div
-        className={cn(
-          'hidden shrink-0 transition-all duration-200 md:block xl:hidden',
-          'w-[88px]'
-        )}
+        className="hidden w-[88px] shrink-0 transition-all duration-200 md:block xl:hidden"
         aria-hidden="true"
       />
 
-      {/* Sidebar / Collapsible Tablet Rail / Mobile Drawer */}
+      {/* Deep Red Sidebar (Right side in RTL via start-0) */}
       <aside
         aria-label={mode === 'admin' ? 'Admin Navigation' : 'Scorer Navigation'}
         className={cn(
-          'fixed inset-y-0 start-0 z-50 flex flex-col border-e border-border bg-bg-raised pt-safe pb-safe ps-safe transition-all duration-200',
-          // Mobile (< md): slide-over drawer mirrored in RTL
+          'fixed inset-y-0 start-0 z-50 flex flex-col border-e-[3px] border-outline pt-safe pb-safe ps-safe text-white transition-all duration-200',
+          isScorer ? 'bg-red-800' : 'bg-red-800',
           mobileDrawerOpen
-            ? 'w-[min(85vw,300px)] translate-x-0 visible shadow-glow-gold-lg'
+            ? 'w-[min(85vw,300px)] translate-x-0 visible shadow-sticker-lg'
             : 'w-[min(85vw,300px)] -translate-x-full rtl:translate-x-full invisible md:visible',
-          // Tablet (md..xl): persistent collapsible rail at start-0
           'md:translate-x-0 md:rtl:translate-x-0',
-          tabletExpanded ? 'md:w-72 md:shadow-glow-gold-lg' : 'md:w-[88px]',
-          // Desktop (xl+): static docked sidebar (collapsible if desired)
+          tabletExpanded ? 'md:w-72 md:shadow-sticker-lg' : 'md:w-[88px]',
           'xl:static xl:shadow-none',
           desktopCollapsed ? 'xl:w-[88px]' : 'xl:w-64 2xl:w-72'
         )}
       >
-        {/* Sidebar / Rail Header */}
-        <div className="flex h-header-h items-center justify-between border-b border-border px-3.5">
+        {/* Sidebar Header */}
+        <div className="flex h-header-h items-center justify-between border-b-2 border-outline bg-red-700 px-3.5">
           <Link
             href="/"
             className={cn(
-              'flex min-h-[44px] items-center gap-3 overflow-hidden',
+              'flex min-h-[44px] items-center gap-3 overflow-hidden rounded-button focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
               !tabletExpanded && 'md:justify-center md:w-full',
               desktopCollapsed ? 'xl:justify-center xl:w-full' : 'xl:justify-start'
             )}
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-button border border-border-strong bg-surface shadow-glow-gold">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-button border-2 border-outline bg-white shadow-sticker-sm">
               <FanousIcon className="h-6 w-6" />
             </div>
             <div
@@ -198,16 +197,15 @@ export function StudioSidebarShell({
                 desktopCollapsed ? 'xl:hidden' : 'xl:block'
               )}
             >
-              <div className="truncate font-display text-base font-bold text-gold-gradient">
+              <div className="truncate py-0.5 leading-tight font-display text-lg text-gold-sticker">
                 {t.brandName}
               </div>
-              <div className="truncate text-[11px] uppercase tracking-wider text-text-muted">
+              <div className="truncate text-[11px] font-bold uppercase ltr:tracking-wider rtl:tracking-normal text-white/90">
                 {mode === 'admin' ? t.nav.adminArea : t.nav.scorerConsole}
               </div>
             </div>
           </Link>
 
-          {/* Mobile Drawer Close (< md) */}
           <Button
             variant="surface"
             size="icon"
@@ -219,14 +217,13 @@ export function StudioSidebarShell({
           </Button>
         </div>
 
-        {/* Tablet & Desktop Rail Collapse Toggle Bar */}
-        <div className="hidden md:flex items-center justify-center border-b border-border/60 px-2.5 py-2">
-          {/* Tablet expand/collapse button */}
+        {/* Collapse / Expand Rail Button */}
+        <div className="hidden md:flex items-center justify-center border-b-2 border-outline/40 px-2.5 py-2">
           <button
             type="button"
             onClick={() => setTabletExpanded((prev) => !prev)}
             aria-label={tabletExpanded ? 'Collapse navigation rail' : 'Expand navigation rail'}
-            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-button border border-border bg-surface/80 px-2 text-xs font-medium text-gold-300 transition-colors hover:border-gold-500 xl:hidden"
+            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-button border-2 border-outline bg-white px-2 text-xs font-extrabold text-red-900 shadow-sticker-sm transition-colors hover:bg-paper xl:hidden focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           >
             {tabletExpanded ? (
               <>
@@ -238,12 +235,11 @@ export function StudioSidebarShell({
             )}
           </button>
 
-          {/* Desktop collapse/expand button */}
           <button
             type="button"
             onClick={() => setDesktopCollapsed((prev) => !prev)}
             aria-label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="hidden xl:flex min-h-[44px] w-full items-center justify-center gap-2 rounded-button border border-border bg-surface/80 px-2.5 text-xs font-medium text-gold-300 transition-colors hover:border-gold-500"
+            className="hidden xl:flex min-h-[44px] w-full items-center justify-center gap-2 rounded-button border-2 border-outline bg-white px-2.5 text-xs font-extrabold text-red-900 shadow-sticker-sm transition-colors hover:bg-paper focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           >
             {desktopCollapsed ? (
               <ChevronRight className="h-4 w-4 shrink-0 rtl:rotate-180" />
@@ -257,7 +253,7 @@ export function StudioSidebarShell({
         </div>
 
         {/* Navigation Links */}
-        <nav className="no-scrollbar flex-1 space-y-1 overflow-y-auto p-2.5 sm:p-3">
+        <nav className="no-scrollbar flex-1 space-y-1.5 overflow-y-auto p-2.5 sm:p-3">
           {visibleLinks.map((item) => {
             const Icon = item.icon;
             const active = isLinkActive(item.href);
@@ -272,15 +268,20 @@ export function StudioSidebarShell({
                   setTabletExpanded(false);
                 }}
                 className={cn(
-                  'flex min-h-[44px] min-w-[44px] items-center gap-3 rounded-button px-3 py-2.5 text-sm font-medium transition-all',
+                  'flex min-h-[44px] min-w-[44px] items-center gap-3 rounded-button px-3 py-2.5 text-sm font-bold transition-all focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
                   !tabletExpanded && 'md:justify-center md:px-0',
                   desktopCollapsed ? 'xl:justify-center xl:px-0' : 'xl:justify-start xl:px-3.5',
                   active
-                    ? 'border border-gold-500/50 bg-gold-500/15 text-gold-300 shadow-glow-gold'
-                    : 'text-text-muted hover:bg-surface hover:text-ivory'
+                    ? 'border-2 border-outline bg-gold-400 text-red-900 shadow-sticker-sm'
+                    : 'border-2 border-transparent text-white/90 hover:bg-red-700 hover:text-white'
                 )}
               >
-                <Icon className="h-4 w-4 shrink-0 text-gold-500" />
+                <Icon
+                  className={cn(
+                    'h-4 w-4 shrink-0',
+                    active ? 'text-red-900' : 'text-white'
+                  )}
+                />
                 <span
                   className={cn(
                     'truncate',
@@ -295,19 +296,19 @@ export function StudioSidebarShell({
           })}
         </nav>
 
-        {/* Bottom Sidebar Controls: Reset Demo Data & Return to Public Site */}
-        <div className="space-y-2 border-t border-border p-3">
+        {/* Bottom Sidebar Controls */}
+        <div className="space-y-2 border-t-2 border-outline/40 bg-red-900/40 p-3">
           <button
             type="button"
             onClick={handleResetDemo}
             title={t.common.resetDemoData}
             className={cn(
-              'flex min-h-[44px] w-full items-center justify-center gap-2 rounded-button border border-border-strong bg-surface px-3 py-2 text-xs font-medium text-gold-300 transition-colors hover:border-gold-500 hover:bg-gold-500/10',
+              'flex min-h-[44px] w-full items-center justify-center gap-2 rounded-button border-2 border-outline bg-white px-3 py-2 text-xs font-extrabold text-red-900 shadow-sticker-sm sticker-press hover:bg-paper focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
               !tabletExpanded && 'md:px-0',
               desktopCollapsed && 'xl:px-0'
             )}
           >
-            <RotateCcw className="h-4 w-4 shrink-0" />
+            <RotateCcw className="h-4 w-4 shrink-0 text-red-600" />
             <span
               className={cn(
                 'truncate',
@@ -323,7 +324,7 @@ export function StudioSidebarShell({
             href="/"
             title={t.common.backToHome}
             className={cn(
-              'flex min-h-[44px] w-full items-center justify-center gap-2 rounded-button border border-border bg-surface-2 px-3 py-2 text-xs text-text-muted hover:text-ivory',
+              'flex min-h-[44px] w-full items-center justify-center gap-2 rounded-button border-2 border-white/25 bg-red-900 px-3 py-2 text-xs font-bold text-white transition-colors hover:border-white/50 hover:bg-red-700 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
               !tabletExpanded && 'md:px-0',
               desktopCollapsed && 'xl:px-0'
             )}
@@ -345,7 +346,14 @@ export function StudioSidebarShell({
       {/* Main Content Area */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top Studio Bar */}
-        <header className="sticky top-0 z-30 flex h-header-h items-center justify-between gap-2 border-b border-border bg-bg/90 px-3 xs:px-4 pt-safe backdrop-blur-md md:px-6 xl:px-8">
+        <header
+          className={cn(
+            'sticky top-0 z-30 flex h-header-h items-center justify-between gap-2 px-3 xs:px-4 pt-safe backdrop-blur-md md:px-6 xl:px-8',
+            isScorer
+              ? 'border-b-2 border-red-800 bg-red-900/95 text-white'
+              : 'border-b border-border-paper bg-white/95 text-ink shadow-sm'
+          )}
+        >
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <Button
               variant="surface"
@@ -360,21 +368,26 @@ export function StudioSidebarShell({
               {user ? t.roles[user.role] : t.roles.visitor}
             </Badge>
             {user && (
-              <span className="hidden lg:inline truncate text-sm font-medium text-ivory">
+              <span
+                className={cn(
+                  'hidden lg:inline truncate text-sm font-bold',
+                  isScorer ? 'text-white' : 'text-red-900'
+                )}
+              >
                 {localizeText(lang, user.name, user.nameAr)}
               </span>
             )}
           </div>
 
           <div className="flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2">
-            {/* Quick Role Selector (min 16px font so iOS doesn't zoom, min 44px touch target) */}
+            {/* Quick Role Selector (min 16px font, min 44px touch height) */}
             <select
               aria-label={t.common.switchRoleQuick}
               value={user?.id ?? ''}
               onChange={(e) => {
                 if (e.target.value) loginAs(e.target.value);
               }}
-              className="min-h-[44px] h-11 min-w-0 max-w-[155px] xs:max-w-[190px] sm:max-w-[235px] rounded-input border border-border-strong bg-surface-2 px-2.5 sm:px-3 text-base text-ivory focus:border-gold-500"
+              className="min-h-[44px] h-11 min-w-0 max-w-[155px] xs:max-w-[190px] sm:max-w-[235px] rounded-input border-2 border-border-paper bg-white px-2.5 sm:px-3 text-base font-medium text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
             >
               {demoUsers.map((u) => (
                 <option key={u.id} value={u.id}>
@@ -387,16 +400,21 @@ export function StudioSidebarShell({
               type="button"
               onClick={toggleLang}
               aria-label="Toggle Language (English / Arabic)"
-              className="inline-flex min-h-[44px] min-w-[44px] h-11 shrink-0 items-center justify-center gap-1.5 rounded-pill border border-border-strong bg-surface-2 px-3 sm:px-3.5 text-xs font-semibold text-gold-300 hover:border-gold-500"
+              className={cn(
+                'inline-flex min-h-[44px] min-w-[44px] h-11 shrink-0 items-center justify-center gap-1.5 rounded-pill border-2 border-outline px-3 sm:px-3.5 text-xs font-extrabold shadow-sticker-sm sticker-press focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+                isScorer
+                  ? 'bg-gold-400 text-red-900'
+                  : 'bg-red-600 text-white'
+              )}
             >
-              <Globe className="h-3.5 w-3.5 shrink-0 text-gold-500" />
+              <Globe className="h-3.5 w-3.5 shrink-0" />
               <span>{t.common.switchLanguage}</span>
             </button>
           </div>
         </header>
 
         {resetMessage && (
-          <div className="border-b border-positive/40 bg-positive/15 px-4 py-2.5 text-center text-xs font-semibold text-positive">
+          <div className="border-b-2 border-positive bg-positive-soft px-4 py-2.5 text-center text-xs font-bold text-positive-ink">
             {resetMessage}
           </div>
         )}
@@ -408,10 +426,10 @@ export function StudioSidebarShell({
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar (< md, hides on ultra-short landscape phones where drawer trigger stays in top bar) */}
+      {/* Mobile Bottom Navigation Bar (< md) */}
       <nav
         aria-label={mode === 'admin' ? 'Mobile Admin Bar' : 'Mobile Scorer Bar'}
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-border-strong bg-bg-raised/95 pb-safe backdrop-blur-md md:hidden [@media(max-height:460px)]:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t-[3px] border-outline bg-red-800 pb-safe text-white md:hidden [@media(max-height:460px)]:hidden"
       >
         <div className="grid grid-flow-col auto-cols-fr gap-1 px-2 py-1.5">
           {bottomBarLinks.map((item) => {
@@ -422,13 +440,13 @@ export function StudioSidebarShell({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-button px-1 py-1 text-[11px] font-medium transition-colors',
+                  'flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-button px-1 py-1 text-[11px] font-bold transition-colors',
                   active
-                    ? 'bg-gold-500/15 text-gold-300'
-                    : 'text-text-muted hover:text-ivory'
+                    ? 'border-2 border-outline bg-gold-400 text-red-900 shadow-sticker-sm'
+                    : 'text-white/90 hover:bg-red-700 hover:text-white'
                 )}
               >
-                <Icon className="h-4 w-4 shrink-0 text-gold-500" />
+                <Icon className="h-4 w-4 shrink-0" />
                 <span className="max-w-full truncate">{item.shortLabel ?? item.label}</span>
               </Link>
             );
@@ -437,10 +455,10 @@ export function StudioSidebarShell({
           <button
             type="button"
             onClick={() => setMobileDrawerOpen(true)}
-            className="flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-button px-1 py-1 text-[11px] font-medium text-text-muted hover:text-ivory"
+            className="flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-button px-1 py-1 text-[11px] font-bold text-white/90 hover:bg-red-700 hover:text-white"
             aria-label="More navigation links"
           >
-            <Menu className="h-4 w-4 shrink-0 text-gold-500" />
+            <Menu className="h-4 w-4 shrink-0" />
             <span>{lang === 'ar' ? 'المزيد' : 'More'}</span>
           </button>
         </div>

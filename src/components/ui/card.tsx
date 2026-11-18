@@ -5,9 +5,13 @@ import { cn } from '@/lib/utils';
 import { MarqueeBulbs } from '@/components/brand/MarqueeBulbs';
 
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  /** Premium variant adds strong gold border, inner glow, corner ornaments, and optional marquee bulbs */
+  /** Premium variant adds gold corner ribbon, gold shimmer, and optional marquee bulbs */
   premium?: boolean;
-  /** Wrap or crown the card with warm chasing casino marquee bulbs */
+  /** Optional custom ribbon label for premium cards */
+  ribbonLabel?: string;
+  /** Force sticker style (2.5px maroon outline + hard offset shadow) or calm Paper style */
+  appearance?: 'auto' | 'sticker' | 'calm';
+  /** Wrap or crown the card with warm chasing marquee bulbs */
   marquee?: boolean | 'strip' | 'perimeter';
   bulbCount?: number;
 }
@@ -17,6 +21,8 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
     {
       className,
       premium = false,
+      ribbonLabel,
+      appearance = 'auto',
       marquee = false,
       bulbCount = 12,
       children,
@@ -28,39 +34,31 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
       <div
         ref={ref}
         className={cn(
-          '@container relative min-w-0 overflow-hidden rounded-card border bg-surface p-card-pad shadow-card-inner transition-all duration-200',
-          premium
-            ? 'border-border-strong shadow-glow-gold bg-gradient-to-b from-surface-2/80 via-surface to-surface'
-            : 'border-border hover:border-border-strong hover:shadow-[0_0_20px_rgba(232,184,75,0.12)]',
+          '@container relative min-w-0 overflow-hidden rounded-card p-card-pad transition-all duration-200',
+          appearance === 'sticker'
+            ? 'bg-white text-ink border-[2.5px] border-outline shadow-sticker'
+            : appearance === 'calm'
+              ? 'bg-white text-ink border border-border-paper shadow-soft'
+              : 'card-surface',
+          premium &&
+            'border-[2.5px] border-outline shadow-sticker-lg bg-gradient-to-b from-gold-200/35 via-paper to-white text-ink',
           className
         )}
         {...props}
       >
-        {/* Subtle Gold Corner Filigree Accents on Premium Cards */}
+        {/* Gold Corner Ribbon on Premium Cards (DESIGN.md §6) */}
         {premium && (
-          <>
-            <span
-              className="pointer-events-none absolute top-2.5 start-2.5 h-3.5 w-3.5 border-t-2 border-s-2 border-gold-500/65 rounded-tl-[4px]"
-              aria-hidden="true"
-            />
-            <span
-              className="pointer-events-none absolute top-2.5 end-2.5 h-3.5 w-3.5 border-t-2 border-e-2 border-gold-500/65 rounded-tr-[4px]"
-              aria-hidden="true"
-            />
-            <span
-              className="pointer-events-none absolute bottom-2.5 start-2.5 h-3.5 w-3.5 border-b-2 border-s-2 border-gold-500/65 rounded-bl-[4px]"
-              aria-hidden="true"
-            />
-            <span
-              className="pointer-events-none absolute bottom-2.5 end-2.5 h-3.5 w-3.5 border-b-2 border-e-2 border-gold-500/65 rounded-br-[4px]"
-              aria-hidden="true"
-            />
-          </>
+          <span
+            className="pointer-events-none absolute top-0 end-5 z-20 rounded-b-[10px] border-x-2 border-b-2 border-outline bg-gold-gradient px-3 py-1 text-[10px] font-black uppercase tracking-wider text-red-900 shadow-sticker-sm"
+            aria-hidden="true"
+          >
+            {ribbonLabel ?? '★ PREMIUM'}
+          </span>
         )}
 
         {/* Top Marquee Strip if marquee === 'strip' */}
         {marquee === 'strip' && (
-          <div className="mb-4 sm:mb-5">
+          <div className={cn('mb-4 sm:mb-5', premium && 'mt-4')}>
             <MarqueeBulbs variant="strip" bulbCount={bulbCount} />
           </div>
         )}
@@ -101,7 +99,7 @@ export const CardTitle = React.forwardRef<
   <h3
     ref={ref}
     className={cn(
-      'font-display text-fluid-xl font-bold leading-tight ltr:tracking-tight rtl:tracking-normal text-ivory',
+      'font-display text-fluid-xl leading-tight ltr:tracking-tight rtl:tracking-normal text-red-900',
       className
     )}
     {...props}
@@ -115,7 +113,7 @@ export const CardDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <p
     ref={ref}
-    className={cn('text-sm text-text-muted leading-relaxed', className)}
+    className={cn('text-sm card-muted leading-relaxed', className)}
     {...props}
   />
 ));
@@ -136,7 +134,7 @@ export const CardFooter = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      'flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 mt-4',
+      'flex flex-wrap items-center justify-between gap-3 border-t border-border-paper pt-4 mt-4',
       className
     )}
     {...props}

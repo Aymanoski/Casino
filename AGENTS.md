@@ -59,7 +59,7 @@ A separate **registration quiz** (20 questions, 10 seconds each, randomized) was
 - **Points:** presets per segment (like +10, +5, -5) **plus** free number input, with an optional note and an undo.
 - **Language:** English first, **Arabic toggle with full RTL**.
 - **Public spectator pages** exist: bracket, live leaderboard, schedule, rules, sponsors, the final.
-- **Look:** Ramadan casino night. See `DESIGN.md`.
+- **Look:** bold "Casino El Al3ab" game-show theme: red sunburst stages, gold-to-orange outlined lettering, white as a primary surface and text color, and a hint of electric blue where it fits. Playful sticker style with dice, cards and chips, and Ramadan lanterns/crescent as a secondary accent. See `DESIGN.md` (this replaced the earlier midnight-and-gold theme).
 - **Pitch page** order: final-night showcase hero, then live demo, then sponsor tiers.
 
 ## 4. Roles and permissions
@@ -197,7 +197,7 @@ Who did what, to what, when, with before/after for edits. Filter and export.
 ## 10. Legal and brand safety
 
 - Use Marwan Serry's **name only** as text. **Do not use his photo or any photo of real people.**
-- **Do not use the real show's logo, artwork, or text.** Do not use copyrighted images. Use original CSS/SVG graphics and generic icons.
+- **Do not use the real show's logo, lettering, artwork, or text.** The theme takes inspiration from the show's brand colors and energy only. Draw original dice, cards, chips, swirls and sunbursts, and create sticker-style lettering with fonts plus outlines. Do not trace or recreate the show's logo. Do not use copyrighted images. Use original CSS/SVG graphics and generic icons. (If the client later provides the official logo with Marwan Serry's permission, it can be added as an asset.)
 - Avatars are generated (initials or abstract patterns).
 - Write all copy yourself. Segment descriptions are original.
 - Sponsor tiers and prices are placeholders ("Contact us" instead of prices).
@@ -210,7 +210,7 @@ Who did what, to what, when, with before/after for edits. Filter and export.
 4. **Keep a `TODO.md`** for things to do when the real database and auth are added (list every place a repo will be swapped).
 5. **Commit after every phase** with a clear message.
 6. **Verify with the browser.** After each screen: run the dev server, open it, screenshot, compare to `DESIGN.md`, fix the 3 biggest gaps. Check both **English (LTR)** and **Arabic (RTL)**, and a phone-width viewport.
-7. **Definition of done for any screen:** no console errors, no lint or type errors, keyboard accessible, readable contrast, works in EN and AR, works at 390px and 1440px width, empty and loading states handled.
+7. **Definition of done for any screen:** no console errors, no lint or type errors, keyboard accessible, readable contrast, works in EN and AR, works across the full device matrix in section 13 (320px phones up to 2560px monitors), empty and loading states handled.
 8. **Never invent real data** about real people or real prices. Placeholders must look like placeholders where it matters.
 9. Do not build the registration quiz.
 10. Ask the product owner a question only when a decision would be expensive to undo. Otherwise decide, document, continue.
@@ -225,3 +225,45 @@ Who did what, to what, when, with before/after for edits. Filter and export.
 - **Everything marked "out of scope" or "decided" can be reopened** when the product owner asks. Until then, do not build the registration quiz.
 - **Change protocol:** when scope changes, (1) update `AGENTS.md` sections affected, (2) note it in `ASSUMPTIONS.md` with the date, (3) check that existing screens, seed data and repos still work, (4) continue.
 - The legal and brand-safety rules in section 10 stay, because they protect the product owner. Everything else is flexible.
+
+## 13. Responsive and device support (REQUIRED in every phase, for every screen)
+
+The site must be **optimized for mobile web, tablet, laptop and desktop web, at all sizes**. Not just "it doesn't break": each size should feel designed for it.
+
+**Approach**
+- **Mobile-first** CSS with Tailwind breakpoints, then enhance upward. Define and use consistent breakpoints (suggested: `sm 640`, `md 768`, `lg 1024`, `xl 1280`, `2xl 1536`, plus a custom `3xl 1920` for big screens).
+- **Fluid everything:** fluid typography and spacing with `clamp()`, flexible grids, container queries for components that live in different-width containers, images and SVG that scale, no fixed pixel widths for layout.
+- **Use `dvh`/`svh` instead of `vh`** for full-height sections (mobile browser bars), respect **safe-area insets** (notches, home indicator), and handle both portrait and landscape.
+- **Touch vs mouse:** hover effects only under `@media (hover: hover)`. Touch targets at least 44px (scorer console 56px+). Inputs at least 16px font so iOS doesn't auto-zoom. No hover-only functionality.
+- **No horizontal page scroll** at any width. Long text, tables and numbers must wrap or scroll inside their own container.
+- Works with browser zoom 100% to 200% and Windows display scaling (125%, 150%), and with short laptop screens (for example 1366x768).
+
+**Device matrix to test (every screen, before it is "done")**
+- Phones: 320, 360, 390, 430 px wide (portrait) and one phone landscape
+- Tablets: 768, 820, 1024 px wide (portrait and landscape)
+- Laptops: 1280, 1366, 1440, 1536 px wide
+- Desktops and large monitors: 1920 and 2560 px wide
+- Big screen / TV view (`/screen/*`): scales proportionally up to 4K and stays legible from 10 meters
+- Browsers: Chrome, Safari (iOS and macOS), Firefox, Edge
+- Each of the above in **English (LTR) and Arabic (RTL)**
+
+**Layout patterns per screen type**
+- **Navigation:** public header collapses into a drawer menu on small screens (mirrors in RTL). Admin and scorer sidebars become a bottom bar or drawer on phones and a collapsible rail on tablets. The language toggle is always reachable.
+- **Tables (admin):** on small screens become card lists or scroll horizontally inside a container with a sticky first column. Filters move into a sheet.
+- **Dialogs and menus:** become bottom sheets on phones.
+- **Scorer console:** phone portrait = stacked player panels with a sticky action bar; tablet landscape and up = 3 columns side by side with the segment/timer panel. It must be usable one-handed on a phone.
+- **Big screen:** layout scales with the viewport (use `vw`/`clamp`), never scrolls, and keeps 3 players plus the segment title visible at any aspect ratio (16:9, 16:10, 21:9).
+- **Landing page:** hero, live demo, bracket and sponsor tiers each have a deliberate mobile layout (not just stacked desktop). The live demo section simplifies to a vertical flow on phones.
+- **Bracket:** scrolls and zooms horizontally on small screens, with a clear current-round focus.
+- **Forms:** single column on phones, sensible multi-column on larger screens.
+
+**Performance on mid-range phones:** lazy-load heavy components and images, avoid layout shift, keep animations GPU friendly, and keep the main thread light.
+
+## 14. Impeccable design skill (if installed) and precedence rules
+
+The project may use the **Impeccable** design skill (by Paul Bakaus), installed in the agent environment. If it is installed:
+- **Use it for craft quality:** typography scale, spacing rhythm, contrast, accessibility, responsive behavior, motion quality, UX writing, and its audit/polish commands after each screen.
+- **`DESIGN.md` wins on brand and identity:** palette, fonts, motifs, mood, and the page-by-page direction. If Impeccable flags something `DESIGN.md` intentionally specifies (for example gold gradients or glows), keep the `DESIGN.md` choice and note the exception in `ASSUMPTIONS.md`.
+- **`AGENTS.md` wins on product decisions** (scope, roles, data, phases). Skills never override it.
+- **Phase rule:** Delighters (DESIGN.md section 11) stay in Phase 10. Do not use Impeccable's more extreme "go bigger" commands (such as overdrive) before Phase 10.
+- When Impeccable asks for project design context, use `AGENTS.md` and `DESIGN.md` as the source. Do not invent a different brand direction.

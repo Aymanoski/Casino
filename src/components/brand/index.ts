@@ -1,3 +1,5 @@
+export * from './SunburstStage';
+export * from './GameMotifs';
 export * from './Lantern';
 export * from './CrescentStar';
 export * from './ArabesqueBackground';

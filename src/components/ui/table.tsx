@@ -28,8 +28,8 @@ import {
 /**
  * Table
  * Per DESIGN.md §6 & AGENTS.md §13:
- * Compact, sticky headers, sticky first column (optional, enabled by default),
- * zebra with surface vs surface-2, row hover gold tint, sortable, searchable,
+ * Paper theme, compact, sticky headers, sticky first column (optional),
+ * zebra with --white / --paper-2, row hover warm gold tint, sortable, searchable,
  * mobile card-list fallback or horizontal scroll inside container.
  */
 export const Table = React.forwardRef<
@@ -50,16 +50,16 @@ export const Table = React.forwardRef<
   ) => (
     <div
       className={cn(
-        'relative w-full overflow-auto overscroll-x-contain rounded-card border border-border bg-surface shadow-card-inner',
+        'relative w-full overflow-auto overscroll-x-contain rounded-card border border-border-paper bg-white shadow-soft',
         maxHeightClassName
       )}
     >
       <table
         ref={ref}
         className={cn(
-          'w-full caption-bottom text-start text-sm',
+          'w-full caption-bottom text-start text-sm text-ink',
           stickyFirstColumn &&
-            '[&_thead_th:first-child]:sticky [&_thead_th:first-child]:start-0 [&_thead_th:first-child]:z-30 [&_thead_th:first-child]:bg-bg-raised [&_tbody_td:first-child]:sticky [&_tbody_td:first-child]:start-0 [&_tbody_td:first-child]:z-10 [&_tbody_tr:nth-child(odd)>td:first-child]:bg-surface [&_tbody_tr:nth-child(even)>td:first-child]:bg-surface-2 [&_thead_th:first-child]:shadow-[4px_0_10px_-4px_rgba(7,11,26,0.75)] [&_tbody_td:first-child]:shadow-[4px_0_10px_-4px_rgba(7,11,26,0.75)] rtl:[&_thead_th:first-child]:shadow-[-4px_0_10px_-4px_rgba(7,11,26,0.75)] rtl:[&_tbody_td:first-child]:shadow-[-4px_0_10px_-4px_rgba(7,11,26,0.75)]',
+            '[&_thead_th:first-child]:sticky [&_thead_th:first-child]:start-0 [&_thead_th:first-child]:z-30 [&_thead_th:first-child]:bg-paper-2 [&_tbody_td:first-child]:sticky [&_tbody_td:first-child]:start-0 [&_tbody_td:first-child]:z-10 [&_tbody_tr:nth-child(odd)>td:first-child]:bg-white [&_tbody_tr:nth-child(even)>td:first-child]:bg-paper-2 [&_thead_th:first-child]:shadow-[4px_0_10px_-4px_rgba(79,7,22,0.12)] [&_tbody_td:first-child]:shadow-[4px_0_10px_-4px_rgba(79,7,22,0.10)] rtl:[&_thead_th:first-child]:shadow-[-4px_0_10px_-4px_rgba(79,7,22,0.12)] rtl:[&_tbody_td:first-child]:shadow-[-4px_0_10px_-4px_rgba(79,7,22,0.10)]',
           className
         )}
         {...props}
@@ -76,7 +76,7 @@ export const TableHeader = React.forwardRef<
   <thead
     ref={ref}
     className={cn(
-      'sticky top-0 z-20 border-b border-border-strong bg-bg-raised/95 backdrop-blur-md',
+      'sticky top-0 z-20 border-b-2 border-border-paper bg-paper-2/95 backdrop-blur-md',
       className
     )}
     {...props}
@@ -103,7 +103,7 @@ export const TableFooter = React.forwardRef<
   <tfoot
     ref={ref}
     className={cn(
-      'border-t border-border-strong bg-bg-raised font-medium',
+      'border-t border-border-paper bg-paper-2 font-medium text-ink',
       className
     )}
     {...props}
@@ -118,7 +118,7 @@ export const TableRow = React.forwardRef<
   <tr
     ref={ref}
     className={cn(
-      'border-b border-border transition-colors odd:bg-surface even:bg-surface-2/60 hover:bg-gold-500/[0.11] data-[state=selected]:bg-gold-500/20',
+      'border-b border-border-paper transition-colors odd:bg-white even:bg-paper-2/75 hover:bg-gold-200/30 data-[state=selected]:bg-blue-100',
       className
     )}
     {...props}
@@ -133,7 +133,7 @@ export const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      'h-11 whitespace-nowrap px-4 text-start align-middle text-xs font-bold uppercase tracking-wider text-gold-300',
+      'h-11 whitespace-nowrap px-4 text-start align-middle text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900',
       className
     )}
     {...props}
@@ -162,15 +162,15 @@ export function SortableTableHead({
         type="button"
         onClick={onSort}
         className={cn(
-          'flex min-h-[44px] w-full items-center gap-1.5 whitespace-nowrap px-4 text-start text-xs font-bold uppercase tracking-wider transition-colors hover:text-gold-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold-500',
-          active ? 'text-gold-100' : 'text-gold-300'
+          'flex min-h-[44px] w-full items-center gap-1.5 whitespace-nowrap px-4 text-start text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal transition-colors hover:text-red-600 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-blue-500',
+          active ? 'text-red-600' : 'text-red-900'
         )}
       >
         <span>{children}</span>
         {active && direction === 'asc' ? (
-          <ArrowUp className="h-3.5 w-3.5 shrink-0 text-gold-500" />
+          <ArrowUp className="h-3.5 w-3.5 shrink-0 text-red-600" />
         ) : active && direction === 'desc' ? (
-          <ArrowDown className="h-3.5 w-3.5 shrink-0 text-gold-500" />
+          <ArrowDown className="h-3.5 w-3.5 shrink-0 text-red-600" />
         ) : (
           <ArrowUpDown className="h-3.5 w-3.5 shrink-0 opacity-55" />
         )}
@@ -185,7 +185,7 @@ export const TableCell = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <td
     ref={ref}
-    className={cn('px-4 py-3 align-middle text-sm text-ivory', className)}
+    className={cn('px-4 py-3 align-middle text-sm text-ink', className)}
     {...props}
   />
 ));
@@ -197,7 +197,6 @@ export interface DataTableColumn<T> {
   sortable?: boolean;
   sortAccessor?: (row: T) => string | number;
   render: (row: T) => React.ReactNode;
-  /** Optional mobile card role: 'title' highlights in card header; 'hidden' omits on mobile cards */
   mobileRole?: 'badge' | 'title' | 'meta' | 'hidden';
   className?: string;
 }
@@ -209,10 +208,8 @@ export interface DataTableProps<T> {
   searchable?: boolean;
   searchPlaceholder?: string;
   searchFilter?: (row: T, query: string) => boolean;
-  /** Optional filter controls; shown inline on md+ and inside a bottom-sheet Dialog on phones */
   filterSlot?: React.ReactNode;
   filterLabel?: string;
-  /** Default mobile representation below md (768px): 'cards' (with optional switch) or 'scroll' (sticky first col) */
   mobileMode?: 'cards' | 'scroll';
   allowMobileViewToggle?: boolean;
   stickyFirstColumn?: boolean;
@@ -276,7 +273,6 @@ export function DataTable<T>({
     return list;
   }, [data, query, searchFilter, sortKey, sortDir, columns]);
 
-  // Identify primary/header columns for mobile card rendering
   const titleCol =
     columns.find((c) => c.mobileRole === 'title') ?? columns[1] ?? columns[0];
   const badgeCol =
@@ -317,7 +313,7 @@ export function DataTable<T>({
               </div>
             )}
 
-            {/* Mobile Filter Bottom Sheet Trigger (AGENTS.md §13) */}
+            {/* Mobile Filter Bottom Sheet Trigger */}
             {filterSlot && (
               <Dialog>
                 <DialogTrigger asChild>
@@ -327,7 +323,7 @@ export function DataTable<T>({
                     size="sm"
                     className="md:hidden"
                   >
-                    <SlidersHorizontal className="h-4 w-4 text-gold-500" />
+                    <SlidersHorizontal className="h-4 w-4 text-red-600" />
                     <span>{resolvedFilterLabel}</span>
                   </Button>
                 </DialogTrigger>
@@ -338,7 +334,7 @@ export function DataTable<T>({
                   <div className="space-y-4 py-2">{filterSlot}</div>
                   <DialogFooter>
                     <DialogClose asChild>
-                      <Button variant="primary" size="md">
+                      <Button variant="red" size="md">
                         {lang === 'ar' ? 'تطبيق' : 'Apply'}
                       </Button>
                     </DialogClose>
@@ -354,16 +350,16 @@ export function DataTable<T>({
                 aria-label={
                   lang === 'ar' ? 'طريقة عرض الجدول' : 'Mobile table view mode'
                 }
-                className="inline-flex rounded-button border border-border bg-bg-raised p-1 md:hidden"
+                className="inline-flex rounded-button border-2 border-outline bg-paper-2 p-1 md:hidden"
               >
                 <button
                   type="button"
                   onClick={() => setViewMode('cards')}
                   className={cn(
-                    'inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-xs font-semibold transition-colors',
+                    'inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-xs font-bold transition-colors',
                     viewMode === 'cards'
-                      ? 'bg-surface-2 text-gold-300 shadow-glow-gold'
-                      : 'text-text-muted hover:text-ivory'
+                      ? 'bg-red-600 text-white shadow-sticker-sm'
+                      : 'text-ink-muted hover:text-ink'
                   )}
                 >
                   <LayoutGrid className="h-3.5 w-3.5" />
@@ -373,10 +369,10 @@ export function DataTable<T>({
                   type="button"
                   onClick={() => setViewMode('scroll')}
                   className={cn(
-                    'inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-xs font-semibold transition-colors',
+                    'inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-xs font-bold transition-colors',
                     viewMode === 'scroll'
-                      ? 'bg-surface-2 text-gold-300 shadow-glow-gold'
-                      : 'text-text-muted hover:text-ivory'
+                      ? 'bg-red-600 text-white shadow-sticker-sm'
+                      : 'text-ink-muted hover:text-ink'
                   )}
                 >
                   <Table2 className="h-3.5 w-3.5" />
@@ -396,13 +392,13 @@ export function DataTable<T>({
         />
       ) : (
         <>
-          {/* Mobile Card List View (< md when viewMode === 'cards') */}
+          {/* Mobile Card List View */}
           {viewMode === 'cards' && (
             <div className="grid gap-3 md:hidden">
               {filteredAndSorted.map((row) => (
                 <div
                   key={getRowKey(row)}
-                  className="@container rounded-card border border-border bg-surface p-4 shadow-card-inner space-y-3"
+                  className="@container rounded-card border border-border-paper bg-white p-4 text-ink shadow-soft space-y-3"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
@@ -414,13 +410,13 @@ export function DataTable<T>({
                   </div>
 
                   {metaColumns.length > 0 && (
-                    <div className="grid grid-cols-1 gap-2.5 border-t border-border/80 pt-3 @xs:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2.5 border-t border-border-paper pt-3 @xs:grid-cols-2">
                       {metaColumns.map((col) => (
                         <div key={col.key} className="min-w-0 space-y-1">
-                          <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                          <div className="text-[11px] font-bold uppercase ltr:tracking-wider rtl:tracking-normal text-ink-muted">
                             {col.header}
                           </div>
-                          <div className="text-sm text-ivory">
+                          <div className="text-sm text-ink">
                             {col.render(row)}
                           </div>
                         </div>
@@ -432,7 +428,7 @@ export function DataTable<T>({
             </div>
           )}
 
-          {/* Table View (always on md+, or on mobile when viewMode === 'scroll' with sticky first col) */}
+          {/* Table View */}
           <div className={cn(viewMode === 'cards' ? 'hidden md:block' : 'block')}>
             <Table stickyFirstColumn={stickyFirstColumn}>
               <TableHeader>

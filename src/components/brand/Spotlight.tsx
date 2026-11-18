@@ -9,8 +9,7 @@ export interface SpotlightProps extends React.HTMLAttributes<HTMLDivElement> {
 
 /**
  * Spotlight
- * Overhead casino/game-show stage light beams per DESIGN.md §5.
- * Uses fluid viewport-bounded widths so decorative glows never expand layout bounds.
+ * Overhead TV game-show light beams & focal bloom for Stage sections per DESIGN.md §5.
  */
 export function Spotlight({
   intensity = 'medium',
@@ -34,44 +33,41 @@ export function Spotlight({
       )}
       aria-hidden="true"
     >
-      {/* Center overhead radial stage glow */}
+      {/* Center overhead warm radial light bloom */}
       <div
         className="absolute -top-24 left-1/2 h-[360px] w-[min(100vw,780px)] -translate-x-1/2 rounded-full blur-3xl"
         style={{
           background:
-            'radial-gradient(ellipse at 50% 0%, rgba(251, 235, 181, 0.22) 0%, rgba(232, 184, 75, 0.10) 45%, transparent 75%)',
+            'radial-gradient(ellipse at 50% 0%, rgba(255, 232, 153, 0.28) 0%, rgba(255, 193, 43, 0.12) 45%, transparent 75%)',
         }}
       />
 
-      {/* Left angled stage beam */}
       {(beams === 'dual' || beams === 'triple') && (
         <div
           className="absolute -top-20 left-[12%] h-[420px] w-[min(42vw,260px)] origin-top -rotate-[22deg] blur-2xl"
           style={{
             background:
-              'linear-gradient(180deg, rgba(251, 235, 181, 0.20) 0%, rgba(232, 184, 75, 0.06) 60%, transparent 100%)',
+              'linear-gradient(180deg, rgba(255, 232, 153, 0.24) 0%, rgba(255, 193, 43, 0.08) 60%, transparent 100%)',
           }}
         />
       )}
 
-      {/* Right angled stage beam */}
       {(beams === 'dual' || beams === 'triple') && (
         <div
           className="absolute -top-20 right-[12%] h-[420px] w-[min(42vw,260px)] origin-top rotate-[22deg] blur-2xl"
           style={{
             background:
-              'linear-gradient(180deg, rgba(251, 235, 181, 0.20) 0%, rgba(232, 184, 75, 0.06) 60%, transparent 100%)',
+              'linear-gradient(180deg, rgba(255, 232, 153, 0.24) 0%, rgba(255, 193, 43, 0.08) 60%, transparent 100%)',
           }}
         />
       )}
 
-      {/* Center vertical hero beam */}
       {(beams === 'single' || beams === 'triple') && (
         <div
           className="absolute -top-16 left-1/2 h-[440px] w-[min(55vw,320px)] -translate-x-1/2 blur-2xl"
           style={{
             background:
-              'linear-gradient(180deg, rgba(251, 235, 181, 0.24) 0%, rgba(232, 184, 75, 0.07) 65%, transparent 100%)',
+              'linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 193, 43, 0.09) 65%, transparent 100%)',
           }}
         />
       )}

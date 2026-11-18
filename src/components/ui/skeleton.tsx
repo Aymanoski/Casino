@@ -20,7 +20,7 @@ export function Skeleton({
     <div
       aria-hidden="true"
       className={cn(
-        'animate-pulse border border-border/50 bg-gradient-to-r from-surface-2 via-gold-500/10 to-surface-2',
+        'animate-pulse border border-border-paper bg-gradient-to-r from-paper-2 via-gold-200/45 to-paper-2',
         radiusClass,
         className
       )}
@@ -34,7 +34,7 @@ export function PlayerPanelSkeleton({ className }: { className?: string }) {
     <div
       aria-hidden="true"
       className={cn(
-        'rounded-card border border-border bg-surface p-6 space-y-5',
+        'rounded-card border border-border-paper bg-white p-6 space-y-5 shadow-soft',
         className
       )}
     >
@@ -49,7 +49,7 @@ export function PlayerPanelSkeleton({ className }: { className?: string }) {
           <Skeleton className="h-4 w-1/2" />
         </div>
       </div>
-      <div className="flex items-center justify-between border-t border-border pt-4">
+      <div className="flex items-center justify-between border-t border-border-paper pt-4">
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-10 w-20" />
       </div>
@@ -65,7 +65,7 @@ export function TableRowSkeleton({
   return (
     <div
       aria-hidden="true"
-      className="flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-3.5"
+      className="flex items-center justify-between gap-4 border-b border-border-paper bg-white px-4 py-3.5"
     >
       {Array.from({ length: columns }).map((_, idx) => (
         <Skeleton

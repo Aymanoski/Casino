@@ -2,18 +2,23 @@
 
 import React, { useEffect, useState } from 'react';
 import {
+  AlertCircle,
   Bell,
   CheckCircle2,
+  Crown,
   Flame,
   Globe,
   Hash,
   Layers,
+  Minus,
   Play,
   Plus,
   RotateCcw,
+  ShieldCheck,
   Sparkles,
   Trash2,
   Trophy,
+  Undo2,
   Wand2,
   Zap,
 } from 'lucide-react';
@@ -32,7 +37,9 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
+  ConfettiShapes,
   ConfirmDialog,
+  CrescentStar,
   DataTable,
   Dialog,
   DialogClose,
@@ -44,10 +51,28 @@ import {
   DialogTrigger,
   EmptyState,
   FormGrid,
+  GoldDivider,
   Input,
+  Lantern,
+  LanternCluster,
+  LiveBadge,
+  MarqueeBulbs,
+  PlayerAvatar,
+  PlayerPanel,
   PlayerPanelSkeleton,
+  PlayingCardFan,
+  PlayingCardMotif,
+  PlayingDice,
+  ScoreboardRow,
+  ScoreChip,
+  SectionHeading,
   SelectField,
   Skeleton,
+  Spotlight,
+  StageDivider,
+  StickerBadge,
+  SunburstStage,
+  SwirlOrnament,
   TableRowSkeleton,
   Tabs,
   TabsContent,
@@ -55,23 +80,8 @@ import {
   TabsTrigger,
   Textarea,
   useToast,
-} from '@/components/ui';
-import {
-  ArabesqueBackground,
-  CrescentStar,
-  GoldDivider,
-  Lantern,
-  LanternCluster,
-  LiveBadge,
-  MarqueeBulbs,
-  PlayerAvatar,
-  PlayerPanel,
-  ScoreboardRow,
-  ScoreChip,
-  SectionHeading,
-  Spotlight,
   TimerRing,
-} from '@/components/brand';
+} from '@/components/ui';
 
 interface SandboxPlayer {
   id: string;
@@ -96,7 +106,7 @@ export default function StyleguidePage() {
   const [buzzedPlayerId, setBuzzedPlayerId] = useState<string>('player-1');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('player-1');
 
-  // Timer states for normal & urgent demonstration
+  // Timer states for Stage Gold, Paper Red, and Urgent Last-5s Flash
   const [timerRemaining, setTimerRemaining] = useState<number>(24);
   const [timerStatus, setTimerStatus] = useState<'idle' | 'running' | 'paused'>(
     'running'
@@ -112,7 +122,7 @@ export default function StyleguidePage() {
   );
   const [showTableEmpty, setShowTableEmpty] = useState<boolean>(false);
 
-  // Loaded from repos (zero direct seed imports per AGENTS.md §6)
+  // Loaded via async repos (zero direct seed imports per AGENTS.md §6)
   const [seededPlayers, setSeededPlayers] = useState<Player[]>([]);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [sandboxPlayers, setSandboxPlayers] = useState<SandboxPlayer[]>([
@@ -174,7 +184,6 @@ export default function StyleguidePage() {
     };
   }, []);
 
-  // Countdown tick for live timer ring when running
   useEffect(() => {
     if (timerStatus !== 'running') return;
     const interval = setInterval(() => {
@@ -200,8 +209,8 @@ export default function StyleguidePage() {
       variant: delta >= 0 ? 'positive' : 'negative',
       title:
         lang === 'ar'
-          ? `${delta > 0 ? `+${delta}` : delta} نقطة لـ ${targetName}`
-          : `${delta > 0 ? `+${delta}` : delta} pts applied to ${targetName}`,
+          ? `${delta > 0 ? `+${delta}` : `−${Math.abs(delta)}`} نقطة لـ ${targetName}`
+          : `${delta > 0 ? `+${delta}` : `−${Math.abs(delta)}`} pts applied to ${targetName}`,
       description:
         lang === 'ar'
           ? 'تم تحديث لوحة الصدارة والعداد المتحرك فوراً.'
@@ -216,28 +225,73 @@ export default function StyleguidePage() {
       ? segments
       : segments.filter((s) => s.category === tableCategoryFilter);
 
+  const paletteGroups = [
+    {
+      title: lang === 'ar' ? 'أحمر المسرح (Stage Red)' : 'Brand Red (The Stage)',
+      swatches: [
+        { token: '--red-100', hex: '#FDE7EB', bg: 'bg-red-100', darkInk: true },
+        { token: '--red-400', hex: '#E5405C', bg: 'bg-red-400', darkInk: false },
+        { token: '--red-600', hex: '#C4163A', bg: 'bg-red-600', darkInk: false },
+        { token: '--red-700', hex: '#A81233', bg: 'bg-red-700', darkInk: false },
+        { token: '--red-800', hex: '#7E0D26', bg: 'bg-red-800', darkInk: false },
+        { token: '--red-900', hex: '#4F0716', bg: 'bg-red-900', darkInk: false },
+      ],
+    },
+    {
+      title: lang === 'ar' ? 'الذهبي والبرتقالي (The Star)' : 'Gold & Orange (The Star)',
+      swatches: [
+        { token: '--gold-200', hex: '#FFE899', bg: 'bg-gold-200', darkInk: true },
+        { token: '--gold-300', hex: '#FFD54A', bg: 'bg-gold-300', darkInk: true },
+        { token: '--gold-400', hex: '#FFC12B', bg: 'bg-gold-400', darkInk: true },
+        { token: '--gold-500', hex: '#FF9F1C', bg: 'bg-gold-500', darkInk: true },
+        { token: '--gold-600', hex: '#E8740C', bg: 'bg-gold-600', darkInk: false },
+      ],
+    },
+    {
+      title: lang === 'ar' ? 'الورق والأبيض (Paper & Ink)' : 'White, Paper & Ink',
+      swatches: [
+        { token: '--white', hex: '#FFFFFF', bg: 'bg-white', darkInk: true },
+        { token: '--paper', hex: '#FFF9F0', bg: 'bg-paper', darkInk: true },
+        { token: '--paper-2', hex: '#FBEFE0', bg: 'bg-paper-2', darkInk: true },
+        { token: '--ink', hex: '#2A0A10', bg: 'bg-ink', darkInk: false },
+        { token: '--ink-muted', hex: '#6B4A50', bg: 'bg-ink-muted', darkInk: false },
+      ],
+    },
+    {
+      title: lang === 'ar' ? 'الأزرق الكهربائي والحالات' : 'Electric Blue & Status',
+      swatches: [
+        { token: '--blue-100', hex: '#E6EEFF', bg: 'bg-blue-100', darkInk: true },
+        { token: '--blue-300', hex: '#7FA8FF', bg: 'bg-blue-300', darkInk: true },
+        { token: '--blue-500', hex: '#2F6BFF', bg: 'bg-blue-500', darkInk: false },
+        { token: '--blue-600', hex: '#1F4FD8', bg: 'bg-blue-600', darkInk: false },
+        { token: '--positive', hex: '#1FA971', bg: 'bg-positive', darkInk: true },
+        { token: '--negative', hex: '#B3001B', bg: 'bg-negative', darkInk: false },
+      ],
+    },
+  ];
+
   return (
-    <div className="min-h-dvh pb-24">
-      {/* Styleguide Inspector Bar: sticky only on md+ tall viewports so phones/landscape/zoomed screens keep screen space */}
-      <div className="relative md:sticky md:top-header-h [@media(max-height:740px)]:static z-30 border-b border-border-strong bg-bg-raised/95 backdrop-blur-md">
+    <div className="min-h-dvh pb-16">
+      {/* 0. STYLEGUIDE INSPECTOR BAR */}
+      <div className="relative md:sticky md:top-header-h [@media(max-height:740px)]:static z-30 border-b-2 border-outline bg-white/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-content-wide 3xl:max-w-stage flex-col gap-3 px-safe py-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <ScoreChip value="P2" size="sm" className="shrink-0" />
+          <div className="flex min-w-0 items-center gap-3">
+            <ScoreChip value="★" tone="red" size="sm" className="shrink-0" />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="truncate font-display text-fluid-lg font-bold text-gold-gradient">
+                <span className="truncate font-display text-fluid-lg text-red-900">
                   {lang === 'ar'
-                    ? 'دليل نظام التصميم — ليالي كازينو رمضان'
-                    : 'Ramadan Casino Night — Design System & Styleguide'}
+                    ? 'دليل نظام التصميم — كازينو الألعاب'
+                    : 'Casino El Al3ab — Stage & Paper Styleguide'}
                 </span>
                 <Badge variant="gold" className="hidden sm:inline-flex shrink-0">
-                  DESIGN.md v2.1
+                  DESIGN.md · Stage & Paper
                 </Badge>
               </div>
-              <p className="truncate text-xs text-text-muted">
+              <p className="truncate text-xs text-ink-muted">
                 {lang === 'ar'
-                  ? 'جميع المكونات في /components/ui و /components/brand (يدعم العربية RTL والإنجليزية LTR)'
-                  : 'Complete responsive component library in /components/ui & /components/brand (320px–2560px)'}
+                  ? 'أحمر المسرح المشع، الذهبي، الأبيض، ولمسة الأزرق الكهربائي (٣٢٠–٢٥٦٠ بكسل)'
+                  : 'Sunburst Stage, Paper clarity, sticker outlines, Lilita One / Lalezar / Bebas Neue / Cairo'}
               </p>
             </div>
           </div>
@@ -247,15 +301,15 @@ export default function StyleguidePage() {
             <div
               role="group"
               aria-label="Language & Direction Mode"
-              className="inline-flex rounded-pill border border-border-strong bg-surface p-0.5"
+              className="inline-flex rounded-pill border-2 border-outline bg-paper-2 p-0.5 shadow-sticker-sm"
             >
               <button
                 type="button"
                 onClick={() => setLang('en')}
-                className={`min-h-[44px] rounded-pill px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                className={`min-h-[44px] rounded-pill px-3.5 py-1.5 text-xs font-extrabold transition-all ${
                   lang === 'en'
-                    ? 'bg-gold-gradient text-bg shadow-glow-gold'
-                    : 'text-text-muted hover:text-ivory'
+                    ? 'bg-red-600 text-white shadow-sticker-sm'
+                    : 'text-ink hover:text-red-900'
                 }`}
               >
                 EN · LTR
@@ -263,155 +317,521 @@ export default function StyleguidePage() {
               <button
                 type="button"
                 onClick={() => setLang('ar')}
-                className={`min-h-[44px] rounded-pill px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                className={`min-h-[44px] rounded-pill px-3.5 py-1.5 text-xs font-extrabold transition-all ${
                   lang === 'ar'
-                    ? 'bg-gold-gradient text-bg shadow-glow-gold'
-                    : 'text-text-muted hover:text-ivory'
+                    ? 'bg-red-600 text-white shadow-sticker-sm'
+                    : 'text-ink hover:text-red-900'
                 }`}
               >
                 عربي · RTL
               </button>
             </div>
 
-            {/* Western vs Arabic-Indic Digits Toggle */}
+            {/* Western vs Arabic-Indic Digits */}
             <button
               type="button"
               onClick={() => setUseArabicIndic((prev) => !prev)}
-              className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-pill border px-3.5 text-xs font-semibold transition-colors ${
+              className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-pill border-2 border-outline px-3.5 text-xs font-extrabold shadow-sticker-sm transition-colors ${
                 useArabicIndic
-                  ? 'border-gold-500 bg-gold-500/20 text-gold-100'
-                  : 'border-border bg-surface text-text-muted hover:text-ivory'
+                  ? 'bg-gold-400 text-red-900'
+                  : 'bg-white text-ink hover:bg-paper'
               }`}
             >
-              <Hash className="h-3.5 w-3.5 shrink-0 text-gold-500" />
+              <Hash className="h-3.5 w-3.5 shrink-0 text-red-600" />
               <span>{useArabicIndic ? '١٢٣ (هندي)' : '123 (Western)'}</span>
             </button>
 
-            {/* Dual EN/AR Specimen Card Toggle */}
+            {/* Dual EN/AR Specimen Toggle */}
             <button
               type="button"
               onClick={() => setBilingualPreview((prev) => !prev)}
-              className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-pill border px-3.5 text-xs font-semibold transition-colors ${
+              className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-pill border-2 border-outline px-3.5 text-xs font-extrabold shadow-sticker-sm transition-colors ${
                 bilingualPreview
-                  ? 'border-gold-500 bg-gold-500/20 text-gold-100'
-                  : 'border-border bg-surface text-text-muted hover:text-ivory'
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-white text-ink hover:bg-paper'
               }`}
             >
-              <Globe className="h-3.5 w-3.5 shrink-0 text-gold-500" />
+              <Globe className="h-3.5 w-3.5 shrink-0" />
               <span>
-                {lang === 'ar'
-                  ? 'معاينة ثنائية (EN + AR)'
-                  : 'Dual EN/AR Specimen'}
+                {lang === 'ar' ? 'معاينة EN + AR' : 'Dual EN/AR Specimen'}
               </span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* 1. HERO SHOWCASE: Spotlight + ArabesqueBackground + Lanterns + SectionHeading */}
-      <Spotlight intensity="dramatic" beams="triple" className="border-b border-border">
-        <ArabesqueBackground className="py-section-y">
-          <div className="mx-auto max-w-content-wide 3xl:max-w-stage space-y-8 sm:space-y-10 px-safe">
-            {/* Hanging Lanterns Row */}
-            <div className="flex flex-col items-center justify-between gap-4 sm:flex-row sm:items-start">
-              <LanternCluster className="scale-90 sm:scale-100" />
-              <div className="flex flex-col items-center gap-2 sm:pt-4">
-                <LiveBadge
-                  size="lg"
-                  label={
-                    lang === 'ar'
-                      ? 'مباشر · استوديو كازينو الألعاب'
-                      : 'LIVE · CASINO EL AL3AB STUDIO'
-                  }
-                />
-              </div>
-              <LanternCluster className="hidden sm:inline-flex" />
+      {/* 1. STAGE HERO SHOWCASE: Red Sunburst + Spotlight + Gold Sticker Headlines + Dice/Cards + Subtle Lanterns */}
+      <SunburstStage as="section" className="py-section-y">
+        <Spotlight overlayOnly intensity="dramatic" beams="triple" />
+
+        <div className="relative z-10 mx-auto max-w-content-wide 3xl:max-w-stage space-y-8 sm:space-y-10 px-safe">
+          {/* Decorative Top Row: Dice + LiveBadge + Subtle Lanterns */}
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <PlayingDice value={5} size="md" tilt={-12} float />
+              <PlayingCardMotif
+                suit="star"
+                cornerText="A"
+                tone="gold"
+                size="sm"
+                tilt={10}
+                float
+              />
             </div>
 
-            {/* SectionHeading in active language */}
+            <div className="flex flex-col items-center gap-2">
+              <LiveBadge
+                surface="stage"
+                size="lg"
+                label={
+                  lang === 'ar'
+                    ? 'مباشر · استوديو كازينو الألعاب'
+                    : 'LIVE · CASINO EL AL3AB STAGE'
+                }
+              />
+            </div>
+
+            <div className="hidden sm:flex items-center gap-3">
+              <LanternCluster className="scale-90" />
+            </div>
+          </div>
+
+          {/* Giant Gold-to-Orange Sticker Outlined Headline */}
+          <div className="relative">
+            <div className="hidden lg:block absolute -top-4 start-4">
+              <SwirlOrnament tone="gold" size="lg" />
+            </div>
+            <div className="hidden lg:block absolute -top-4 end-4">
+              <SwirlOrnament tone="white" size="lg" flip />
+            </div>
+
             <SectionHeading
               as="h1"
               size="xl"
               align="center"
+              surface="stage"
               eyebrow={
                 lang === 'ar'
-                  ? 'المرحلة الثانية · نظام التصميم المتجاوب'
-                  : 'PHASE 2 · RESPONSIVE DESIGN SYSTEM'
+                  ? 'هوية العرض التلفزيوني المبهجة · Stage & Paper'
+                  : 'GAME-SHOW DESIGN SYSTEM · STAGE & PAPER'
               }
               title={
                 lang === 'ar'
-                  ? 'ليلة رمضانية فاخرة داخل كازينو الألعاب'
-                  : 'A Luxurious Ramadan Night Inside The Casino'
+                  ? 'ليالي رمضان داخل كازينو الألعاب'
+                  : 'The Final. Two Finalists. One Marwan Serry.'
               }
-              goldKeyword={lang === 'ar' ? 'كازينو الألعاب' : 'Casino'}
+              goldKeyword={lang === 'ar' ? 'كازينو الألعاب' : 'Marwan Serry.'}
               subtitle={
                 lang === 'ar'
-                  ? 'تم بناء جميع المكونات بدقة وفق ملف DESIGN.md: أزرار الحكم، البطاقات المضيئة، الفوانيس المتحركة، عدادات النقاط، وحلقات المؤقت عبر جميع المقاسات.'
-                  : 'Every UI and Brand primitive crafted to DESIGN.md: midnight depths, fluid clamp() typography, container queries, bottom-sheet dialogs, and broadcast scoreboards.'
-              }
-            />
-
-            {/* Side-by-Side EN (LTR) & AR (RTL) Typography & Heading Specimen */}
-            {bilingualPreview && (
-              <div className="grid gap-grid-gap lg:grid-cols-2">
-                <Card dir="ltr" lang="en" className="space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Badge variant="gold">ENGLISH · LTR SPECIMEN</Badge>
-                    <span className="text-xs text-text-muted">
-                      Cormorant Garamond + Bebas Neue + Inter
-                    </span>
-                  </div>
-                  <SectionHeading
-                    size="md"
-                    eyebrow="FINAL NIGHT SHOWCASE"
-                    title="Two Finalists. One Marwan Serry."
-                    goldKeyword="Marwan Serry."
-                    subtitle="Tabular score counters, 14px button radius, 20px card radius, and 1px gold-tinted borders."
-                  />
-                </Card>
-
-                <Card dir="rtl" lang="ar" className="space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Badge variant="gold">العربية · نموذج RTL</Badge>
-                    <span className="text-xs text-text-muted">
-                      Reem Kufi + Cairo (Tabular)
-                    </span>
-                  </div>
-                  <SectionHeading
-                    size="md"
-                    eyebrow="عرض ليلة النهائي الكبرى"
-                    title="متأهلان اثنان في مواجهة مروان سري"
-                    goldKeyword="مروان سري"
-                    subtitle="تصميم ثنائي اللغة أصيل يدعم الاتجاه من اليمين لليسار مع تباين ألوان يتجاوز معيار WCAG AA."
-                  />
-                </Card>
-              </div>
-            )}
-
-            <GoldDivider
-              ornament="suits"
-              label={
-                lang === 'ar'
-                  ? '١. محاكي الطاولة المباشرة (PlayerPanel + ScoreboardRow + TimerRing)'
-                  : '1. LIVE BROADCAST TABLE SANDBOX'
+                  ? 'خلفية أشعة الشمس الحمراء، خطوط ذهبية متدرجة بإطار عنابي، بطاقات بيضاء بظل ستيكر صلب، ولمسة أزرق كهربائي واضحة.'
+                  : 'Crimson sunburst stages, glossy gold-to-orange sticker typography, crisp white Paper clarity, and electric blue contrast sparks.'
               }
             />
           </div>
-        </ArabesqueBackground>
-      </Spotlight>
 
+          {/* Primary Stage Actions + Confetti */}
+          <div className="flex flex-col items-center justify-center gap-4">
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Button variant="gold" size="lg">
+                <Zap className="h-5 w-5 shrink-0 fill-current" />
+                <span>
+                  {lang === 'ar' ? 'جرّب المحاكي المباشر' : 'Try Live Stage Demo'}
+                </span>
+              </Button>
+              <Button variant="secondary" size="lg">
+                <Trophy className="h-5 w-5 shrink-0 text-red-600" />
+                <span>
+                  {lang === 'ar' ? 'باقات الرعاية' : 'Sponsor the Final'}
+                </span>
+              </Button>
+              <Button variant="info" size="lg">
+                <span>{lang === 'ar' ? 'جدول البطولة' : 'View Schedule'}</span>
+              </Button>
+            </div>
+            <ConfettiShapes className="h-12 w-full max-w-md opacity-95" variant="stage" />
+          </div>
+
+          {/* Dual EN / AR Typography & Surface Specimen Cards */}
+          {bilingualPreview && (
+            <div className="grid gap-grid-gap lg:grid-cols-2">
+              <Card appearance="sticker" dir="ltr" lang="en" className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Badge variant="gold">ENGLISH · LTR SPECIMEN</Badge>
+                  <span className="text-xs font-bold text-ink-muted">
+                    Lilita One + Bebas Neue + Inter
+                  </span>
+                </div>
+                <SectionHeading
+                  size="md"
+                  surface="paper"
+                  eyebrow="PAPER HEADLINE TREATMENT"
+                  title="Two Finalists. One Golden Seat."
+                  goldKeyword="Golden Seat."
+                  subtitle="Chunky maroon headline on warm Paper, gold-highlighted keyword, 20px card radius, 14px button radius, and mirrored RTL sticker shadows."
+                />
+                <div className="flex items-baseline gap-4 border-t border-border-paper pt-3">
+                  <span className="font-score text-4xl font-black text-red-900 tabular-nums">
+                    1,250
+                  </span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-ink-muted">
+                    Bebas Neue Tabular Numerals
+                  </span>
+                </div>
+              </Card>
+
+              <Card appearance="sticker" dir="rtl" lang="ar" className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Badge variant="red">العربية · نموذج RTL</Badge>
+                  <span className="text-xs font-bold text-ink-muted">
+                    Lalezar + Cairo (900 Tabular)
+                  </span>
+                </div>
+                <SectionHeading
+                  size="md"
+                  surface="paper"
+                  eyebrow="عرض ليلة النهائي الكبرى"
+                  title="متأهلان اثنان في مواجهة مروان سري"
+                  goldKeyword="مروان سري"
+                  subtitle="تصميم ثنائي اللغة أصيل بخط Lalezar للعناوين و Cairo للنصوص والأرقام مع تباين يتجاوز معيار WCAG AA."
+                />
+                <div className="flex items-baseline gap-4 border-t border-border-paper pt-3">
+                  <span className="font-score text-4xl font-black text-red-600 tabular-nums">
+                    ١٬٢٥٠
+                  </span>
+                  <span className="text-xs font-bold text-ink-muted">
+                    أرقام جدولية ثابتة العرض بخط Cairo 900
+                  </span>
+                </div>
+              </Card>
+            </div>
+          )}
+        </div>
+      </SunburstStage>
+
+      {/* ZigZag Sticker Transition: Stage -> Paper */}
+      <StageDivider variant="zigzag" from="stage" to="paper" />
+
+      {/* MAIN PAPER CONTENT BODY */}
       <div className="mx-auto max-w-content-wide 3xl:max-w-stage space-y-12 sm:space-y-16 px-safe pt-10 sm:pt-12">
-        {/* 2. PLAYER PANELS, SCOREBOARD ROWS, SCORE CHIPS & TIMER RING */}
-        <section className="space-y-8" aria-labelledby="section-game-components">
+        {/* 2. COLOR TOKENS & WCAG AA CONTRAST RULES */}
+        <section className="space-y-6" aria-labelledby="section-tokens">
+          <SectionHeading
+            id="section-tokens"
+            size="md"
+            surface="paper"
+            eyebrow={lang === 'ar' ? '١. الألوان والتباين' : '1. PALETTE & CONTRAST RULES'}
+            title={
+              lang === 'ar'
+                ? 'باليتة الألوان وقواعد القراءة (WCAG AA)'
+                : 'Color Tokens, Gradients & Readability Rules'
+            }
+            goldKeyword={lang === 'ar' ? 'القراءة' : 'Readability'}
+            subtitle={
+              lang === 'ar'
+                ? 'الأبيض على الأحمر لكل المقاسات، الذهبي على الأحمر للعناوين الكبيرة فقط (+24px)، الأزرق على الأبيض/الورق أو بإطار أبيض، والزائد/الناقص بالرمز والشكل دائماً.'
+                : 'White on red at any size, gold on red only for large 24px+ display type, blue never touching red directly, and + / − never shown by color alone.'
+            }
+          />
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {paletteGroups.map((group) => (
+              <Card key={group.title} appearance="calm" className="space-y-3">
+                <h3 className="font-display text-base text-red-900">{group.title}</h3>
+                <div className="space-y-2">
+                  {group.swatches.map((sw) => (
+                    <div
+                      key={sw.token}
+                      className="flex items-center justify-between gap-2 rounded-input border border-border-paper p-2 bg-paper"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span
+                          className={`h-8 w-8 shrink-0 rounded-[8px] border-2 border-outline ${sw.bg}`}
+                          aria-hidden="true"
+                        />
+                        <span className="truncate font-mono text-xs font-bold text-ink">
+                          {sw.token}
+                        </span>
+                      </div>
+                      <span className="font-mono text-xs text-ink-muted shrink-0">
+                        {sw.hex}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          {/* Contrast Rules Visual Guardrails */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-card border-[2.5px] border-outline bg-red-600 p-card-pad text-white shadow-sticker space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Badge variant="white">RULE 1 · RED STAGE</Badge>
+                <CheckCircle2 className="h-5 w-5 text-white shrink-0" />
+              </div>
+              <p className="font-display text-2xl text-gold-sticker">
+                {lang === 'ar' ? 'عنوان ذهبي كبير (+24px)' : 'Large Gold Display (24px+)'}
+              </p>
+              <p className="text-sm font-medium text-white">
+                {lang === 'ar'
+                  ? 'النصوص العادية والفقرات على الخلفية الحمراء تكون باللون الأبيض دائماً لتحقيق تباين عالٍ.'
+                  : 'Body copy and small labels on --red-600 always use crisp #FFFFFF (6.0:1+ AA).'}
+              </p>
+            </div>
+
+            <div className="rounded-card border-[2.5px] border-outline bg-red-600 p-card-pad text-white shadow-sticker space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Badge variant="info">RULE 2 · BLUE ON RED</Badge>
+                <ShieldCheck className="h-5 w-5 text-white shrink-0" />
+              </div>
+              <p className="font-display text-2xl text-white">
+                {lang === 'ar' ? 'حاجز أبيض للأزرق' : 'White-Buffered Blue'}
+              </p>
+              <p className="text-sm font-medium text-white">
+                {lang === 'ar'
+                  ? 'لا يلامس الأزرق الأحمر مباشرة؛ إما على الورق الأبيض أو داخل إطار أبيض واضح.'
+                  : 'Blue never sits directly on red: it lives on Paper or inside a white-bordered chip / focus ring.'}
+              </p>
+            </div>
+
+            <Card appearance="sticker" className="bg-white text-ink space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <Badge variant="gold">RULE 3 · PLUS / MINUS</Badge>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="positive" className="text-sm font-extrabold">
+                  <Plus className="h-4 w-4 stroke-[3]" />
+                  <span>+10</span>
+                </Badge>
+                <Badge variant="negative" className="text-sm font-extrabold">
+                  <Minus className="h-4 w-4 stroke-[3]" />
+                  <span>−5</span>
+                </Badge>
+              </div>
+              <p className="text-sm text-ink-muted">
+                {lang === 'ar'
+                  ? 'الزيادة والخصم تظهران دائماً بعلامة (+ / −) وأيقونة واضحة، وليس باللون فقط.'
+                  : 'Positive & negative points always pair color with explicit + / − signs and Plus/Minus icons.'}
+              </p>
+            </Card>
+          </div>
+        </section>
+
+        <GoldDivider
+          ornament="dice"
+          label={
+            lang === 'ar'
+              ? '٢. مقارنة السمات الثلاث: Stage و Paper و Stage-Dark'
+              : '2. STAGE vs PAPER vs STAGE-DARK SURFACES'
+          }
+        />
+
+        {/* 3. SIDE-BY-SIDE THEME COMPARISON */}
+        <section className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* STAGE THEME DEMO */}
+            <SunburstStage
+              as="div"
+              animateRays={false}
+              className="rounded-card border-[3px] border-outline p-5 sm:p-7 shadow-sticker-lg"
+            >
+              <div className="space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <StickerBadge tone="white">STAGE THEME (.theme-stage)</StickerBadge>
+                  <LiveBadge surface="stage" size="sm" />
+                </div>
+
+                <SectionHeading
+                  size="md"
+                  surface="stage"
+                  title={
+                    lang === 'ar'
+                      ? 'أزرار ذهبية وبطاقات ستيكر بيضاء'
+                      : 'Gold Actions & White Sticker Cards'
+                  }
+                  goldKeyword={lang === 'ar' ? 'ذهبية' : 'Gold Actions'}
+                  subtitle={
+                    lang === 'ar'
+                      ? 'تُستخدم لواجهة العرض الرئيسية، ليلة النهائي، وشاشة الصالة العملاقة.'
+                      : 'Used for Hero moments, Final Night, Big Screen, and live celebrations.'
+                  }
+                />
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button variant="primary" size="md">
+                    <Sparkles className="h-4 w-4 shrink-0" />
+                    <span>{lang === 'ar' ? 'زر رئيسي ذهبي' : 'Stage Primary (Gold)'}</span>
+                  </Button>
+                  <Button variant="secondary" size="md">
+                    <span>{lang === 'ar' ? 'ثانوي أبيض' : 'Stage Secondary'}</span>
+                  </Button>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 items-center">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">
+                        {lang === 'ar' ? 'بطاقة ستيكر بيضاء' : 'Stage Sticker Card'}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-xs text-ink-muted">
+                        {lang === 'ar'
+                          ? 'إطار عنابي سميك ٢.٥ بكسل مع ظل ستيكر صلب ينعكس في العربية.'
+                          : '2.5px maroon outline + mirrored hard offset sticker shadow.'}
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <div className="flex justify-center">
+                    <TimerRing
+                      durationSec={30}
+                      remainingSec={21}
+                      status="running"
+                      surface="stage"
+                      size="sm"
+                      useArabicIndicDigits={useArabicIndic}
+                    />
+                  </div>
+                </div>
+              </div>
+            </SunburstStage>
+
+            {/* PAPER THEME DEMO */}
+            <div className="theme-paper rounded-card border-[3px] border-outline bg-paper p-5 sm:p-7 text-ink shadow-sticker-lg">
+              <div className="space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <StickerBadge tone="red">PAPER THEME (.theme-paper)</StickerBadge>
+                  <LiveBadge surface="paper" size="sm" />
+                </div>
+
+                <SectionHeading
+                  size="md"
+                  surface="paper"
+                  title={
+                    lang === 'ar'
+                      ? 'أزرار حمراء وبطاقات هادئة للقراءة'
+                      : 'Red Actions & Calm Paper Clarity'
+                  }
+                  goldKeyword={lang === 'ar' ? 'هادئة' : 'Paper Clarity'}
+                  subtitle={
+                    lang === 'ar'
+                      ? 'تُستخدم للوحة الإدارة، الجداول، النماذج، القوانين، وصفحات اللاعبين.'
+                      : 'Used for Admin, Data Tables, Forms, Rules, Schedule, and Contestant pages.'
+                  }
+                />
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button variant="primary" size="md">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span>{lang === 'ar' ? 'زر رئيسي أحمر' : 'Paper Primary (Red)'}</span>
+                  </Button>
+                  <Button variant="secondary" size="md">
+                    <span>{lang === 'ar' ? 'ثانوي بإطار أحمر' : 'Paper Secondary'}</span>
+                  </Button>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 items-center">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">
+                        {lang === 'ar' ? 'بطاقة ورقية هادئة' : 'Calm Paper Card'}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-xs text-ink-muted">
+                        {lang === 'ar'
+                          ? 'إطار رقيق هادئ وظل ناعم لعرض البيانات الكثيفة بدون ضجيج بصري.'
+                          : '1px --border-paper + soft shadow for dense admin and reading layouts.'}
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <div className="flex justify-center">
+                    <TimerRing
+                      durationSec={30}
+                      remainingSec={18}
+                      status="running"
+                      surface="paper"
+                      size="sm"
+                      useArabicIndicDigits={useArabicIndic}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* STAGE-DARK (SCORER CONSOLE) STRIP */}
+          <div className="theme-stage-dark rounded-card border-[3px] border-outline bg-red-900 p-5 sm:p-7 text-white shadow-sticker-lg">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="gold">STAGE-DARK · SCORER CONSOLE</Badge>
+                  <LiveBadge surface="stage" size="sm" />
+                </div>
+                <h3 className="font-display text-fluid-2xl text-white">
+                  {lang === 'ar'
+                    ? 'لوحة الحكم الليلية (تباين فائق · أزرار 56px+)'
+                    : 'Scorer Console Mode (Deep Maroon, Blue Selected Ring, 56px+ Targets)'}
+                </h3>
+              </div>
+              <Button variant="gold" size="scorer">
+                <Undo2 className="h-5 w-5 shrink-0" />
+                <span>{lang === 'ar' ? 'تراجع عن آخر حركة' : 'Undo Last Action'}</span>
+              </Button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <PlayerPanel
+                surface="dark"
+                variant="scorer"
+                name={lang === 'ar' ? 'عمر حسن' : 'Omar Hassan'}
+                nickname={lang === 'ar' ? 'الثعلب' : 'The Fox'}
+                avatarSeed="omar-fox"
+                score={sandboxPlayers[0].score}
+                rank={1}
+                isSelected
+                isBuzzed={buzzedPlayerId === 'player-1'}
+                presetPoints={[10, 5, -5]}
+                useArabicIndicDigits={useArabicIndic}
+                onBuzz={() => setBuzzedPlayerId('player-1')}
+                onApplyPreset={(pts) => applySandboxDelta('player-1', pts)}
+              />
+              <PlayerPanel
+                surface="dark"
+                variant="scorer"
+                name={lang === 'ar' ? 'سلمى رضا' : 'Salma Reda'}
+                nickname={lang === 'ar' ? 'سلسبيل' : 'Salsabeel'}
+                avatarSeed="salma-salsabeel"
+                score={sandboxPlayers[1].score}
+                rank={2}
+                isBuzzed={buzzedPlayerId === 'player-19'}
+                presetPoints={[10, 5, -5]}
+                useArabicIndicDigits={useArabicIndic}
+                onBuzz={() => setBuzzedPlayerId('player-19')}
+                onApplyPreset={(pts) => applySandboxDelta('player-19', pts)}
+              />
+            </div>
+          </div>
+        </section>
+
+        <GoldDivider
+          ornament="suits"
+          label={
+            lang === 'ar'
+              ? '٣. محاكي الطاولة المباشرة (PlayerPanel + ScoreboardRow + TimerRing)'
+              : '3. LIVE BROADCAST TABLE SANDBOX'
+          }
+        />
+
+        {/* 4. INTERACTIVE SANDBOX: PLAYER PANELS, SCOREBOARD ROWS & TIMERS */}
+        <section className="space-y-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <SectionHeading
-              id="section-game-components"
               size="md"
-              eyebrow={
-                lang === 'ar'
-                  ? 'مكونات برنامج المسابقات'
-                  : 'GAME-SHOW BROADCAST COMPONENTS'
-              }
+              surface="paper"
+              eyebrow={lang === 'ar' ? 'مكونات برنامج المسابقات' : 'BROADCAST SANDBOX'}
               title={
                 lang === 'ar'
                   ? 'لوحات اللاعبين ولوحة الصدارة والمؤقت'
@@ -420,22 +840,20 @@ export default function StyleguidePage() {
               goldKeyword={lang === 'ar' ? 'الصدارة' : 'Scoreboard'}
               subtitle={
                 lang === 'ar'
-                  ? 'اضغط على أزرار النقاط (+10، +5، -5) أو زر الجرس لمشاهدة الحركة الفورية وتبديل المراكز.'
-                  : 'Tap any preset point button (+10, +5, -5) or "Buzzed First" target below to test animated counters, delta flashes, and rank reordering.'
+                  ? 'اضغط لتحديد اللاعب (حلقة زرقاء) أو ضغط الجرس (حلقة ذهبية) أو تطبيق النقاط.'
+                  : 'Tap any panel to select (blue ring), trigger Buzzed First (gold pulse), or apply +/- points with instant counter & rank reorder.'
               }
             />
 
             <div className="flex flex-wrap items-center gap-2">
               <Button
-                variant="primary"
+                variant="red"
                 size="sm"
                 onClick={() => applySandboxDelta(buzzedPlayerId, 10)}
               >
                 <Plus className="h-4 w-4 shrink-0" />
                 <span>
-                  {lang === 'ar'
-                    ? '+١٠ للاعب الضاغط'
-                    : '+10 pts to Buzzed Player'}
+                  {lang === 'ar' ? '+١٠ للاعب الضاغط' : '+10 pts to Buzzed'}
                 </span>
               </Button>
               <Button
@@ -443,34 +861,29 @@ export default function StyleguidePage() {
                 size="sm"
                 onClick={() => applySandboxDelta(buzzedPlayerId, -5)}
               >
-                <span>
-                  {lang === 'ar'
-                    ? '-٥ عقوبة للاعب الضاغط'
-                    : '-5 Penalty to Buzzed'}
-                </span>
+                <Minus className="h-4 w-4 shrink-0" />
+                <span>{lang === 'ar' ? '−٥ خصم' : '−5 Penalty'}</span>
               </Button>
             </div>
           </div>
 
-          {/* 3-Player Panel Grid (1-col phone -> 2-col tablet -> 3-col xl+) */}
+          {/* 3-Player Sticker Panel Grid */}
           <div className="grid grid-cols-1 gap-grid-gap md:grid-cols-2 xl:grid-cols-3">
             {sandboxPlayers.map((p) => {
               const rank =
                 sortedSandbox.findIndex((item) => item.id === p.id) + 1;
-              const isBuzzed = buzzedPlayerId === p.id;
-              const isSelected = selectedPlayerId === p.id;
-
               return (
                 <PlayerPanel
                   key={p.id}
                   playerId={p.id}
+                  surface="light"
                   name={localizeText(lang, p.nameEn, p.nameAr)}
                   nickname={localizeText(lang, p.nicknameEn, p.nicknameAr)}
                   avatarSeed={p.avatarSeed}
                   score={p.score}
                   rank={rank}
-                  isBuzzed={isBuzzed}
-                  isSelected={isSelected}
+                  isBuzzed={buzzedPlayerId === p.id}
+                  isSelected={selectedPlayerId === p.id}
                   isWinner={rank === 1}
                   isHost={p.isHost}
                   useArabicIndicDigits={useArabicIndic}
@@ -485,10 +898,6 @@ export default function StyleguidePage() {
                         lang === 'ar'
                           ? `⚡ ${p.nameAr} ضغط الجرس أولاً!`
                           : `⚡ ${p.nameEn} buzzed first!`,
-                      description:
-                        lang === 'ar'
-                          ? 'تم تفعيل الحلقة الذهبية المضيئة.'
-                          : 'Pulsing gold ring activated on PlayerPanel.',
                     });
                   }}
                   onApplyPreset={(pts) => applySandboxDelta(p.id, pts)}
@@ -497,20 +906,17 @@ export default function StyleguidePage() {
             })}
           </div>
 
-          {/* ScoreboardRow + TimerRing Showcase */}
+          {/* ScoreboardRow + TimerRing Gallery */}
           <div className="grid gap-6 lg:grid-cols-12">
-            {/* Live Reordering Scoreboard Rows */}
             <div className="space-y-4 lg:col-span-7">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="font-display text-fluid-xl font-bold text-gold-100">
+                <h3 className="font-display text-fluid-xl text-red-900">
                   {lang === 'ar'
                     ? 'صفوف لوحة الصدارة (ScoreboardRow)'
-                    : 'Animated Scoreboard Rows (ScoreboardRow)'}
+                    : 'Animated Scoreboard Rows'}
                 </h3>
-                <Badge variant="gold">
-                  {lang === 'ar'
-                    ? 'ترتيب تلقائي + وميض النقاط'
-                    : 'Layout Reorder + Delta Flash'}
+                <Badge variant="info">
+                  {lang === 'ar' ? 'ترتيب تلقائي + أيقونة +/-' : 'Auto Rank + +/- Icons'}
                 </Badge>
               </div>
 
@@ -532,9 +938,9 @@ export default function StyleguidePage() {
                       p.isHost
                         ? lang === 'ar'
                           ? 'المضيف'
-                          : 'THE BOSS'
+                          : 'THE HOST'
                         : lang === 'ar'
-                          ? 'متأهل للنهائي'
+                          ? 'متأهل'
                           : 'FINALIST'
                     }
                     useArabicIndicDigits={useArabicIndic}
@@ -543,33 +949,31 @@ export default function StyleguidePage() {
               </div>
             </div>
 
-            {/* TimerRing Showcase (Standard Gold + Last-5-Seconds Ruby Pulse) */}
-            <Card premium className="flex flex-col justify-between lg:col-span-5">
+            <Card appearance="sticker" className="flex flex-col justify-between lg:col-span-5">
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="font-display text-fluid-xl font-bold text-gold-100">
+                  <h3 className="font-display text-fluid-xl text-red-900">
                     {lang === 'ar'
-                      ? 'حلقة المؤقت (TimerRing)'
-                      : 'Segment Timer Ring (TimerRing)'}
+                      ? 'حلقات المؤقت (Stage · Paper · 5s)'
+                      : 'Timer Rings (Stage · Paper · 5s Flash)'}
                   </h3>
-                  <Badge variant="negative">
-                    {lang === 'ar' ? 'نبض ياقوتي بآخر ٥ ثوانٍ' : 'Ruby Pulse ≤ 5s'}
-                  </Badge>
+                  <Badge variant="negative">≤ 5s White Flash</Badge>
                 </div>
-                <p className="mt-1 text-xs text-text-muted">
+                <p className="mt-1 text-xs text-ink-muted">
                   {lang === 'ar'
-                    ? 'حلقة تقدم ذهبية تتدرج مقاساتها وتتحول إلى اللون الياقوتي وتنبض في آخر ٥ ثوانٍ.'
-                    : 'Fluid clamp() circular progress ring; turns casino ruby and pulses in the final 5 seconds.'}
+                    ? 'حلقة ذهبية على المسرح وحمراء على الورق، مع نبض وإطار أبيض وامض في آخر ٥ ثوانٍ.'
+                    : 'Gold ring on Stage, red ring on Paper, plus pulsing white flash border in the final 5 seconds.'}
                 </p>
               </div>
 
-              <div className="my-6 flex flex-wrap items-start justify-around gap-6">
+              <div className="my-5 flex flex-wrap items-start justify-around gap-4">
                 <div className="flex flex-col items-center gap-2">
                   <TimerRing
                     durationSec={30}
                     remainingSec={timerRemaining}
                     status={timerStatus}
-                    size="md"
+                    surface="paper"
+                    size="sm"
                     showControls
                     useArabicIndicDigits={useArabicIndic}
                     onStart={() => setTimerStatus('running')}
@@ -579,30 +983,29 @@ export default function StyleguidePage() {
                       setTimerRemaining(30);
                     }}
                   />
-                  <span className="text-xs font-medium text-text-muted">
-                    {lang === 'ar' ? 'الوضع القياسي (ذهبي)' : 'Standard Gold State'}
+                  <span className="text-xs font-bold text-ink-muted">
+                    {lang === 'ar' ? 'ورق (أحمر)' : 'Paper (Red)'}
                   </span>
                 </div>
 
-                <div className="flex flex-col items-center gap-2">
+                <div className="flex flex-col items-center gap-2 rounded-card border-2 border-outline bg-red-600 p-3 shadow-sticker-sm">
                   <TimerRing
                     durationSec={30}
                     remainingSec={urgentRemaining}
                     status="running"
-                    size="md"
+                    surface="stage"
+                    size="sm"
                     useArabicIndicDigits={useArabicIndic}
                   />
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      variant="surface"
-                      size="sm"
-                      onClick={() =>
-                        setUrgentRemaining((prev) => (prev <= 1 ? 5 : prev - 1))
-                      }
-                    >
-                      {lang === 'ar' ? 'تغيير الثانية (١-٥)' : 'Step 5s → 1s'}
-                    </Button>
-                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      setUrgentRemaining((prev) => (prev <= 1 ? 5 : prev - 1))
+                    }
+                  >
+                    {lang === 'ar' ? 'اختبار ٥->١ ث' : 'Step 5s → 1s'}
+                  </Button>
                 </div>
               </div>
             </Card>
@@ -613,40 +1016,24 @@ export default function StyleguidePage() {
           ornament="crescent"
           label={
             lang === 'ar'
-              ? '٢. عقدة شجرة البطولة المتجاوبة (BracketNode)'
-              : '2. RESPONSIVE TOURNAMENT BRACKET NODES'
+              ? '٤. شجرة البطولة (BracketNode + المقعد الذهبي)'
+              : '4. BRACKET NODES & GOLDEN SEAT BOSS NODE'
           }
         />
 
-        {/* BRACKET NODE & BRACKET TRACK SHOWCASE */}
+        {/* 5. BRACKET NODES */}
         <section className="space-y-6">
-          <SectionHeading
-            size="md"
-            eyebrow={lang === 'ar' ? 'شجرة البطولة' : 'TOURNAMENT BRACKET PRIMITIVES'}
-            title={
-              lang === 'ar'
-                ? 'عقد المباريات (BracketNode) مع التكبير والتمرير'
-                : 'Bracket Nodes & Horizontal Zoom Track'
-            }
-            goldKeyword={lang === 'ar' ? 'المباريات' : 'Bracket'}
-            subtitle={
-              lang === 'ar'
-                ? 'بطاقات مرنة لـ ٣ لاعبين تتكيف مع شاشات الهواتف وتتضمن عقدة النهائي المضيئة لمروان سري.'
-                : 'Container-query 3-player game nodes highlighting winners, LIVE tables, and Marwan Serry’s Golden Seat Final Boss node inside a zoomable pan track.'
-            }
-          />
-
           <BracketTrack
             title={
               lang === 'ar'
-                ? 'معاينة مسار الأدوار الإقصائية (اسحب أفقياً أو كبّر)'
-                : 'Knockout Path Preview (Pan Horizontally & Zoom on Mobile)'
+                ? 'اسحب أفقياً أو كبّر (٤٤ بكسل لمس)'
+                : 'Horizontal Pan & Zoom Bracket Track'
             }
           >
             <div className="grid min-w-[260px] grid-cols-1 gap-6 lg:min-w-[820px] lg:grid-cols-3 lg:items-center">
               <BracketNode
                 roundLabel={lang === 'ar' ? 'ربع النهائي · طاولة أ' : 'QUARTER-FINAL · TABLE A'}
-                tableName={lang === 'ar' ? 'طاولة أ (مكتملة)' : 'Table A (Finished)'}
+                tableName={lang === 'ar' ? 'طاولة أ (منتهية)' : 'Table A (Finished)'}
                 status="finished"
                 useArabicIndicDigits={useArabicIndic}
                 players={[
@@ -723,12 +1110,12 @@ export default function StyleguidePage() {
                   },
                   {
                     id: 'sf-1',
-                    name: lang === 'ar' ? 'المتأهل الأول' : 'Finalist #1 (SF Top)',
+                    name: lang === 'ar' ? 'المتأهل الأول' : 'Finalist #1',
                     isPlaceholder: true,
                   },
                   {
                     id: 'sf-2',
-                    name: lang === 'ar' ? 'المتأهل الثاني' : 'Finalist #2 (SF 2nd)',
+                    name: lang === 'ar' ? 'المتأهل الثاني' : 'Finalist #2',
                     isPlaceholder: true,
                   },
                 ]}
@@ -738,32 +1125,36 @@ export default function StyleguidePage() {
         </section>
 
         <GoldDivider
-          ornament="crescent"
+          ornament="dice"
           label={
             lang === 'ar'
-              ? '٣. فيشات النقاط والشارات والصور الرمزية'
-              : '3. POKER SCORE CHIPS, BADGES & GENERATED AVATARS'
+              ? '٥. فيشات الكازينو (الأربعة الكلاسيكية) والشارات والصور الرمزية'
+              : '5. CASINO CHIPS (4 CLASSIC + SCORE), BADGES & AVATARS'
           }
         />
 
-        {/* 3. SCORE CHIPS, BADGES, LIVE BADGE & PLAYER AVATARS */}
+        {/* 6. CHIPS, BADGES & AVATARS */}
         <section className="grid gap-6 lg:grid-cols-2">
-          {/* ScoreChip & Badges */}
-          <Card className="space-y-6">
+          <Card appearance="sticker" className="space-y-6">
             <div>
-              <h3 className="font-display text-fluid-xl font-bold text-gold-100">
+              <h3 className="font-display text-fluid-xl text-red-900">
                 {lang === 'ar'
-                  ? 'فيشات النقاط (ScoreChip) والشارات (Badge / LiveBadge)'
-                  : 'ScoreChip (Poker Chip), Badge & LiveBadge'}
+                  ? 'فيشات الكازينو (الأحمر والأبيض والأزرق والذهبي + النقاط)'
+                  : 'Casino Chips (Red, White, Blue, Gold + Score Chips)'}
               </h3>
-              <p className="mt-1 text-sm text-text-muted">
+              <p className="mt-1 text-sm text-ink-muted">
                 {lang === 'ar'
-                  ? 'فيشات دائرية بحلقة متقطعة وأرقام ثابتة العرض، بمساحة لمس ٤٤ بكسل عند التفاعل.'
-                  : 'Circular poker chips with dashed inner ring, tabular numerals, and 44px+ interactive targets.'}
+                  ? 'فيشات دائرية بإطار عنابي صلب وحلقة متقطعة، مع علامة +/- دائماً.'
+                  : 'Circular chips with dashed inner ring, thick maroon outline, and explicit + / − indicators.'}
               </p>
             </div>
 
+            {/* Classic 4 Chips + Positive/Negative */}
             <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+              <ScoreChip value="01" tone="red" size="md" subtitle="STEP" />
+              <ScoreChip value="02" tone="white" size="md" subtitle="STEP" />
+              <ScoreChip value="03" tone="blue" size="md" subtitle="INFO" />
+              <ScoreChip value="★" tone="gold" size="lg" subtitle="FINAL" />
               <ScoreChip
                 value={10}
                 tone="positive"
@@ -774,70 +1165,51 @@ export default function StyleguidePage() {
                 onClick={() => applySandboxDelta(selectedPlayerId, 10)}
               />
               <ScoreChip
-                value={5}
-                tone="positive"
-                size="md"
-                showSign
-                useArabicIndicDigits={useArabicIndic}
-                onClick={() => applySandboxDelta(selectedPlayerId, 5)}
-              />
-              <ScoreChip
                 value={-5}
                 tone="negative"
                 size="md"
                 showSign
+                subtitle="PEN"
                 useArabicIndicDigits={useArabicIndic}
                 onClick={() => applySandboxDelta(selectedPlayerId, -5)}
               />
-              <ScoreChip
-                value="★"
-                tone="neutral"
-                size="md"
-                subtitle="FINAL"
-              />
-              <ScoreChip
-                value={100}
-                tone="neutral"
-                size="xl"
-                subtitle="BOSS"
-                useArabicIndicDigits={useArabicIndic}
-              />
-              <ScoreChip value="LIVE" tone="live" size="sm" />
             </div>
 
-            <div className="space-y-3 border-t border-border pt-4">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-gold-300">
-                {lang === 'ar'
-                  ? 'جميع حالات الشارات (Badge & LiveBadge)'
-                  : 'All Badge & LiveBadge Variants'}
+            <div className="space-y-3 border-t border-border-paper pt-4">
+              <span className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
+                {lang === 'ar' ? 'الشارات وحالات الفقرات' : 'Status & Category Badges'}
               </span>
               <div className="flex flex-wrap items-center gap-2">
-                <LiveBadge size="sm" />
-                <LiveBadge
-                  size="md"
-                  label={lang === 'ar' ? 'مباشر · طاولة ب' : 'LIVE · TABLE B'}
-                />
-                <Badge variant="gold">★ Gold Accent</Badge>
-                <Badge variant="positive">+10 Emerald Positive</Badge>
-                <Badge variant="negative">-5 Ruby Negative</Badge>
-                <Badge variant="info">Round 2 Info</Badge>
-                <Badge variant="muted">Scheduled Muted</Badge>
+                <LiveBadge surface="paper" size="sm" />
+                <LiveBadge surface="stage" size="sm" />
+                <Badge variant="gold">★ Winner Gold</Badge>
+                <Badge variant="upcoming">Upcoming Blue</Badge>
+                <Badge variant="muted">Finished Neutral</Badge>
+                <Badge variant="positive">
+                  <Plus className="h-3.5 w-3.5 stroke-[3]" />
+                  <span>+10 Added</span>
+                </Badge>
+                <Badge variant="negative">
+                  <Minus className="h-3.5 w-3.5 stroke-[3]" />
+                  <span>−5 Deducted</span>
+                </Badge>
+                <Badge variant="red">Music Segment</Badge>
+                <Badge variant="white">Wordplay</Badge>
               </div>
             </div>
           </Card>
 
-          {/* PlayerAvatar Geometric Patterns */}
-          <Card className="space-y-6">
+          <Card appearance="sticker" className="space-y-6">
             <div>
-              <h3 className="font-display text-fluid-xl font-bold text-gold-100">
+              <h3 className="font-display text-fluid-xl text-red-900">
                 {lang === 'ar'
-                  ? 'الصور الرمزية المولّدة هندسياً (PlayerAvatar)'
-                  : 'Generated Geometric Avatars (PlayerAvatar)'}
+                  ? 'الصور الرمزية الهندسية المولّدة (بدون صور أشخاص)'
+                  : 'Generated Geometric Avatars (No Real Photos)'}
               </h3>
-              <p className="mt-1 text-sm text-text-muted">
+              <p className="mt-1 text-sm text-ink-muted">
                 {lang === 'ar'
-                  ? 'أنماط هندسية إسلامية وكازينو مولّدة برمجياً مع الأحرف الأولى داخل إطار ذهبي (بدون صور أشخاص حقيقيين).'
-                  : '6 deterministic geometric SVG patterns + initials in gold rings. Strictly no real photos per AGENTS.md §10.'}
+                  ? 'حلقات سميكة بألوان الهوية الجديدة وحالة التحديد بالحلقة الزرقاء وحالة الجرس بالحلقة الذهبية.'
+                  : 'Deterministic SVG patterns in brand red/maroon/blue/gold rings. Selected = blue ring; Buzzed = gold ring.'}
               </p>
             </div>
 
@@ -850,7 +1222,7 @@ export default function StyleguidePage() {
                   isHost
                   rank={1}
                 />
-                <span className="text-xs font-semibold text-gold-300">
+                <span className="text-xs font-extrabold text-red-900">
                   Marwan (Host)
                 </span>
               </div>
@@ -858,46 +1230,25 @@ export default function StyleguidePage() {
               {(seededPlayers.length > 0
                 ? seededPlayers.filter((p) => !p.isHost).slice(0, 5)
                 : [
-                    {
-                      id: '1',
-                      fullName: 'Omar Hassan',
-                      avatarSeed: 'seed-0',
-                    },
-                    {
-                      id: '2',
-                      fullName: 'Youssef Adel',
-                      avatarSeed: 'seed-1',
-                    },
-                    {
-                      id: '3',
-                      fullName: 'Salma Reda',
-                      avatarSeed: 'seed-2',
-                    },
-                    {
-                      id: '4',
-                      fullName: 'Karim Nabil',
-                      avatarSeed: 'seed-3',
-                    },
-                    {
-                      id: '5',
-                      fullName: 'Mariam Hatem',
-                      avatarSeed: 'seed-4',
-                    },
+                    { id: '1', fullName: 'Omar Hassan', avatarSeed: 'seed-0' },
+                    { id: '2', fullName: 'Youssef Adel', avatarSeed: 'seed-1' },
+                    { id: '3', fullName: 'Salma Reda', avatarSeed: 'seed-2' },
+                    { id: '4', fullName: 'Karim Nabil', avatarSeed: 'seed-3' },
+                    { id: '5', fullName: 'Mariam Hatem', avatarSeed: 'seed-4' },
                   ]
               ).map((p, idx) => (
-                <div
-                  key={p.id}
-                  className="flex flex-col items-center gap-1.5"
-                >
+                <div key={p.id} className="flex flex-col items-center gap-1.5">
                   <PlayerAvatar
                     name={p.fullName}
                     avatarSeed={p.avatarSeed}
                     size={idx === 0 ? 'lg' : 'md'}
                     buzzed={idx === 0}
+                    selected={idx === 1}
                     rank={idx + 2}
                   />
-                  <span className="max-w-[84px] truncate text-xs text-text-muted">
+                  <span className="max-w-[84px] truncate text-xs font-semibold text-ink-muted">
                     {p.fullName.split(' ')[0]}
+                    {idx === 0 ? ' (Buzz)' : idx === 1 ? ' (Blue)' : ''}
                   </span>
                 </div>
               ))}
@@ -906,78 +1257,66 @@ export default function StyleguidePage() {
         </section>
 
         <GoldDivider
-          ornament="crescent"
+          ornament="suits"
           label={
             lang === 'ar'
-              ? '٤. الأزرار والبطاقات القياسية والفاخرة'
-              : '4. BUTTONS & CARDS (STANDARD + PREMIUM MARQUEE)'
+              ? '٦. الأزرار والبطاقات والنماذج والنوافذ المنبثقة'
+              : '6. BUTTONS, CARDS, FORMS (BLUE FOCUS) & DIALOGS'
           }
         />
 
-        {/* 4. BUTTONS & CARDS */}
+        {/* 7. BUTTONS & CARDS */}
         <section className="space-y-8">
-          <Card className="space-y-6">
+          <Card appearance="sticker" className="space-y-6">
             <div>
-              <h3 className="font-display text-fluid-xl font-bold text-gold-100">
+              <h3 className="font-display text-fluid-xl text-red-900">
                 {lang === 'ar'
-                  ? 'الأزرار (Button — ٤٤ بكسل كحد أدنى، ٥٦ بكسل للحكم)'
-                  : 'Buttons (44px+ Min Touch Target, 56px+ Scorer Console)'}
+                  ? 'الأزرار (١٤ بكسل · ظل ستيكر · هبوط عند الضغط)'
+                  : 'Buttons (14px Radius · Blue Focus Ring · Tactile Pressed-Sink)'}
               </h3>
-              <p className="mt-1 text-sm text-text-muted">
+              <p className="mt-1 text-sm text-ink-muted">
                 {lang === 'ar'
-                  ? 'تدرج ذهبي للأزرار الرئيسية، إطار ذهبي للثانوية، ياقوتي للحذف، وحجم كبير خاص بلوحة الحكم (٥٦ بكسل على الأقل).'
-                  : '14px radius, 2px gold focus ring with offset, hover effects gated under (hover: hover), and 56px+ tall scorer console touch targets.'}
+                  ? 'اضغط مع الاستمرار على أي زر لمشاهدة هبوط الزر وتلاشي الظل الصلب، وتنقل بـ Tab لمشاهدة حلقة التركيز الزرقاء.'
+                  : 'Press and hold any button to feel the shadow collapse; tab through for the 3px electric blue focus ring with 2px white offset.'}
               </p>
             </div>
 
-            {/* Variants */}
             <div className="flex flex-wrap items-center gap-3">
-              <Button variant="primary">
+              <Button variant="gold">
                 <Sparkles className="h-4 w-4 shrink-0" />
-                <span>
-                  {lang === 'ar' ? 'زر رئيسي ذهبي' : 'Primary Gold Gradient'}
-                </span>
+                <span>{lang === 'ar' ? 'ذهبي (Stage)' : 'Gold Stage Primary'}</span>
               </Button>
-
+              <Button variant="red">
+                <Crown className="h-4 w-4 shrink-0" />
+                <span>{lang === 'ar' ? 'أحمر (Paper)' : 'Red Paper Primary'}</span>
+              </Button>
               <Button variant="secondary">
-                <span>
-                  {lang === 'ar' ? 'زر ثانوي بإطار ذهبي' : 'Secondary Gold Border'}
-                </span>
+                <span>{lang === 'ar' ? 'ثانوي أبيض' : 'Secondary White'}</span>
               </Button>
-
+              <Button variant="info">
+                <span>{lang === 'ar' ? 'أزرق معلومات' : 'Info Blue'}</span>
+              </Button>
               <Button variant="destructive">
                 <Trash2 className="h-4 w-4 shrink-0" />
-                <span>
-                  {lang === 'ar' ? 'حذف / إجراء خطر' : 'Destructive Ruby Outline'}
-                </span>
+                <span>{lang === 'ar' ? 'حذف عنابي' : 'Destructive Maroon'}</span>
               </Button>
-
               <Button variant="destructiveSolid">
                 <Flame className="h-4 w-4 shrink-0" />
-                <span>
-                  {lang === 'ar' ? 'تأكيد الحذف النهائي' : 'Destructive Confirm Fill'}
-                </span>
+                <span>{lang === 'ar' ? 'تأكيد الحذف' : 'Confirm Delete'}</span>
               </Button>
-
-              <Button variant="surface">
-                <span>{lang === 'ar' ? 'سطح مرتفع' : 'Elevated Surface'}</span>
-              </Button>
-
               <Button variant="ghost">
-                <span>{lang === 'ar' ? 'زر شفاف' : 'Ghost Action'}</span>
+                <span>{lang === 'ar' ? 'زر خفيف' : 'Ghost'}</span>
               </Button>
-
-              <Button variant="primary" disabled>
-                <span>{lang === 'ar' ? 'معطّل' : 'Disabled State'}</span>
+              <Button variant="red" disabled>
+                <span>{lang === 'ar' ? 'معطّل' : 'Disabled'}</span>
               </Button>
             </div>
 
-            {/* Sizes including Large Scorer Size */}
-            <div className="space-y-3 border-t border-border pt-4">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-gold-300">
+            <div className="space-y-3 border-t border-border-paper pt-4">
+              <span className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
                 {lang === 'ar'
-                  ? 'مقاسات الأزرار (جميعها ≥ 44px وحجم الحكم ≥ 56px)'
-                  : 'Button Sizes (all ≥ 44px, Scorer ≥ 56px)'}
+                  ? 'المقاسات (≥ 44px للجميع، ≥ 56px للوحة الحكم)'
+                  : 'Sizes (44px+ Standard, 56px+ Scorer Console)'}
               </span>
               <div className="flex flex-wrap items-center gap-3">
                 <Button variant="secondary" size="sm">
@@ -989,11 +1328,11 @@ export default function StyleguidePage() {
                 <Button variant="secondary" size="lg">
                   Large (48px)
                 </Button>
-                <Button variant="primary" size="scorer" className="w-full sm:w-auto">
+                <Button variant="gold" size="scorer" className="w-full sm:w-auto">
                   <Zap className="h-5 w-5 shrink-0 fill-current" />
                   <span>
                     {lang === 'ar'
-                      ? 'حجم لوحة الحكم الكبير (56px+)'
+                      ? 'زر لوحة الحكم الكبير (56px+)'
                       : 'Scorer Console Action (56px+)'}
                   </span>
                 </Button>
@@ -1001,64 +1340,69 @@ export default function StyleguidePage() {
             </div>
           </Card>
 
-          {/* Standard vs Premium Card with Marquee Bulbs */}
+          {/* Calm vs Premium Marquee Ribbon Card */}
           <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
+            <Card appearance="calm">
               <CardHeader>
                 <Badge variant="muted" className="w-fit">
-                  STANDARD CARD (--surface)
+                  CALM PAPER CARD
                 </Badge>
                 <CardTitle>
                   {lang === 'ar'
-                    ? 'بطاقة قياسية بإطار ذهبي خفيف'
-                    : 'Standard Surface Card'}
+                    ? 'بطاقة هادئة للإدارة والبيانات'
+                    : 'Calm Paper Card (Admin & Reading)'}
                 </CardTitle>
                 <CardDescription>
                   {lang === 'ar'
-                    ? 'حواف دائرية ٢٠ بكسل، إضاءة علوية داخلية ناعمة، وتوهج ذهبي خفيف عند التمرير.'
-                    : '20px corner radius, 1px gold-tinted border (--border), soft top inner highlight, and fluid padding.'}
+                    ? 'نصف قطر ٢٠ بكسل، حدود رقيقة بلون --border-paper وظل ناعم، لتسهيل القراءة الطويلة.'
+                    : '20px corner radius, 1px --border-paper, and --shadow-soft for dense tables and editorial pages.'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-ivory/90">
+                <p className="text-sm text-ink">
                   {lang === 'ar'
-                    ? 'تُستخدم للأقسام العامة، بطاقات الفقرات، وإحصائيات لوحة التحكم.'
-                    : 'Used across segment libraries, schedule blocks, and admin studio panels.'}
+                    ? 'محتوى واضح بخط Cairo وحجم خط مريح للعين.'
+                    : 'Crisp --ink typography with high contrast on white surface.'}
                 </p>
               </CardContent>
               <CardFooter>
-                <span className="text-xs text-text-muted">Fluid clamp() padding</span>
-                <Button variant="secondary" size="sm">
-                  {lang === 'ar' ? 'استكشاف' : 'Explore'}
+                <span className="text-xs font-semibold text-ink-muted">Calm surface</span>
+                <Button variant="red" size="sm">
+                  {lang === 'ar' ? 'فتح' : 'Open'}
                 </Button>
               </CardFooter>
             </Card>
 
-            <Card premium marquee="perimeter" bulbCount={12}>
-              <CardHeader>
+            <Card
+              premium
+              marquee="perimeter"
+              bulbCount={12}
+              ribbonLabel={lang === 'ar' ? '★ المقعد الذهبي' : '★ GOLDEN SEAT'}
+            >
+              <CardHeader className="pt-4">
                 <div className="flex items-center justify-between gap-2">
                   <Badge variant="gold">PREMIUM MARQUEE CARD</Badge>
                   <CrescentStar size="sm" glow />
                 </div>
-                <CardTitle className="text-gold-gradient">
+                <CardTitle>
                   {lang === 'ar'
-                    ? 'بطاقة العرض الفاخرة بإضاءة المسرح (Marquee Bulbs)'
-                    : 'Premium Stage Card with Marquee Bulbs'}
+                    ? 'بطاقة النهائي بإضاءة المسرح وشريط ذهبي'
+                    : 'Premium Marquee Card with Gold Ribbon'}
                 </CardTitle>
                 <CardDescription>
                   {lang === 'ar'
-                    ? 'تتضمن مصابيح المسرح الدافئة المتتابعة وزخارف الزوايا الذهبية لليلة النهائي ومقعد مروان سري.'
-                    : 'Features chasing warm marquee bulbs around the perimeter and corner gold filigree ornaments for Final Night and Marwan Serry’s seat.'}
+                    ? 'مصابيح متتابعة حول الإطار وشريط زاوية ذهبي لليلة النهائي ومواجهة مروان سري.'
+                    : 'Warm chasing marquee bulbs and gold corner ribbon for Marwan Serry’s Final Night.'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <MarqueeBulbs variant="strip" bulbCount={12} />
               </CardContent>
               <CardFooter>
-                <span className="text-xs text-gold-300">
+                <span className="text-xs font-bold text-red-800">
                   Respects prefers-reduced-motion
                 </span>
-                <Button variant="primary" size="sm">
+                <Button variant="gold" size="sm">
                   <Trophy className="h-4 w-4 shrink-0" />
                   <span>{lang === 'ar' ? 'المقعد الذهبي' : 'Golden Seat'}</span>
                 </Button>
@@ -1067,41 +1411,31 @@ export default function StyleguidePage() {
           </div>
         </section>
 
-        <GoldDivider
-          ornament="crescent"
-          label={
-            lang === 'ar'
-              ? '٥. النماذج والحقول والنوافذ المنبثقة (Bottom Sheet على الهاتف)'
-              : '5. FORMS (16px+ INPUTS), BOTTOM-SHEET DIALOGS & TOASTS'
-          }
-        />
-
-        {/* 5. FORMS, DIALOGS & TOASTS */}
+        {/* 8. FORMS (BLUE FOCUS), DIALOGS & TOASTS */}
         <section className="grid gap-6 lg:grid-cols-12">
-          {/* Form Controls: Input, Select, Textarea inside single-col-on-phone FormGrid */}
-          <Card className="space-y-5 lg:col-span-7">
+          <Card appearance="calm" className="space-y-5 lg:col-span-7">
             <div>
-              <h3 className="font-display text-fluid-xl font-bold text-gold-100">
+              <h3 className="font-display text-fluid-xl text-red-900">
                 {lang === 'ar'
-                  ? 'حقول الإدخال والاختيار (عمود واحد على الهاتف)'
-                  : 'Form Controls (16px Min Font · 1-Col on Phones)'}
+                  ? 'حقول النماذج (إطار أزرق عند التركيز + خط 16px+)'
+                  : 'Forms (White Inputs · Electric Blue Focus Ring · 16px+ Font)'}
               </h3>
-              <p className="mt-1 text-sm text-text-muted">
+              <p className="mt-1 text-sm text-ink-muted">
                 {lang === 'ar'
-                  ? 'خلفية surface-2، خط بحجم ١٦ بكسل على الأقل لمنع تكبير iOS التلقائي، وعمود واحد على الشاشات الصغيرة.'
-                  : 'Surface-2 background, 16px+ font size to prevent iOS Safari zoom, and FormGrid single-column stacking on phones.'}
+                  ? 'خلفية بيضاء وحدود ٢ بكسل تتحول إلى الأزرق الكهربائي عند التركيز مع أيقونة خطأ واضحة.'
+                  : 'White inputs, 2px --border-paper turning electric blue on focus, and inline validation with AlertCircle icon.'}
               </p>
             </div>
 
             <FormGrid columns={2}>
               <Input
-                label={lang === 'ar' ? 'نقاط مخصصة (حكم الطاولة)' : 'Custom Points Delta'}
+                label={lang === 'ar' ? 'نقاط مخصصة' : 'Custom Points Delta'}
                 value={customPoints}
                 onChange={(e) => setCustomPoints(e.target.value)}
                 helperText={
                   lang === 'ar'
-                    ? 'أدخل قيمة موجبة أو سالبة'
-                    : 'Enter positive or negative integer'
+                    ? 'اضغط داخل الحقل لرؤية التركيز الأزرق'
+                    : 'Focus this input to verify the blue ring'
                 }
               />
 
@@ -1110,51 +1444,31 @@ export default function StyleguidePage() {
                 value={selectedCategory}
                 onValueChange={setSelectedCategory}
                 dir={lang === 'ar' ? 'rtl' : 'ltr'}
-                helperText={
-                  lang === 'ar'
-                    ? 'قائمة منسدلة مبنية على Radix Select'
-                    : 'Radix Select themed to midnight & gold'
-                }
+                helperText="Radix Select in Paper theme"
                 options={[
                   {
                     value: 'music',
-                    label:
-                      lang === 'ar'
-                        ? 'موسيقى وغناء (Music & Singing)'
-                        : 'Music & Singing',
+                    label: lang === 'ar' ? 'موسيقى وغناء' : 'Music & Singing',
                   },
                   {
                     value: 'wordplay',
-                    label:
-                      lang === 'ar'
-                        ? 'لعب بالكلمات وسرعة (Wordplay)'
-                        : 'Wordplay & Speed',
+                    label: lang === 'ar' ? 'لعب بالكلمات وسرعة' : 'Wordplay & Speed',
                   },
                   {
                     value: 'popculture',
-                    label:
-                      lang === 'ar'
-                        ? 'سينما وثقافة شعبية (Pop Culture)'
-                        : 'Cinema & Pop Culture',
+                    label: lang === 'ar' ? 'سينما وثقافة شعبية' : 'Cinema & Pop Culture',
                   },
                   {
                     value: 'general',
-                    label:
-                      lang === 'ar'
-                        ? 'معلومات عامة (General Trivia)'
-                        : 'General Knowledge',
+                    label: lang === 'ar' ? 'معلومات عامة' : 'General Knowledge',
                   },
                 ]}
               />
             </FormGrid>
 
             <Input
-              label={
-                lang === 'ar'
-                  ? 'مثال لحقل بخطأ تحقق (Inline Ruby Validation)'
-                  : 'Validation Error State Specimen'
-              }
-              defaultValue="invalid-score-delta"
+              label={lang === 'ar' ? 'حالة خطأ التحقق' : 'Inline Validation Error State'}
+              defaultValue="invalid-delta"
               error={
                 lang === 'ar'
                   ? 'يجب إدخال رقم صحيح للنقاط قبل الاعتماد.'
@@ -1163,45 +1477,35 @@ export default function StyleguidePage() {
             />
 
             <Textarea
-              label={
-                lang === 'ar'
-                  ? 'ملاحظة الحكم الاختيارية (Textarea)'
-                  : 'Scorer Audit Note (Textarea)'
-              }
+              label={lang === 'ar' ? 'ملاحظة الحكم الاختيارية' : 'Scorer Audit Note'}
               value={scorerNote}
               onChange={(e) => setScorerNote(e.target.value)}
-              helperText={
-                lang === 'ar'
-                  ? 'تُحفظ هذه الملاحظة في سجل النتائج وسجل المراجعة.'
-                  : 'Recorded on both ScoreEvent and AuditEntry.'
-              }
+              helperText="Recorded on ScoreEvent & AuditEntry."
             />
           </Card>
 
-          {/* Dialogs & Toasts */}
-          <Card className="flex flex-col justify-between space-y-6 lg:col-span-5">
+          <Card appearance="sticker" className="flex flex-col justify-between space-y-6 lg:col-span-5">
             <div className="space-y-4">
               <div>
-                <h3 className="font-display text-fluid-xl font-bold text-gold-100">
+                <h3 className="font-display text-fluid-xl text-red-900">
                   {lang === 'ar'
-                    ? 'النوافذ الحوارية (Bottom Sheet على الهواتف) والتنبيهات'
-                    : 'Dialogs (Bottom Sheet on Phones) & Toasts'}
+                    ? 'النوافذ الحوارية والتنبيهات (Sticker Outline)'
+                    : 'Sticker Dialogs (Bottom Sheet on Phones) & Toasts'}
                 </h3>
-                <p className="mt-1 text-sm text-text-muted">
+                <p className="mt-1 text-sm text-ink-muted">
                   {lang === 'ar'
-                    ? 'تفتح النوافذ كلوحة سفلية على الهواتف ووسط الشاشة على التابلت والديسكتوب، مع زر تأكيد ياقوتي صريح.'
-                    : 'Dialogs slide up as a bottom sheet with safe-area padding on phones (< 640px) and center on sm+.'}
+                    ? 'سطح أبيض بإطار ستيكر صلب ولوحة سفلية على الهواتف، مع تأكيد صريح للإجراءات الخطرة.'
+                    : 'White surface, thick maroon sticker border, bottom sheet on <640px phones, explicit confirm for destructive actions.'}
                 </p>
               </div>
 
-              {/* Dialog Triggers */}
               <div className="flex flex-wrap gap-3">
                 <Dialog>
                   <DialogTrigger asChild>
                     <Button variant="secondary" className="w-full xs:w-auto">
-                      <Wand2 className="h-4 w-4 shrink-0 text-gold-500" />
+                      <Wand2 className="h-4 w-4 shrink-0 text-red-600" />
                       <span>
-                        {lang === 'ar' ? 'فتح نافذة قياسية' : 'Open Standard Dialog'}
+                        {lang === 'ar' ? 'فتح نافذة قياسية' : 'Open Sticker Dialog'}
                       </span>
                     </Button>
                   </DialogTrigger>
@@ -1214,14 +1518,14 @@ export default function StyleguidePage() {
                       </DialogTitle>
                       <DialogDescription>
                         {lang === 'ar'
-                          ? 'يوجد تعادل في النقاط المؤهلة على هذه الطاولة. هل ترغب في إلحاق الفقرة رقم ١٦ (جولة التحدي والحسم) الآن؟'
-                          : 'A qualifying tie exists across the advancement cutoff. Append Segment #16 (Tie-Breaker Challenge) to resolve the winner?'}
+                          ? 'يوجد تعادل في النقاط المؤهلة على هذه الطاولة. هل ترغب في إلحاق الفقرة رقم ١٦ الآن؟'
+                          : 'A qualifying tie exists across the advancement cutoff. Append Segment #16 (Tie-Breaker Challenge) now?'}
                       </DialogDescription>
                     </DialogHeader>
-                    <div className="rounded-input border border-border bg-surface-2 p-4 text-xs text-gold-100">
+                    <div className="rounded-input border-2 border-outline bg-paper-2 p-4 text-xs font-bold text-red-900">
                       {lang === 'ar'
-                        ? 'الفقرة ١٦: جولة التحدي / الحسم — نقاط مقترحة: +10 / -5'
-                        : 'Segment #16: Tie-Breaker & Penalty Challenge — Presets: +10 / -5'}
+                        ? 'الفقرة ١٦: جولة التحدي / الحسم — نقاط مقترحة: +10 / −5'
+                        : 'Segment #16: Tie-Breaker & Penalty Challenge — Presets: +10 / −5'}
                     </div>
                     <DialogFooter>
                       <DialogClose asChild>
@@ -1231,7 +1535,7 @@ export default function StyleguidePage() {
                       </DialogClose>
                       <DialogClose asChild>
                         <Button
-                          variant="primary"
+                          variant="red"
                           onClick={() =>
                             toast({
                               variant: 'gold',
@@ -1255,9 +1559,7 @@ export default function StyleguidePage() {
                     <Button variant="destructive" className="w-full xs:w-auto">
                       <RotateCcw className="h-4 w-4 shrink-0" />
                       <span>
-                        {lang === 'ar'
-                          ? 'نافذة تأكيد خطرة (Ruby)'
-                          : 'Destructive Confirm Dialog'}
+                        {lang === 'ar' ? 'تأكيد خطر' : 'Destructive Confirm'}
                       </span>
                     </Button>
                   }
@@ -1268,8 +1570,8 @@ export default function StyleguidePage() {
                   }
                   description={
                     lang === 'ar'
-                      ? 'سيؤدي هذا الإجراء إلى مسح جميع التعديلات المحلية واستعادة حالة البطولة الافتراضية لرمضان ٢٠٢٧.'
-                      : 'This action restores all 27 players, 14 games, and score events to their initial seeded state.'
+                      ? 'سيؤدي هذا الإجراء إلى مسح التعديلات المحلية واستعادة حالة البطولة الافتراضية.'
+                      : 'This restores all 27 players, 14 games, and score events to their seeded state.'
                   }
                   confirmLabel={
                     lang === 'ar' ? 'نعم، إعادة الضبط الآن' : 'Yes, Reset Demo Data'
@@ -1280,24 +1582,17 @@ export default function StyleguidePage() {
                       variant: 'negative',
                       title:
                         lang === 'ar'
-                          ? 'تم تأكيد الإجراء'
+                          ? 'تم تنفيذ إعادة الضبط'
                           : 'Destructive Action Confirmed',
-                      description:
-                        lang === 'ar'
-                          ? 'تم تنفيذ أمر التأكيد الياقوتي بنجاح.'
-                          : 'Explicit ruby confirmation callback executed.',
                     })
                   }
                 />
               </div>
             </div>
 
-            {/* Toast Triggers */}
-            <div className="space-y-3 border-t border-border pt-4">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-gold-300">
-                {lang === 'ar'
-                  ? 'تجربة التنبيهات الفورية (Toast Variants)'
-                  : 'Trigger Toast Notifications'}
+            <div className="space-y-3 border-t border-border-paper pt-4">
+              <span className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
+                {lang === 'ar' ? 'تجربة التنبيهات الفورية' : 'Trigger Toast Variants'}
               </span>
               <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                 <Button
@@ -1306,77 +1601,54 @@ export default function StyleguidePage() {
                   onClick={() =>
                     toast({
                       variant: 'gold',
-                      title:
-                        lang === 'ar'
-                          ? 'تنبيه ذهبي فاخر'
-                          : 'Gold Broadcast Notice',
-                      description:
-                        lang === 'ar'
-                          ? 'بدأت الفقرة الرابعة على طاولة ب المباشرة.'
-                          : 'Segment 4 of 6 is now live on Table B.',
+                      title: lang === 'ar' ? 'تنبيه ذهبي' : 'Gold Show Notice',
+                      description: 'Segment 4 of 6 is live on Table B.',
                     })
                   }
                 >
-                  <Bell className="h-3.5 w-3.5 shrink-0 text-gold-500" />
+                  <Bell className="h-3.5 w-3.5 shrink-0 text-gold-600" />
                   <span>Gold Toast</span>
                 </Button>
-
                 <Button
                   variant="surface"
                   size="sm"
                   onClick={() =>
                     toast({
                       variant: 'positive',
-                      title:
-                        lang === 'ar' ? '+١٠ نقاط مضافة' : '+10 Points Recorded',
-                      description:
-                        lang === 'ar'
-                          ? 'تم تحديث الرصيد وبث الحدث عبر BroadcastChannel.'
-                          : 'Synced to Big Screen via BroadcastChannel.',
+                      title: lang === 'ar' ? '+١٠ نقاط مضافة' : '+10 Points Recorded',
+                      description: 'Synced via BroadcastChannel.',
                     })
                   }
                 >
-                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-positive" />
-                  <span>Emerald Toast</span>
+                  <Plus className="h-3.5 w-3.5 shrink-0 text-positive-ink" />
+                  <span>+Positive Toast</span>
                 </Button>
-
                 <Button
                   variant="surface"
                   size="sm"
                   onClick={() =>
                     toast({
                       variant: 'negative',
-                      title:
-                        lang === 'ar' ? '-٥ نقاط خصم' : '-5 Penalty Applied',
-                      description:
-                        lang === 'ar'
-                          ? 'إجابة خاطئة قبل انتهاء الوقت.'
-                          : 'Incorrect buzz response recorded.',
+                      title: lang === 'ar' ? '−٥ نقاط خصم' : '−5 Penalty Applied',
+                      description: 'Incorrect buzz response.',
                     })
                   }
                 >
-                  <Flame className="h-3.5 w-3.5 shrink-0 text-negative" />
-                  <span>Ruby Toast</span>
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0 text-negative" />
+                  <span>−Negative Toast</span>
                 </Button>
-
                 <Button
                   variant="surface"
                   size="sm"
                   onClick={() =>
                     toast({
                       variant: 'info',
-                      title:
-                        lang === 'ar'
-                          ? 'تم تسجيل حضور اللاعب'
-                          : 'Player Checked In',
-                      description:
-                        lang === 'ar'
-                          ? 'بوابة الحضور: عمر حسن جاهز للطاولة.'
-                          : 'Gate Staff marked contestant ready.',
+                      title: lang === 'ar' ? 'حضور مسجّل' : 'Player Checked In',
+                      description: 'Gate staff confirmed readiness.',
                     })
                   }
                 >
-                  <span>Info Toast</span>
+                  <span>Blue Info Toast</span>
                 </Button>
               </div>
             </div>
@@ -1387,36 +1659,30 @@ export default function StyleguidePage() {
           ornament="crescent"
           label={
             lang === 'ar'
-              ? '٦. التبويبات والجداول المتجاوبة وحالات الفراغ والتحميل'
-              : '6. TABS, RESPONSIVE DATA TABLE (CARDS + STICKY COL), EMPTY & SKELETONS'
+              ? '٧. الجداول الورقية المتجاوبة وحالة الفراغ بالزهر والكروت'
+              : '7. PAPER DATA TABLE, DICE EMPTY STATE & SKELETONS'
           }
         />
 
-        {/* 6. TABS, TABLE, EMPTY STATE & SKELETONS */}
-        <section className="space-y-8">
+        {/* 9. PAPER DATA TABLE, DICE EMPTY STATE & SKELETONS */}
+        <section className="space-y-6">
           <Tabs defaultValue="table">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <TabsList>
                 <TabsTrigger value="table">
-                  <Layers className="h-4 w-4 shrink-0 text-gold-500" />
+                  <Layers className="h-4 w-4 shrink-0" />
                   <span>
-                    {lang === 'ar'
-                      ? 'جدول البيانات المتجاوب'
-                      : 'Responsive DataTable'}
+                    {lang === 'ar' ? 'جدول البيانات الورقي' : 'Paper DataTable'}
                   </span>
                 </TabsTrigger>
                 <TabsTrigger value="empty">
                   <span>
-                    {lang === 'ar'
-                      ? 'حالة الفراغ بالفانوس (EmptyState)'
-                      : 'Lantern EmptyState'}
+                    {lang === 'ar' ? 'حالة الفراغ (زهر وكروت)' : 'Dice & Card EmptyState'}
                   </span>
                 </TabsTrigger>
                 <TabsTrigger value="skeletons">
                   <span>
-                    {lang === 'ar'
-                      ? 'هياكل التحميل (Skeletons)'
-                      : 'Loading Skeletons'}
+                    {lang === 'ar' ? 'هياكل التحميل' : 'Paper Skeletons'}
                   </span>
                 </TabsTrigger>
               </TabsList>
@@ -1428,8 +1694,8 @@ export default function StyleguidePage() {
               >
                 {showTableEmpty
                   ? lang === 'ar'
-                    ? 'إظهار بيانات الجدول (٨ فقرات)'
-                    : 'Populate Table Rows'
+                    ? 'إظهار الصفوف (٨ فقرات)'
+                    : 'Populate Rows'
                   : lang === 'ar'
                     ? 'معاينة الجدول الفارغ'
                     : 'Simulate Empty Table'}
@@ -1442,7 +1708,7 @@ export default function StyleguidePage() {
                 getRowKey={(seg) => seg.id}
                 searchPlaceholder={
                   lang === 'ar'
-                    ? 'ابحث في فقرات البرنامج بالاسم أو الفئة...'
+                    ? 'ابحث في فقرات البرنامج...'
                     : 'Search show segments by title or category...'
                 }
                 searchFilter={(seg, q) =>
@@ -1481,8 +1747,8 @@ export default function StyleguidePage() {
                 }
                 emptyDescription={
                   lang === 'ar'
-                    ? 'جرّب تغيير كلمات البحث أو استعد قائمة الفقرات الافتراضية.'
-                    : 'Try clearing the search filter or click "Populate Table Rows" above.'
+                    ? 'جرّب مسح التصفية أو الضغط على إظهار الصفوف.'
+                    : 'Clear the search filter or click "Populate Rows" above.'
                 }
                 columns={[
                   {
@@ -1494,6 +1760,7 @@ export default function StyleguidePage() {
                     render: (seg) => (
                       <ScoreChip
                         value={seg.order}
+                        tone="gold"
                         size="sm"
                         useArabicIndicDigits={useArabicIndic}
                       />
@@ -1508,10 +1775,10 @@ export default function StyleguidePage() {
                     sortAccessor: (seg) => seg.nameEn,
                     render: (seg) => (
                       <div className="min-w-[150px]">
-                        <div className="font-semibold text-ivory">
+                        <div className="font-bold text-ink">
                           {localizeText(lang, seg.nameEn, seg.nameAr)}
                         </div>
-                        <div className="text-xs text-text-muted">
+                        <div className="text-xs text-ink-muted">
                           {lang === 'ar' ? seg.nameEn : seg.nameAr}
                         </div>
                       </div>
@@ -1523,7 +1790,16 @@ export default function StyleguidePage() {
                     sortable: true,
                     sortAccessor: (seg) => seg.category,
                     render: (seg) => (
-                      <Badge variant="gold" className="uppercase">
+                      <Badge
+                        variant={
+                          seg.category === 'music'
+                            ? 'red'
+                            : seg.category === 'wordplay'
+                              ? 'gold'
+                              : 'info'
+                        }
+                        className="uppercase"
+                      >
                         {seg.category}
                       </Badge>
                     ),
@@ -1539,7 +1815,12 @@ export default function StyleguidePage() {
                             variant={pt > 0 ? 'positive' : 'negative'}
                             className="tabular-nums"
                           >
-                            {pt > 0 ? `+${pt}` : pt}
+                            {pt > 0 ? (
+                              <Plus className="h-3 w-3 stroke-[3]" />
+                            ) : (
+                              <Minus className="h-3 w-3 stroke-[3]" />
+                            )}
+                            <span>{Math.abs(pt)}</span>
                           </Badge>
                         ))}
                       </div>
@@ -1558,28 +1839,26 @@ export default function StyleguidePage() {
                 }
                 description={
                   lang === 'ar'
-                    ? 'بمجرد أن يبدأ حكم الطاولة الجلسة من لوحة التحكم، ستظهر النتائج المباشرة هنا تلقائياً.'
-                    : 'As soon as a table scorer starts a session from the Scorer Console, live standings and events will illuminate here.'
+                    ? 'بمجرد أن يبدأ حكم الطاولة الجلسة ستظهر النتائج المباشرة هنا تلقائياً.'
+                    : 'Once a table scorer starts a session, live standings and events appear right here.'
                 }
                 action={
                   <Button
-                    variant="primary"
+                    variant="red"
                     size="sm"
                     onClick={() =>
                       toast({
                         variant: 'gold',
                         title:
                           lang === 'ar'
-                            ? 'تم تنشيط إجراء الحالة الفارغة'
-                            : 'EmptyState CTA Triggered',
+                            ? 'تم تشغيل الجلسة التجريبية'
+                            : 'EmptyState Action Triggered',
                       })
                     }
                   >
                     <Play className="h-4 w-4 shrink-0 fill-current" />
                     <span>
-                      {lang === 'ar'
-                        ? 'تشغيل مباراة تجريبية'
-                        : 'Launch Demo Session'}
+                      {lang === 'ar' ? 'تشغيل مباراة تجريبية' : 'Launch Demo Session'}
                     </span>
                   </Button>
                 }
@@ -1592,7 +1871,7 @@ export default function StyleguidePage() {
                 <PlayerPanelSkeleton />
                 <PlayerPanelSkeleton />
               </div>
-              <div className="overflow-hidden rounded-card border border-border">
+              <div className="overflow-hidden rounded-card border border-border-paper">
                 <TableRowSkeleton columns={4} />
                 <TableRowSkeleton columns={4} />
                 <TableRowSkeleton columns={4} />
@@ -1605,76 +1884,92 @@ export default function StyleguidePage() {
             </TabsContent>
           </Tabs>
         </section>
+      </div>
 
-        <GoldDivider
-          ornament="suits"
-          label={
-            lang === 'ar'
-              ? '٧. الزخارف الرمضانية وعناصر الهوية البصرية'
-              : '7. SIGNATURE RAMADAN & CASINO MOTIFS'
-          }
-        />
+      {/* 10. ORIGINAL SIGNATURE MOTIFS SHOWCASE (STAGE BAND) */}
+      <div className="mt-14">
+        <StageDivider variant="scallop" from="paper" to="stage" />
+        <SunburstStage as="section" className="py-section-y">
+          <div className="mx-auto max-w-content-wide 3xl:max-w-stage space-y-10 px-safe">
+            <SectionHeading
+              size="lg"
+              align="center"
+              surface="stage"
+              eyebrow={
+                lang === 'ar'
+                  ? '٨. الزخارف الأصلية (SVG/CSS مبتكرة ١٠٠٪)'
+                  : '8. ORIGINAL SIGNATURE MOTIFS GALLERY'
+              }
+              title={
+                lang === 'ar'
+                  ? 'النرد، الكروت، الفيشات، الدوامات والزخارف الرمضانية'
+                  : 'Dice, Cards, Chips, Swirls, Confetti & Ramadan Accents'
+              }
+              goldKeyword={lang === 'ar' ? 'الفيشات' : 'Chips, Swirls,'}
+              subtitle={
+                lang === 'ar'
+                  ? 'رسوم فيكتور أصلية بالكامل بحدود عنابية سميكة دون أي نسخ لشعارات أو رسومات من البرنامج الحقيقي.'
+                  : '100% original SVG/CSS game-show stickers with thick maroon outlines, keeping lanterns & crescent as a warm secondary accent.'
+              }
+            />
 
-        {/* 7. MOTIFS GALLERY: Lantern sizes, CrescentStar, MarqueeBulbs, GoldDivider */}
-        <section className="grid gap-6 md:grid-cols-3">
-          <Card className="flex flex-col items-center justify-between text-center">
-            <div className="space-y-1">
-              <Badge variant="gold">SWAYING SVG FANOUS</Badge>
-              <h3 className="font-display text-xl font-bold text-ivory">
-                {lang === 'ar' ? 'فانوس رمضان المتأرجح' : 'Lantern (sm / md / lg)'}
-              </h3>
-            </div>
-            <div className="my-4 flex items-end justify-center gap-5">
-              <Lantern size="sm" chainLength={10} />
-              <Lantern size="md" chainLength={6} />
-              <Lantern size="lg" chainLength={4} />
-            </div>
-            <p className="text-xs text-text-muted">
-              {lang === 'ar'
-                ? 'حركة تأرجح هادئة (٣ إلى ٥ ثوانٍ) تتوقف تلقائياً عند تفعيل تقليل الحركة.'
-                : 'Gentle 3–5s sway loop; automatically pauses when prefers-reduced-motion is active.'}
-            </p>
-          </Card>
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+              {/* Dice + Cards */}
+              <Card appearance="sticker" className="flex flex-col items-center justify-between text-center">
+                <Badge variant="gold">DICE & PLAYING CARDS</Badge>
+                <div className="my-6 flex items-center justify-center gap-4">
+                  <PlayingDice value={5} size="lg" tilt={-10} float />
+                  <PlayingCardFan float />
+                </div>
+                <p className="text-xs font-medium text-ink-muted">
+                  Original sticker-outlined dice & game-show cards (zero gambling motifs).
+                </p>
+              </Card>
 
-          <Card className="flex flex-col items-center justify-between text-center">
-            <div className="space-y-1">
-              <Badge variant="gold">CRESCENT, STAR & SUITS</Badge>
-              <h3 className="font-display text-xl font-bold text-ivory">
-                {lang === 'ar' ? 'الهلال والنجمة وأوراق اللعب' : 'CrescentStar & Card Suits'}
-              </h3>
-            </div>
-            <div className="my-6 flex items-center justify-center gap-5">
-              <CrescentStar size="sm" />
-              <CrescentStar size="md" glow />
-              <CrescentStar size="lg" glow />
-              <CrescentStar size="xl" glow />
-            </div>
-            <div className="w-full space-y-2">
-              <GoldDivider ornament="crescent" className="py-1" />
-              <GoldDivider ornament="suits" className="py-1" />
-            </div>
-          </Card>
+              {/* Classic 4 Chips */}
+              <Card appearance="sticker" className="flex flex-col items-center justify-between text-center">
+                <Badge variant="red">4 CLASSIC CASINO CHIPS</Badge>
+                <div className="my-6 grid grid-cols-2 gap-3">
+                  <ScoreChip value="R" tone="red" size="md" subtitle="RED" />
+                  <ScoreChip value="W" tone="white" size="md" subtitle="WHITE" />
+                  <ScoreChip value="B" tone="blue" size="md" subtitle="BLUE" />
+                  <ScoreChip value="G" tone="gold" size="md" subtitle="GOLD" />
+                </div>
+                <p className="text-xs font-medium text-ink-muted">
+                  Red, White, Blue (white-buffered) & Gold chips for steps & scores.
+                </p>
+              </Card>
 
-          <ArabesqueBackground className="flex flex-col justify-between rounded-card border border-border-strong bg-bg-raised p-card-pad text-center">
-            <div className="space-y-1">
-              <Badge variant="gold">ARABESQUE + MARQUEE</Badge>
-              <h3 className="font-display text-xl font-bold text-ivory">
-                {lang === 'ar'
-                  ? 'خلفية الأرابيسك ومصابيح المسرح'
-                  : 'Arabesque & Marquee Strip'}
-              </h3>
+              {/* Swirls & Confetti */}
+              <Card appearance="sticker" className="flex flex-col items-center justify-between text-center">
+                <Badge variant="info">SWIRLS & CONFETTI</Badge>
+                <div className="my-5 flex flex-col items-center gap-3 w-full">
+                  <div className="flex items-center justify-center gap-4">
+                    <SwirlOrnament tone="gold" size="lg" />
+                    <SwirlOrnament tone="maroon" size="lg" flip />
+                  </div>
+                  <ConfettiShapes variant="paper" className="h-12 w-full" />
+                </div>
+                <p className="text-xs font-medium text-ink-muted">
+                  Spiral doodles, 4-point sparks & confetti ribbons in brand colors.
+                </p>
+              </Card>
+
+              {/* Subtle Secondary Ramadan Accents */}
+              <Card appearance="sticker" className="flex flex-col items-center justify-between text-center">
+                <Badge variant="white">SECONDARY RAMADAN ACCENT</Badge>
+                <div className="my-4 flex items-end justify-center gap-4">
+                  <Lantern size="sm" chainLength={8} />
+                  <CrescentStar size="xl" glow />
+                  <Lantern size="md" chainLength={6} />
+                </div>
+                <p className="text-xs font-medium text-ink-muted">
+                  Subtle Fanous & Crescent Star accents in warm gold & maroon outline.
+                </p>
+              </Card>
             </div>
-            <div className="my-6 space-y-3">
-              <MarqueeBulbs variant="strip" bulbCount={10} tone="gold" />
-              <MarqueeBulbs variant="strip" bulbCount={10} tone="ruby" />
-            </div>
-            <p className="text-xs text-text-muted">
-              {lang === 'ar'
-                ? 'نسيج هندسي إسلامي بشفافية ٥.٥٪ مع أضواء المسرح الدافئة.'
-                : 'Low-opacity (5.5%) 8-point geometric star tessellation with warm stage bulbs.'}
-            </p>
-          </ArabesqueBackground>
-        </section>
+          </div>
+        </SunburstStage>
       </div>
     </div>
   );

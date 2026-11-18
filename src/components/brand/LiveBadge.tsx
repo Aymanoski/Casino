@@ -9,12 +9,21 @@ export interface LiveBadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   label?: string;
   size?: 'sm' | 'md' | 'lg';
   pulse?: boolean;
+  /** 'stage' = white pill with pulsing red dot; 'paper' = red pill with pulsing white dot */
+  surface?: 'stage' | 'paper';
 }
 
+/**
+ * LiveBadge
+ * Per DESIGN.md §6:
+ * - On Stage surfaces: white pill with a pulsing red dot and "LIVE" ("مباشر").
+ * - On Paper surfaces: red pill with a pulsing white dot.
+ */
 export function LiveBadge({
   label,
   size = 'md',
   pulse = true,
+  surface = 'stage',
   className,
   ...props
 }: LiveBadgeProps) {
@@ -24,24 +33,37 @@ export function LiveBadge({
 
   const sizeStyles = {
     sm: 'px-2.5 py-0.5 text-[11px] gap-1.5',
-    md: 'px-3 py-1 text-xs gap-2',
-    lg: 'px-3.5 sm:px-4 py-1.5 text-xs sm:text-sm gap-2',
+    md: 'px-3.5 py-1 text-xs gap-2',
+    lg: 'px-4 py-1.5 text-xs sm:text-sm gap-2',
   }[size];
+
+  const isPaper = surface === 'paper';
 
   return (
     <span
       className={cn(
-        'inline-flex max-w-full items-center justify-center rounded-[18px] sm:rounded-pill border border-live/60 bg-live/15 text-center font-bold uppercase tracking-wider text-live shadow-[0_0_16px_rgba(255,77,77,0.28)]',
+        'inline-flex max-w-full items-center justify-center rounded-pill border-2 border-outline text-center font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal shadow-sticker-sm',
+        isPaper ? 'bg-red-600 text-white' : 'bg-white text-red-600',
         sizeStyles,
         className
       )}
       {...props}
     >
-      <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
+      <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
         {shouldPulse && (
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-pill bg-live opacity-80" />
+          <span
+            className={cn(
+              'absolute inline-flex h-full w-full animate-ping rounded-pill opacity-75',
+              isPaper ? 'bg-white' : 'bg-red-600'
+            )}
+          />
         )}
-        <span className="relative inline-flex h-2 w-2 rounded-pill bg-live" />
+        <span
+          className={cn(
+            'relative inline-flex h-2.5 w-2.5 rounded-pill',
+            isPaper ? 'bg-white' : 'bg-red-600'
+          )}
+        />
       </span>
       <span>{label ?? t.common.live}</span>
     </span>

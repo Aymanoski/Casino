@@ -6,22 +6,26 @@ export interface ArabesqueBackgroundProps
   opacity?: number;
   radialFade?: boolean;
   overlayOnly?: boolean;
+  tone?: 'stage' | 'paper';
 }
 
 /**
  * ArabesqueBackground
- * Renders an authentic geometric 8-point Islamic star & cross tessellation
- * at very low opacity (4% to 6% per DESIGN.md §5) over midnight sections.
+ * Low-opacity geometric tessellation overlay that works subtly on Stage (white/gold)
+ * or Paper (deep maroon) surfaces without competing with foreground sticker elements.
  */
 export function ArabesqueBackground({
-  opacity = 0.055,
+  opacity = 0.08,
   radialFade = true,
   overlayOnly = false,
+  tone = 'stage',
   className,
   children,
   ...props
 }: ArabesqueBackgroundProps) {
   const patternId = useId().replace(/:/g, '');
+  const strokePrimary = tone === 'paper' ? '#4F0716' : '#FFE899';
+  const strokeSecondary = tone === 'paper' ? '#C4163A' : '#FFFFFF';
 
   const patternSvg = (
     <svg
@@ -42,33 +46,30 @@ export function ArabesqueBackground({
           height="64"
           patternUnits="userSpaceOnUse"
         >
-          {/* Outer octagram (Khatam) geometric star */}
           <polygon
             points="32,4 40,24 60,32 40,40 32,60 24,40 4,32 24,24"
             fill="none"
-            stroke="#E8B84B"
-            strokeWidth="1"
+            stroke={strokePrimary}
+            strokeWidth="1.1"
           />
           <polygon
             points="12,12 32,20 52,12 44,32 52,52 32,44 12,52 20,32"
             fill="none"
-            stroke="#E8B84B"
+            stroke={strokePrimary}
             strokeWidth="0.9"
           />
-          {/* Inner rosette diamond */}
           <circle
             cx="32"
             cy="32"
             r="6"
             fill="none"
-            stroke="#FBEBB5"
-            strokeWidth="0.8"
+            stroke={strokeSecondary}
+            strokeWidth="0.9"
           />
-          {/* Corner tile connectors */}
           <path
             d="M0,12 L12,12 L12,0 M52,0 L52,12 L64,12 M64,52 L52,52 L52,64 M12,64 L12,52 L0,52"
             fill="none"
-            stroke="#E8B84B"
+            stroke={strokePrimary}
             strokeWidth="0.8"
           />
         </pattern>

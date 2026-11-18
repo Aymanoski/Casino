@@ -11,6 +11,8 @@ export interface TimerRingProps {
   remainingSec: number;
   status?: 'idle' | 'running' | 'paused';
   size?: 'sm' | 'md' | 'lg' | 'xl';
+  /** 'stage' = gold ring on deep maroon dial; 'paper' = red ring on crisp white dial */
+  surface?: 'stage' | 'paper';
   showControls?: boolean;
   /** 'standard' enforces 44px touch targets; 'scorer' enforces 56px+ scorer touch targets */
   controlSize?: 'standard' | 'scorer';
@@ -22,35 +24,25 @@ export interface TimerRingProps {
 }
 
 const SIZE_CONFIG = {
-  sm: {
-    fluidWidth: 'w-[clamp(76px,22vw,96px)]',
-    stroke: 10,
-  },
-  md: {
-    fluidWidth: 'w-[clamp(104px,28vw,136px)]',
-    stroke: 9,
-  },
-  lg: {
-    fluidWidth: 'w-[clamp(132px,34vw,176px)]',
-    stroke: 8.5,
-  },
-  xl: {
-    fluidWidth: 'w-[clamp(156px,38vw,228px)]',
-    stroke: 8,
-  },
+  sm: { fluidWidth: 'w-[clamp(76px,22vw,96px)]', stroke: 11 },
+  md: { fluidWidth: 'w-[clamp(108px,28vw,140px)]', stroke: 10 },
+  lg: { fluidWidth: 'w-[clamp(136px,34vw,180px)]', stroke: 9.5 },
+  xl: { fluidWidth: 'w-[clamp(160px,38vw,228px)]', stroke: 9 },
 };
 
 /**
  * TimerRing
- * Fluid, container-query scaled circular timer per DESIGN.md §6 & AGENTS.md §13.
- * Uses a normalized 160x160 viewBox + clamp() sizing so it scales cleanly from 320px phones
- * up to 4K big screens, with 44px+ (or 56px scorer) control buttons.
+ * Per DESIGN.md §6:
+ * - Large tabular numeric with circular progress ring: gold on Stage, red on Paper.
+ * - Last 5 seconds: pulse + crisp white flash border.
+ * - Minimum 44px standard / 56px scorer touch controls.
  */
 export function TimerRing({
   durationSec,
   remainingSec,
   status = 'idle',
   size = 'md',
+  surface = 'stage',
   showControls = false,
   controlSize = 'standard',
   useArabicIndicDigits = false,
@@ -74,6 +66,7 @@ export function TimerRing({
 
   const isUrgent = clampedRemaining > 0 && clampedRemaining <= 5;
   const isExpired = clampedRemaining === 0;
+  const isStage = surface === 'stage';
 
   const mins = Math.floor(clampedRemaining / 60);
   const secs = clampedRemaining % 60;
@@ -85,27 +78,53 @@ export function TimerRing({
         )}`
       : `${formatNumber(secs, { useArabicIndicDigits })}s`;
 
-  const btnMinH = controlSize === 'scorer' ? 'min-h-[56px] px-4 text-sm' : 'min-h-[44px] px-3.5 text-xs';
+  const btnMinH =
+    controlSize === 'scorer'
+      ? 'min-h-[56px] px-5 text-sm'
+      : 'min-h-[44px] px-3.5 text-xs';
+
+  const ringStroke =
+    isUrgent || isExpired
+      ? isStage
+        ? '#FFE899'
+        : '#B3001B'
+      : isStage
+        ? 'var(--gold-400)'
+        : 'var(--red-600)';
+
+  const trackStroke = isStage
+    ? 'rgba(255, 255, 255, 0.22)'
+    : 'rgba(79, 7, 22, 0.14)';
 
   return (
     <div className={cn('inline-flex max-w-full flex-col items-center gap-3', className)}>
       <motion.div
         animate={
           isUrgent && !prefersReducedMotion
-            ? { scale: [1, 1.05, 1] }
+            ? {
+                scale: [1, 1.06, 1],
+                boxShadow: [
+                  '0 0 0 3px #FFFFFF, 0 0 0 6px #4F0716',
+                  '0 0 0 6px #FFFFFF, 0 0 24px rgba(255, 255, 255, 0.9)',
+                  '0 0 0 3px #FFFFFF, 0 0 0 6px #4F0716',
+                ],
+              }
             : { scale: 1 }
         }
         transition={
           isUrgent && !prefersReducedMotion
-            ? { duration: 0.7, repeat: Infinity, ease: 'easeInOut' }
+            ? { duration: 0.65, repeat: Infinity, ease: 'easeInOut' }
             : undefined
         }
         className={cn(
-          '@container relative inline-flex aspect-square max-w-full items-center justify-center rounded-pill bg-bg-raised/90',
+          '@container relative inline-flex aspect-square max-w-full items-center justify-center rounded-pill border-[3px]',
           cfg.fluidWidth,
+          isStage
+            ? 'bg-red-900 text-white'
+            : 'bg-white text-ink',
           isUrgent
-            ? 'shadow-[0_0_28px_rgba(214,51,76,0.45)]'
-            : 'shadow-glow-gold'
+            ? 'border-white ring-4 ring-white/85'
+            : 'border-outline shadow-sticker'
         )}
         role="timer"
         aria-live="polite"
@@ -113,7 +132,7 @@ export function TimerRing({
       >
         <svg
           viewBox={`0 0 ${viewSize} ${viewSize}`}
-          className="h-full w-full -rotate-90 transform"
+          className="h-full w-full -rotate-90 transform p-1"
           aria-hidden="true"
         >
           {/* Background Track */}
@@ -122,7 +141,7 @@ export function TimerRing({
             cy={viewSize / 2}
             r={radius}
             fill="transparent"
-            stroke="rgba(232, 184, 75, 0.16)"
+            stroke={trackStroke}
             strokeWidth={cfg.stroke}
           />
           {/* Progress Ring */}
@@ -131,7 +150,7 @@ export function TimerRing({
             cy={viewSize / 2}
             r={radius}
             fill="transparent"
-            stroke={isUrgent || isExpired ? 'var(--negative)' : 'var(--gold-500)'}
+            stroke={ringStroke}
             strokeWidth={cfg.stroke}
             strokeLinecap="round"
             strokeDasharray={circumference}
@@ -140,24 +159,32 @@ export function TimerRing({
           />
         </svg>
 
-        {/* Center Numerals scaled by container width */}
+        {/* Center Numerals */}
         <div className="absolute inset-0 flex flex-col items-center justify-center px-2 text-center">
           <span
             className={cn(
-              'font-score text-[clamp(1.25rem,26cqi,3.5rem)] font-bold leading-none tracking-wider tabular-nums',
-              isUrgent || isExpired ? 'text-negative' : 'text-gold-100'
+              'font-score text-[clamp(1.25rem,26cqi,3.5rem)] font-black leading-none tracking-normal tabular-nums',
+              isStage
+                ? isUrgent || isExpired
+                  ? 'text-white'
+                  : 'text-gold-200'
+                : isUrgent || isExpired
+                  ? 'text-negative'
+                  : 'text-red-900'
             )}
           >
             {formattedTime}
           </span>
           <span
             className={cn(
-              'mt-1 font-semibold uppercase tracking-widest text-[clamp(0.55rem,7.2cqi,0.8rem)] leading-tight',
-              isUrgent
-                ? 'text-negative'
-                : status === 'running'
-                  ? 'text-gold-300'
-                  : 'text-text-muted'
+              'mt-1 font-bold uppercase ltr:tracking-wider rtl:tracking-normal text-[clamp(0.55rem,7.2cqi,0.8rem)] leading-tight',
+              isStage
+                ? isUrgent || isExpired
+                  ? 'text-gold-200'
+                  : 'text-white/90'
+                : isUrgent || isExpired
+                  ? 'text-negative'
+                  : 'text-ink-muted'
             )}
           >
             {isExpired
@@ -183,7 +210,7 @@ export function TimerRing({
         </div>
       </motion.div>
 
-      {/* Optional Start / Pause / Reset Controls (44px+ minimum touch target) */}
+      {/* Start / Pause / Reset Controls */}
       {showControls && (
         <div className="flex flex-wrap items-center justify-center gap-2">
           {status === 'running' ? (
@@ -191,7 +218,7 @@ export function TimerRing({
               type="button"
               onClick={onPause}
               className={cn(
-                'inline-flex items-center gap-1.5 rounded-button border border-border-strong bg-surface-2 font-semibold text-gold-300 hover:border-gold-500',
+                'inline-flex items-center gap-1.5 rounded-button border-[2.5px] border-outline bg-white font-bold text-red-900 shadow-sticker-sm sticker-press focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
                 btnMinH
               )}
             >
@@ -203,7 +230,10 @@ export function TimerRing({
               type="button"
               onClick={onStart}
               className={cn(
-                'inline-flex items-center gap-1.5 rounded-button bg-gold-gradient font-semibold text-bg shadow-glow-gold',
+                'inline-flex items-center gap-1.5 rounded-button border-[2.5px] border-outline font-bold shadow-sticker-sm sticker-press focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+                isStage
+                  ? 'bg-gold-gradient text-red-900'
+                  : 'bg-red-600 text-white',
                 btnMinH
               )}
             >
@@ -215,7 +245,7 @@ export function TimerRing({
             type="button"
             onClick={onReset}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-button border border-border bg-surface font-medium text-text-muted hover:border-border-strong hover:text-ivory',
+              'inline-flex items-center gap-1.5 rounded-button border-[2.5px] border-outline bg-paper font-bold text-ink shadow-sticker-sm sticker-press focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
               btnMinH
             )}
           >

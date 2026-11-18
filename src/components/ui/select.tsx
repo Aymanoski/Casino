@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import * as SelectPrimitive from '@radix-ui/react-select';
-import { Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export const Select = SelectPrimitive.Root;
@@ -18,17 +18,17 @@ export const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex min-h-[44px] h-11 w-full min-w-0 items-center justify-between gap-2 rounded-input border bg-surface-2 px-3.5 py-2 text-base leading-normal text-ivory placeholder:text-text-faint transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gold-500 focus:ring-offset-1 focus:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 [&>span]:text-start',
+      'flex min-h-[44px] h-11 w-full min-w-0 items-center justify-between gap-2 rounded-input border-2 bg-white px-3.5 py-2 text-base leading-normal text-ink placeholder:text-ink-faint transition-colors duration-150 focus:outline-none focus:ring-[3px] focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 [&>span]:text-start',
       error
         ? 'border-negative focus:ring-negative'
-        : 'border-border hover:border-border-strong focus:border-gold-500',
+        : 'border-border-paper hover:border-red-900/35 focus:border-blue-500',
       className
     )}
     {...props}
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 shrink-0 text-gold-500" />
+      <ChevronDown className="h-4 w-4 shrink-0 text-red-700" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ));
@@ -43,14 +43,14 @@ export const SelectContent = React.forwardRef<
       ref={ref}
       position={position}
       className={cn(
-        'relative z-50 max-h-[min(20rem,70dvh)] min-w-[8rem] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-input border border-border-strong bg-surface text-ivory shadow-glow-gold data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+        'relative z-50 max-h-[min(20rem,70dvh)] min-w-[8rem] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-input border-2 border-outline bg-white text-ink shadow-sticker data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
         position === 'popper' &&
           'data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1',
         className
       )}
       {...props}
     >
-      <SelectPrimitive.ScrollUpButton className="flex cursor-default items-center justify-center py-1.5 text-gold-300">
+      <SelectPrimitive.ScrollUpButton className="flex cursor-default items-center justify-center py-1.5 text-red-700">
         <ChevronUp className="h-4 w-4" />
       </SelectPrimitive.ScrollUpButton>
       <SelectPrimitive.Viewport
@@ -62,7 +62,7 @@ export const SelectContent = React.forwardRef<
       >
         {children}
       </SelectPrimitive.Viewport>
-      <SelectPrimitive.ScrollDownButton className="flex cursor-default items-center justify-center py-1.5 text-gold-300">
+      <SelectPrimitive.ScrollDownButton className="flex cursor-default items-center justify-center py-1.5 text-red-700">
         <ChevronDown className="h-4 w-4" />
       </SelectPrimitive.ScrollDownButton>
     </SelectPrimitive.Content>
@@ -77,7 +77,7 @@ export const SelectLabel = React.forwardRef<
   <SelectPrimitive.Label
     ref={ref}
     className={cn(
-      'px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-gold-300',
+      'px-2.5 py-1.5 text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-700',
       className
     )}
     {...props}
@@ -92,14 +92,14 @@ export const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex min-h-[44px] w-full cursor-pointer select-none items-center rounded-[8px] py-2.5 ps-9 pe-3 text-base sm:text-sm text-ivory outline-none transition-colors focus:bg-gold-500/15 focus:text-gold-100 data-[state=checked]:bg-gold-500/20 data-[state=checked]:text-gold-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'relative flex min-h-[44px] w-full cursor-pointer select-none items-center rounded-[8px] py-2.5 ps-9 pe-3 text-base sm:text-sm text-ink outline-none transition-colors focus:bg-blue-100 focus:text-blue-800 data-[state=checked]:bg-paper-2 data-[state=checked]:font-bold data-[state=checked]:text-red-900 data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className
     )}
     {...props}
   >
     <span className="absolute start-2.5 flex h-4 w-4 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
-        <Check className="h-4 w-4 text-gold-500" />
+        <Check className="h-4 w-4 text-blue-600" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
@@ -121,6 +121,7 @@ export interface SelectFieldProps {
   placeholder?: string;
   options: SelectFieldOption[];
   dir?: 'ltr' | 'rtl';
+  labelTone?: 'paper' | 'stage';
   className?: string;
 }
 
@@ -133,6 +134,7 @@ export function SelectField({
   placeholder,
   options,
   dir,
+  labelTone = 'paper',
   className,
 }: SelectFieldProps) {
   const id = React.useId();
@@ -141,7 +143,10 @@ export function SelectField({
       {label && (
         <label
           htmlFor={id}
-          className="block text-xs font-semibold uppercase tracking-wider text-gold-300"
+          className={cn(
+            'block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal',
+            labelTone === 'stage' ? 'text-white' : 'text-ink'
+          )}
         >
           {label}
         </label>
@@ -159,11 +164,22 @@ export function SelectField({
         </SelectContent>
       </Select>
       {error ? (
-        <p role="alert" className="text-xs font-medium text-negative">
-          {error}
+        <p
+          role="alert"
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-negative"
+        >
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
         </p>
       ) : helperText ? (
-        <p className="text-xs text-text-muted">{helperText}</p>
+        <p
+          className={cn(
+            'text-xs',
+            labelTone === 'stage' ? 'text-white/90' : 'text-ink-muted'
+          )}
+        >
+          {helperText}
+        </p>
       ) : null}
     </div>
   );
