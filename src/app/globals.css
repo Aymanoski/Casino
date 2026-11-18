@@ -1,0 +1,133 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Base */
+  --bg:            #070B1A;  /* deepest midnight */
+  --bg-raised:     #0C1230;  /* sections */
+  --surface:       #111A3D;  /* cards */
+  --surface-2:     #18234F;  /* elevated cards, inputs */
+  --border:        rgba(232, 184, 75, 0.18);
+  --border-strong: rgba(232, 184, 75, 0.40);
+
+  /* Gold (the hero color) */
+  --gold-100:      #FBEBB5;
+  --gold-300:      #F3D27A;
+  --gold-500:      #E8B84B;  /* primary accent */
+  --gold-700:      #B8862B;
+  --gold-900:      #6B4C14;
+
+  /* Text */
+  --text:          #F6F0E1;  /* ivory */
+  --text-muted:    #A7B0CF;
+  --text-faint:    #6F7AA3;
+
+  /* Status */
+  --positive:      #2FBF8F;  /* points added, emerald */
+  --negative:      #D6334C;  /* points removed, casino ruby */
+  --live:          #FF4D4D;  /* live indicator */
+  --info:          #5B8CFF;
+
+  /* Effects */
+  --glow-gold:     0 0 24px rgba(232, 184, 75, 0.35);
+  --glow-gold-lg:  0 0 60px rgba(232, 184, 75, 0.30);
+
+  /* Active Typography mapping (EN default) */
+  --font-display: var(--font-cormorant);
+  --font-score: var(--font-bebas);
+  --font-body: var(--font-inter);
+}
+
+html[dir="rtl"] {
+  --font-display: var(--font-reem-kufi);
+  --font-score: var(--font-cairo);
+  --font-body: var(--font-cairo);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body), sans-serif;
+    scroll-behavior: smooth;
+  }
+
+  html[dir="rtl"] body {
+    font-size: 1.03125rem; /* +0.5-1px comfortable scale for Arabic */
+    line-height: 1.7;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Subtle vignette at page edges */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 40;
+    background: radial-gradient(circle at center, transparent 65%, rgba(4, 6, 15, 0.55) 100%);
+  }
+
+  /* Focus ring: 2px gold with 2px offset on all interactive elements */
+  :focus-visible {
+    outline: 2px solid var(--gold-500);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .text-gold-gradient {
+    background: linear-gradient(135deg, #FBEBB5 0%, #E8B84B 45%, #B8862B 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .bg-gold-gradient {
+    background: linear-gradient(135deg, #FBEBB5 0%, #E8B84B 45%, #B8862B 100%);
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .arabesque-bg {
+    background-image: radial-gradient(rgba(232, 184, 75, 0.055) 1px, transparent 1px),
+      radial-gradient(rgba(232, 184, 75, 0.04) 1px, transparent 1px);
+    background-size: 32px 32px;
+    background-position: 0 0, 16px 16px;
+  }
+
+  .gold-hairline {
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(232, 184, 75, 0.4) 50%,
+      transparent 100%
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
