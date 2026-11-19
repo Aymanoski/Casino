@@ -158,3 +158,23 @@
 
 ### 23. Bonus Idea: Guided 3-Step Live Pitch Strip & Pop-Out Big Screen Window
 - **Built in Phase 3:** Added a guided 3-step live prompt strip (`1. Tap Buzz → 2. Tap +10 / Custom → 3. Watch Screen Sync`) paired with a 1-click **Reset Demo Table** control and a **Pop Out Big Screen Tab** button (`/screen/game-demo` in a second tab) right above the split console so presenters pitching Marwan Serry can either demo single-screen sync in 5 seconds or drag the Big Screen tab onto a second monitor to show real multi-window `BroadcastChannel` synchronization.
+
+---
+
+## Phase 4 Scorer Dashboard & Live Scorer Console Decisions (2026-11-19)
+
+### 24. Centralized Scoring History & Game Reopen Permissions (`SCORE_HISTORY_MANAGER_ROLES`)
+- **Context:** Product owner requested full control over scoring history (editing, reverting specific entries, deleting entries, adding manual adjustments, and reopening finished tables) while deferring the final decision on which manager roles hold that permission.
+- **Decision:** Added centralized capability arrays and guards in `src/lib/auth/index.tsx` (`SCORE_HISTORY_MANAGER_ROLES`, `REOPEN_GAME_MANAGER_ROLES`, `canManageScoreHistory`, `canReopenFinishedGame`, `canAccessScorerGame`), initially enabling full history control and reopening for `superAdmin` while standard `scorer` accounts retain quick single-step Undo of their own last action (`onlyOwn: true`) and read-only session timeline inspection. Expanding access to other manager roles later requires only adding the role ID to the constant array—zero UI rewrites. Every history edit (`score.edit`), deletion (`score.delete`), specific revert (`score.undo`), manual adjustment (`score.add`), and reopen (`game.reopen`) writes `before`/`after` records to `auditRepo` and broadcasts realtime sync events.
+
+### 25. Single Selected-Player Action Dock & Automatic Tie-Breaker #16 Insertion
+- **Decision (confirmed via Phase 4 shape interview):**
+  - **Scoring Interaction:** Each of the 3 `PlayerPanel` cards carries one big `>= 56px` **"Buzzed First"** tap target (which records a `BuzzEvent`, highlights the player in gold, and auto-selects them with a white-buffered electric-blue ring); tapping a card also selects them. All segment presets (`+10`, `+5`, `−5`), custom `±` + optional note, Undo (with inline preview of the exact event to revert), and Finish Game live inside one unified **Selected-Player Action Dock** (anchored below the 3 columns on tablet landscape/desktop, and sticky to the bottom thumb zone on phones with 1-handed player quick-switch pills and an expandable Custom/Note panel).
+  - **Qualifying Tie Flow:** Confirming **Finish Game** runs `gameRepo.finishGame(id, userId, { autoOpenTieBreaker: true })`. If a qualifying tie exists across `round.advancePerGame`, Segment #16 (`Tie-Breaker and Penalty Challenge`, 30s timer) is automatically appended, jumped to, logged in `auditRepo`, broadcast in realtime, and surfaced with a prominent banner naming the tied players.
+  - **Game Lifecycle Gates:** Scheduled tables require an explicit **"Start Live Session"** confirmation before unlocking live scoring; finished tables render the official Final Podium summary (read-only for scorers, with a destructive-confirm **"Reopen Session"** control for authorized managers).
+
+### 26. Bonus Idea: Keyboard Shortcuts, Mobile `±` Sign Toggle & Dynamic Scorer Sidebar
+- **Built in Phase 4:**
+  - Added fast desktop/tablet keyboard shortcuts inside `/scorer/[gameId]` (`1`/`2`/`3` select contestant, `B` buzz selected, `Space` start/pause timer, `Ctrl+Z` undo last score) documented in a clean `?` popover without cluttering the Stage-Dark workspace.
+  - Added a dedicated `>= 56px` **`±` Sign Toggle** beside every custom points input (`type="text" inputMode="numeric"`) so scorers on iOS/Android numeric keypads can flip between positive and negative amounts in one tap without hunting for a minus key.
+  - Upgraded `StudioSidebarShell` to resolve each scorer's own active/scheduled table dynamically (instead of hardcoding `game-11`) and to yield the bottom safe area on phones when `/scorer/[gameId]` is active so the sticky Action Dock owns the thumb zone cleanly.

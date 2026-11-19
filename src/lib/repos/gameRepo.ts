@@ -7,7 +7,7 @@ import { auditRepo } from './auditRepo';
 import { recomputePlayerStatsInMemory } from './playerRepo';
 
 export interface FinishGameResult {
-  status: 'finished' | 'qualifying_tie';
+  status: 'finished' | 'qualifying_tie' | 'tie_breaker_opened';
   game: Game;
   tiedPlayerIds?: string[];
   winners?: string[];
@@ -319,7 +319,8 @@ export const gameRepo = {
 
   async finishGame(
     id: string,
-    actorUserId: string
+    actorUserId: string,
+    options?: { autoOpenTieBreaker?: boolean }
   ): Promise<FinishGameResult | null> {
     const db = await storage.readSnapshot();
     const idx = db.games.findIndex((g) => g.id === id);
@@ -349,6 +350,66 @@ export const gameRepo = {
         .filter((t) => t.score === cutoffScore)
         .map((t) => t.playerId);
 
+      if (options?.autoOpenTieBreaker) {
+        const tieBreakerSegId = 'seg-16';
+        const nextSegIds = [...game.segmentIds, tieBreakerSegId];
+        const newIndex = nextSegIds.length - 1;
+        const seg = db.segments.find((s) => s.id === tieBreakerSegId);
+        const dur = seg?.durationSec ?? 30;
+
+        const updatedWithTb: Game = {
+          ...game,
+          segmentIds: nextSegIds,
+          currentSegmentIndex: newIndex,
+          activeBuzzPlayerId: null,
+          timer: {
+            status: 'idle',
+            durationSec: dur,
+            remainingSec: dur,
+            endsAt: null,
+          },
+        };
+        db.games[idx] = updatedWithTb;
+        await storage.writeSnapshot(db);
+
+        const tiedNamesEn = tiedPlayerIds
+          .map((pid) => db.players.find((p) => p.id === pid)?.fullName ?? pid)
+          .join(' & ');
+        const tiedNamesAr = tiedPlayerIds
+          .map((pid) => db.players.find((p) => p.id === pid)?.fullNameAr ?? pid)
+          .join(' و ');
+
+        if (!game.isDemo) {
+          await auditRepo.record({
+            actorUserId,
+            action: 'game.tiebreaker',
+            entityType: 'game',
+            entityId: id,
+            summary: `Qualifying tie (${cutoffScore} pts: ${tiedNamesEn}) — auto-inserted Tie-Breaker segment in "${updatedWithTb.tableName}"`,
+            summaryAr: `تعادل على التأهل (${cutoffScore} نقطة: ${tiedNamesAr}) — تم إدراج جولة الحسم تلقائياً في "${updatedWithTb.tableNameAr || updatedWithTb.tableName}"`,
+            before: { segmentCount: game.segmentIds.length, cutoffScore, tiedPlayerIds },
+            after: { segmentCount: nextSegIds.length, currentSegmentIndex: newIndex, segmentId: tieBreakerSegId },
+          });
+        }
+
+        feedback.play('segment.next');
+        feedback.haptic('warning');
+
+        realtime.publish('segment.changed', {
+          gameId: id,
+          currentSegmentIndex: newIndex,
+          segmentId: tieBreakerSegId,
+          isTieBreaker: true,
+          tiedPlayerIds,
+        });
+
+        return {
+          status: 'tie_breaker_opened',
+          game: updatedWithTb,
+          tiedPlayerIds,
+        };
+      }
+
       return {
         status: 'qualifying_tie',
         game,
@@ -369,7 +430,7 @@ export const gameRepo = {
       activeBuzzPlayerId: null,
       finishedAt: new Date().toISOString(),
       timer: game.timer
-        ? { ...game.timer, status: 'idle', remainingSec: 0 }
+        ? { ...game.timer, status: 'idle', remainingSec: 0, endsAt: null }
         : undefined,
     };
 
@@ -417,5 +478,61 @@ export const gameRepo = {
       game: updated,
       winners: advancingPlayerIds,
     };
+  },
+
+  async reopenGame(id: string, actorUserId: string): Promise<Game | null> {
+    const db = await storage.readSnapshot();
+    const idx = db.games.findIndex((g) => g.id === id);
+    if (idx === -1) return null;
+
+    const current = db.games[idx];
+    const segId = current.segmentIds[current.currentSegmentIndex] ?? current.segmentIds[0];
+    const seg = db.segments.find((s) => s.id === segId);
+    const dur = seg?.durationSec ?? 45;
+
+    const updated: Game = {
+      ...current,
+      status: 'live',
+      winnerPlayerId: undefined,
+      advancingPlayerIds: undefined,
+      finishedAt: undefined,
+      activeBuzzPlayerId: null,
+      timer: {
+        status: 'idle',
+        durationSec: dur,
+        remainingSec: dur,
+        endsAt: null,
+      },
+    };
+    db.games[idx] = updated;
+
+    db.players = db.players.map((p) => {
+      if (!current.playerIds.includes(p.id) || p.isHost) return p;
+      return { ...p, status: 'active' };
+    });
+
+    recomputePlayerStatsInMemory(db);
+    await storage.writeSnapshot(db);
+
+    if (!current.isDemo) {
+      await auditRepo.record({
+        actorUserId,
+        action: 'game.reopen',
+        entityType: 'game',
+        entityId: id,
+        summary: `Reopened finished session "${updated.tableName}" for scoring adjustments`,
+        summaryAr: `تمت إعادة فتح الجلسة المنتهية "${updated.tableNameAr || updated.tableName}" للتعديل`,
+        before: {
+          status: current.status,
+          winnerPlayerId: current.winnerPlayerId ?? null,
+          finishedAt: current.finishedAt ?? null,
+        },
+        after: { status: 'live' },
+      });
+    }
+
+    realtime.publish('game.started', { gameId: id, reopened: true });
+    realtime.publish('bracket.updated', { gameId: id });
+    return updated;
   },
 };

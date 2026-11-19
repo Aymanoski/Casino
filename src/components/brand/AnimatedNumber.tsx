@@ -29,7 +29,10 @@ export function AnimatedNumber({
   const [displayValue, setDisplayValue] = useState<number>(value);
 
   useEffect(() => {
-    if (prefersReducedMotion) {
+    if (
+      prefersReducedMotion ||
+      (typeof document !== 'undefined' && document.hidden)
+    ) {
       motionVal.set(value);
       setDisplayValue(value);
       return;

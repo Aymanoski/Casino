@@ -28,7 +28,8 @@ import {
 } from 'lucide-react';
 import { canAccessPath, useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
-import { settingsRepo } from '@/lib/repos';
+import { realtime } from '@/lib/realtime';
+import { gameRepo, settingsRepo } from '@/lib/repos';
 import { cn, localizeText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -64,8 +65,48 @@ export function StudioSidebarShell({
   const [tabletExpanded, setTabletExpanded] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [primaryGameId, setPrimaryGameId] = useState<string>('game-11');
 
   const isScorer = mode === 'scorer';
+  const activeScorerGameMatch = pathname.match(/^\/scorer\/([^/]+)$/);
+  const activeRouteGameId = activeScorerGameMatch ? activeScorerGameMatch[1] : null;
+  const isScorerConsoleRoute = isScorer && Boolean(activeRouteGameId);
+
+  useEffect(() => {
+    if (!isScorer) return;
+    let mounted = true;
+    const resolvePrimaryGame = async () => {
+      const allGames = await gameRepo.list();
+      if (!mounted || allGames.length === 0) return;
+      const scoped =
+        user?.role === 'scorer'
+          ? allGames.filter((g) => g.scorerUserId === user.id)
+          : allGames;
+      const pool = scoped.length > 0 ? scoped : allGames;
+      const picked =
+        pool.find((g) => g.status === 'live') ??
+        pool.find((g) => g.status === 'scheduled') ??
+        pool[pool.length - 1];
+      if (picked) {
+        setPrimaryGameId(picked.id);
+      }
+    };
+    resolvePrimaryGame();
+    const unsub = realtime.subscribe('*', (msg) => {
+      if (
+        msg.event === 'game.started' ||
+        msg.event === 'game.finished' ||
+        msg.event === 'bracket.updated' ||
+        msg.event === 'data.reset'
+      ) {
+        resolvePrimaryGame();
+      }
+    });
+    return () => {
+      mounted = false;
+      unsub();
+    };
+  }, [isScorer, user?.id, user?.role]);
 
   useEffect(() => {
     setMobileDrawerOpen(false);
@@ -98,16 +139,19 @@ export function StudioSidebarShell({
     { href: '/admin/settings', label: t.adminNav.settings, shortLabel: lang === 'ar' ? 'الإعدادات' : 'Settings', icon: Settings },
   ];
 
+  const consoleTargetGameId = activeRouteGameId ?? primaryGameId;
+  const consoleTargetCode = consoleTargetGameId.replace(/^game-/i, 'G').toUpperCase();
+
   const scorerLinks: SidebarLinkItem[] = [
     { href: '/scorer', label: t.scorerNav.myGames, shortLabel: lang === 'ar' ? 'طاولاتي' : 'Tables', icon: Tablet },
     {
-      href: '/scorer/game-11',
-      label: `${t.scorerNav.liveConsole} (G11)`,
+      href: `/scorer/${consoleTargetGameId}`,
+      label: `${t.scorerNav.liveConsole} (${consoleTargetCode})`,
       shortLabel: lang === 'ar' ? 'التحكيم' : 'Console',
       icon: Sparkles,
     },
     {
-      href: '/screen/game-11',
+      href: `/screen/${consoleTargetGameId}`,
       label: t.scorerNav.bigScreenPreview,
       shortLabel: lang === 'ar' ? 'الشاشة' : 'Screen',
       icon: MonitorPlay,
@@ -449,7 +493,12 @@ export function StudioSidebarShell({
         <main
           id="main-content"
           tabIndex={-1}
-          className="flex-1 px-3 py-4 xs:px-4 md:p-6 xl:p-8 pb-[calc(5.25rem+env(safe-area-inset-bottom))] md:pb-8 outline-none"
+          className={cn(
+            'flex-1 px-3 py-4 xs:px-4 md:p-5 xl:p-7 outline-none',
+            isScorerConsoleRoute
+              ? 'pb-4 md:pb-6'
+              : 'pb-[calc(5.25rem+env(safe-area-inset-bottom))] md:pb-8'
+          )}
         >
           <div className="mx-auto w-full max-w-content-wide">
             <RoleGuard>{children}</RoleGuard>
@@ -457,52 +506,54 @@ export function StudioSidebarShell({
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar (< md) */}
-      <nav
-        aria-label={
-          mode === 'admin'
-            ? lang === 'ar'
-              ? 'شريط تنقل الإدارة'
-              : 'Mobile Admin Bar'
-            : lang === 'ar'
-              ? 'شريط تنقل الحكم'
-              : 'Mobile Scorer Bar'
-        }
-        className="fixed inset-x-0 bottom-0 z-40 border-t-[3px] border-outline bg-red-800 pb-safe text-white md:hidden [@media(max-height:460px)]:hidden"
-      >
-        <div className="grid grid-flow-col auto-cols-fr gap-1 px-2 py-1.5">
-          {bottomBarLinks.map((item) => {
-            const Icon = item.icon;
-            const active = isLinkActive(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  'flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-button px-1 py-1 text-[11px] font-bold transition-colors',
-                  active
-                    ? 'border-2 border-outline bg-gold-400 text-red-900 shadow-sticker-sm'
-                    : 'text-white/90 hover:bg-red-700 hover:text-white'
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="max-w-full truncate">{item.shortLabel ?? item.label}</span>
-              </Link>
-            );
-          })}
+      {/* Mobile Bottom Navigation Bar (< md) — hidden on active /scorer/[gameId] so the sticky Scoring Action Dock owns the bottom thumb zone */}
+      {!isScorerConsoleRoute && (
+        <nav
+          aria-label={
+            mode === 'admin'
+              ? lang === 'ar'
+                ? 'شريط تنقل الإدارة'
+                : 'Mobile Admin Bar'
+              : lang === 'ar'
+                ? 'شريط تنقل الحكم'
+                : 'Mobile Scorer Bar'
+          }
+          className="fixed inset-x-0 bottom-0 z-40 border-t-[3px] border-outline bg-red-800 pb-safe text-white md:hidden [@media(max-height:460px)]:hidden"
+        >
+          <div className="grid grid-flow-col auto-cols-fr gap-1 px-2 py-1.5">
+            {bottomBarLinks.map((item) => {
+              const Icon = item.icon;
+              const active = isLinkActive(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
+                    'flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-button px-1 py-1 text-[11px] font-bold transition-colors',
+                    active
+                      ? 'border-2 border-outline bg-gold-400 text-red-900 shadow-sticker-sm'
+                      : 'text-white/90 hover:bg-red-700 hover:text-white'
+                  )}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="max-w-full truncate">{item.shortLabel ?? item.label}</span>
+                </Link>
+              );
+            })}
 
-          <button
-            type="button"
-            onClick={() => setMobileDrawerOpen(true)}
-            className="flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-button px-1 py-1 text-[11px] font-bold text-white/90 hover:bg-red-700 hover:text-white"
-            aria-label={lang === 'ar' ? 'المزيد من الروابط' : 'More navigation links'}
-          >
-            <Menu className="h-4 w-4 shrink-0" />
-            <span>{lang === 'ar' ? 'المزيد' : 'More'}</span>
-          </button>
-        </div>
-      </nav>
+            <button
+              type="button"
+              onClick={() => setMobileDrawerOpen(true)}
+              className="flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-button px-1 py-1 text-[11px] font-bold text-white/90 hover:bg-red-700 hover:text-white"
+              aria-label={lang === 'ar' ? 'المزيد من الروابط' : 'More navigation links'}
+            >
+              <Menu className="h-4 w-4 shrink-0" />
+              <span>{lang === 'ar' ? 'المزيد' : 'More'}</span>
+            </button>
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

@@ -104,74 +104,25 @@ export function PlayerPanel({
   const buzzedLabel = lang === 'ar' ? 'ضغط الجرس أولاً!' : 'BUZZED FIRST!';
   const isLargeScreen = variant === 'bigScreen' || variant === 'finalBoss';
   const isGoldenSeat = isHost || variant === 'finalBoss';
+  const isScorerCard = variant === 'scorer';
+  const hasChildControls = Boolean(onBuzz || (presetPoints && onApplyPreset));
+  const useOuterButton = Boolean(onSelect && !hasChildControls);
 
-  return (
-    <motion.div
-      layout={!prefersReducedMotion}
-      onClick={onSelect}
-      role={onSelect ? 'button' : undefined}
-      tabIndex={onSelect ? 0 : undefined}
-      onKeyDown={
-        onSelect
-          ? (e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onSelect();
-              }
-            }
-          : undefined
-      }
-      className={cn(
-        '@container relative flex min-w-0 flex-col justify-between overflow-hidden rounded-card p-4 @xs:p-5 @md:p-6 transition-all duration-200',
-        'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
-        isDark
-          ? cn(
-              'bg-red-800 text-white border-[2.5px] shadow-sticker',
-              isSelected
-                ? 'border-white ring-[3px] ring-blue-500'
-                : isBuzzed
-                  ? 'border-gold-300 ring-[3px] ring-gold-400 shadow-glow-gold'
-                  : isGoldenSeat
-                    ? 'border-gold-400 bg-gradient-to-b from-red-800 via-red-800 to-red-900 shadow-glow-gold'
-                    : 'border-red-900'
-            )
-          : cn(
-              'bg-white text-ink border-[2.5px] shadow-sticker',
-              isSelected
-                ? 'border-blue-500 ring-[3px] ring-blue-500'
-                : isBuzzed
-                  ? 'border-outline ring-[3px] ring-gold-400 shadow-glow-gold bg-gradient-to-b from-gold-200 via-white to-white'
-                  : isGoldenSeat
-                    ? 'border-outline bg-gradient-to-b from-gold-200 via-paper to-white shadow-sticker-lg'
-                    : 'border-outline'
-            ),
-        onSelect && 'cursor-pointer',
-        className
-      )}
-    >
-      {/* Pulsing Gold Ring Overlay when Buzzed */}
-      {isBuzzed && !prefersReducedMotion && (
-        <motion.div
-          className="pointer-events-none absolute inset-0 rounded-card border-[3px] border-gold-300"
-          animate={{ opacity: [0.35, 1, 0.35] }}
-          transition={{ duration: 1.3, repeat: Infinity, ease: 'easeInOut' }}
-          aria-hidden="true"
-        />
-      )}
-
+  const cardBodyContent = (
+    <>
       {/* Boss Marquee Lights for Marwan Serry's Golden Seat */}
       {isGoldenSeat && (
-        <div className="relative z-10 mb-3">
+        <div className={cn('relative z-10', isScorerCard ? 'mb-2' : 'mb-3')}>
           <MarqueeBulbs variant="strip" bulbCount={10} />
         </div>
       )}
 
       {/* Top Row: Rank Pill + Winner / Buzzed / Selected Pill */}
-      <div className="relative z-10 flex flex-wrap items-center justify-between gap-2">
+      <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 min-h-[26px]">
         {rankLabel ? (
           <Badge
             variant={rank === 1 || isGoldenSeat ? 'gold' : isDark ? 'neutral' : 'muted'}
-            className="max-w-full truncate"
+            className="max-w-full truncate px-2.5 py-0.5 text-[11px]"
           >
             {isGoldenSeat ? (
               <Crown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -184,29 +135,34 @@ export function PlayerPanel({
           <span />
         )}
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1">
           {isSelected && (
-            <Badge variant="info" className="font-bold">
+            <Badge variant="info" className="px-2 py-0.5 text-[11px] font-bold">
               {lang === 'ar' ? 'مختار' : 'SELECTED'}
             </Badge>
           )}
           {isWinner && (
-            <Badge variant="positive" className="font-bold">
+            <Badge variant="positive" className="px-2 py-0.5 text-[11px] font-bold">
               <Trophy className="h-3 w-3 shrink-0" aria-hidden="true" />
               <span>{lang === 'ar' ? 'الفائز' : 'WINNER'}</span>
             </Badge>
           )}
           {isBuzzed && (
-            <Badge variant="gold" className="font-extrabold shadow-glow-gold">
-              <Zap className="h-3.5 w-3.5 fill-current shrink-0" aria-hidden="true" />
-              <span>{buzzedLabel}</span>
+            <Badge variant="gold" className="px-2 py-0.5 text-[11px] font-extrabold shadow-glow-gold">
+              <Zap className="h-3 w-3 fill-current shrink-0" aria-hidden="true" />
+              <span>{isScorerCard ? (lang === 'ar' ? 'الجرس!' : 'BUZZED!') : buzzedLabel}</span>
             </Badge>
           )}
         </div>
       </div>
 
       {/* Middle Row: Avatar + Name + Nickname */}
-      <div className="relative z-10 my-4 @sm:my-5 flex items-center gap-3 @sm:gap-4">
+      <div
+        className={cn(
+          'relative z-10 flex items-center gap-3',
+          isScorerCard ? 'my-2.5 @sm:my-3' : 'my-4 @sm:my-5 @sm:gap-4'
+        )}
+      >
         <PlayerAvatar
           name={name}
           avatarSeed={avatarSeed}
@@ -216,7 +172,10 @@ export function PlayerPanel({
           selected={isSelected}
           rank={rank}
           className={cn(
-            !isLargeScreen && 'h-12 w-12 @xs:h-14 @xs:w-14 @md:h-16 @md:w-16'
+            !isLargeScreen &&
+              (isScorerCard
+                ? 'h-11 w-11 @xs:h-12 @xs:w-12 @md:h-14 @md:w-14'
+                : 'h-12 w-12 @xs:h-14 @xs:w-14 @md:h-16 @md:w-16')
           )}
         />
 
@@ -226,7 +185,9 @@ export function PlayerPanel({
               'truncate font-display ltr:tracking-tight rtl:tracking-normal',
               isLargeScreen
                 ? 'text-[clamp(1.35rem,6cqi,2.25rem)]'
-                : 'text-[clamp(1.15rem,5.5cqi,1.65rem)]',
+                : isScorerCard
+                  ? 'text-[clamp(1.1rem,5cqi,1.45rem)]'
+                  : 'text-[clamp(1.15rem,5.5cqi,1.65rem)]',
               isDark
                 ? isGoldenSeat
                   ? 'text-gold-200'
@@ -254,7 +215,8 @@ export function PlayerPanel({
       {/* Score Section with Animated Counter & Floating Delta Flash */}
       <div
         className={cn(
-          'relative z-10 flex flex-wrap items-baseline justify-between gap-2 border-t-2 pt-3.5 @sm:pt-4',
+          'relative z-10 flex flex-wrap items-baseline justify-between gap-2 border-t-2',
+          isScorerCard ? 'pt-2.5' : 'pt-3.5 @sm:pt-4',
           isDark ? 'border-white/15' : 'border-border-paper'
         )}
       >
@@ -312,7 +274,9 @@ export function PlayerPanel({
               'font-score font-black leading-none tracking-normal',
               isLargeScreen
                 ? 'text-[clamp(2.5rem,13cqi,5rem)]'
-                : 'text-[clamp(2.25rem,11cqi,3.5rem)]',
+                : isScorerCard
+                  ? 'text-[clamp(2rem,10cqi,3rem)]'
+                  : 'text-[clamp(2.25rem,11cqi,3.5rem)]',
               isDark
                 ? 'text-gold-300'
                 : isGoldenSeat
@@ -322,15 +286,92 @@ export function PlayerPanel({
           />
         </div>
       </div>
+    </>
+  );
+
+  return (
+    <motion.div
+      layout={!prefersReducedMotion && !isScorerCard}
+      onClick={useOuterButton ? onSelect : undefined}
+      role={useOuterButton ? 'button' : undefined}
+      tabIndex={useOuterButton ? 0 : undefined}
+      aria-pressed={useOuterButton ? isSelected : undefined}
+      onKeyDown={
+        useOuterButton && onSelect
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onSelect();
+              }
+            }
+          : undefined
+      }
+      className={cn(
+        '@container relative flex min-w-0 flex-col justify-between overflow-hidden rounded-card transition-all duration-200',
+        isScorerCard ? 'p-3.5 @sm:p-4' : 'p-4 @xs:p-5 @md:p-6',
+        'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+        isDark
+          ? cn(
+              'bg-red-800 text-white border-[2.5px] shadow-sticker',
+              isSelected
+                ? 'border-white ring-[3px] ring-blue-500'
+                : isBuzzed
+                  ? 'border-gold-300 ring-[3px] ring-gold-400 shadow-glow-gold'
+                  : isGoldenSeat
+                    ? 'border-gold-400 bg-gradient-to-b from-red-800 via-red-800 to-red-900 shadow-glow-gold'
+                    : 'border-red-900'
+            )
+          : cn(
+              'bg-white text-ink border-[2.5px] shadow-sticker',
+              isSelected
+                ? 'border-blue-500 ring-[3px] ring-blue-500'
+                : isBuzzed
+                  ? 'border-outline ring-[3px] ring-gold-400 shadow-glow-gold bg-gradient-to-b from-gold-200 via-white to-white'
+                  : isGoldenSeat
+                    ? 'border-outline bg-gradient-to-b from-gold-200 via-paper to-white shadow-sticker-lg'
+                    : 'border-outline'
+            ),
+        useOuterButton && 'cursor-pointer',
+        className
+      )}
+    >
+      {/* Pulsing Gold Ring Overlay when Buzzed */}
+      {isBuzzed && !prefersReducedMotion && (
+        <motion.div
+          className="pointer-events-none absolute inset-0 rounded-card border-[3px] border-gold-300"
+          animate={{ opacity: [0.35, 1, 0.35] }}
+          transition={{ duration: 1.3, repeat: Infinity, ease: 'easeInOut' }}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Selectable Card Info Region (sibling button so zero nested interactive elements!) */}
+      {onSelect && hasChildControls ? (
+        <button
+          type="button"
+          onClick={onSelect}
+          aria-pressed={isSelected}
+          aria-label={
+            lang === 'ar'
+              ? `اختيار المتسابق ${name}`
+              : `Select contestant ${name}`
+          }
+          className="relative z-10 flex w-full flex-1 flex-col justify-between rounded-input text-start focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
+        >
+          {cardBodyContent}
+        </button>
+      ) : (
+        <div className="flex flex-1 flex-col justify-between">{cardBodyContent}</div>
+      )}
 
       {/* Scorer Console Action Targets: minimum 56px tall touch targets */}
       {(onBuzz || (presetPoints && onApplyPreset)) && (
         <div
           className={cn(
-            'relative z-10 mt-4 space-y-2.5 border-t-2 pt-4',
+            'relative z-10 space-y-2.5 border-t-2',
+            isScorerCard ? 'mt-3 pt-3' : 'mt-4 pt-4',
             isDark ? 'border-white/15' : 'border-border-paper'
           )}
-          onClick={(e) => e.stopPropagation()}
         >
           {onBuzz && (
             <button
@@ -358,6 +399,7 @@ export function PlayerPanel({
                     ? 'ضغط الجرس أولاً'
                     : 'Buzzed First'}
               </span>
+              <span className="sr-only"> — {name}</span>
             </button>
           )}
 

@@ -59,6 +59,31 @@ export function canAccessPath(role: UserRole | null, pathname: string): boolean 
   return false;
 }
 
+/**
+ * Centralized Scoring History & Table Lifecycle Permissions
+ * Add or remove manager roles here as product permissions evolve (no UI rewrites needed).
+ */
+export const SCORE_HISTORY_MANAGER_ROLES: readonly UserRole[] = ['superAdmin'];
+export const REOPEN_GAME_MANAGER_ROLES: readonly UserRole[] = ['superAdmin'];
+
+export function canManageScoreHistory(role: UserRole | null): boolean {
+  return Boolean(role && SCORE_HISTORY_MANAGER_ROLES.includes(role));
+}
+
+export function canReopenFinishedGame(role: UserRole | null): boolean {
+  return Boolean(role && REOPEN_GAME_MANAGER_ROLES.includes(role));
+}
+
+export function canAccessScorerGame(
+  user: User | null,
+  gameScorerUserId: string
+): boolean {
+  if (!user) return false;
+  if (user.role === 'superAdmin') return true;
+  if (user.role === 'scorer') return user.id === gameScorerUserId;
+  return false;
+}
+
 export function getDefaultRouteForRole(role: UserRole | null): string {
   switch (role) {
     case 'superAdmin':

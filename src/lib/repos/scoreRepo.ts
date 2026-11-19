@@ -222,12 +222,32 @@ export const scoreRepo = {
 
   async undoLastScore(
     gameId: string,
-    byUserId: string
+    byUserId: string,
+    options?: { onlyOwn?: boolean }
   ): Promise<ScoreEvent | null> {
     const db = await storage.readSnapshot();
     // Find newest non-undo event in this game that hasn't been undone yet
     const targetIdx = db.scoreEvents.findIndex(
       (e) =>
+        e.gameId === gameId &&
+        e.kind !== 'undo' &&
+        !e.undoneByEventId &&
+        (!options?.onlyOwn || e.byUserId === byUserId)
+    );
+    if (targetIdx === -1) return null;
+
+    return this.undoScoreEventById(gameId, db.scoreEvents[targetIdx].id, byUserId);
+  },
+
+  async undoScoreEventById(
+    gameId: string,
+    targetEventId: string,
+    byUserId: string
+  ): Promise<ScoreEvent | null> {
+    const db = await storage.readSnapshot();
+    const targetIdx = db.scoreEvents.findIndex(
+      (e) =>
+        e.id === targetEventId &&
         e.gameId === gameId &&
         e.kind !== 'undo' &&
         !e.undoneByEventId
@@ -284,6 +304,131 @@ export const scoreRepo = {
     });
 
     return undoEvent;
+  },
+
+  async editScoreEvent(
+    eventId: string,
+    patch: { delta: number; note?: string; segmentId?: string },
+    byUserId: string
+  ): Promise<ScoreEvent | null> {
+    const db = await storage.readSnapshot();
+    const idx = db.scoreEvents.findIndex((e) => e.id === eventId);
+    if (idx === -1) return null;
+
+    const before = { ...db.scoreEvents[idx] };
+    const updated: ScoreEvent = {
+      ...before,
+      delta: patch.delta,
+      note: patch.note?.trim() || undefined,
+      segmentId: patch.segmentId ?? before.segmentId,
+    };
+
+    db.scoreEvents[idx] = updated;
+    recomputePlayerStatsInMemory(db);
+    await storage.writeSnapshot(db);
+
+    const game = db.games.find((g) => g.id === updated.gameId);
+    const player = db.players.find((p) => p.id === updated.playerId);
+    const beforeSign = before.delta > 0 ? `+${before.delta}` : `${before.delta}`;
+    const afterSign = updated.delta > 0 ? `+${updated.delta}` : `${updated.delta}`;
+
+    if (!game?.isDemo) {
+      await auditRepo.record({
+        actorUserId: byUserId,
+        action: 'score.edit',
+        entityType: 'score',
+        entityId: eventId,
+        summary: `Edited score for ${player?.fullName ?? updated.playerId}: ${beforeSign} -> ${afterSign}${updated.note ? ` (${updated.note})` : ''}`,
+        summaryAr: `تعديل نقاط ${player?.fullNameAr ?? updated.playerId}: ${beforeSign} ← ${afterSign}${updated.note ? ` (${updated.note})` : ''}`,
+        before: {
+          delta: before.delta,
+          note: before.note ?? null,
+          segmentId: before.segmentId,
+        },
+        after: {
+          delta: updated.delta,
+          note: updated.note ?? null,
+          segmentId: updated.segmentId,
+        },
+      });
+    }
+
+    feedback.play('score.undo');
+    feedback.haptic('light');
+
+    realtime.publish('score.changed', {
+      gameId: updated.gameId,
+      playerId: updated.playerId,
+      delta: updated.delta - before.delta,
+      scoreEventId: updated.id,
+      isEdit: true,
+    });
+
+    return updated;
+  },
+
+  async deleteScoreEvent(
+    eventId: string,
+    byUserId: string
+  ): Promise<ScoreEvent | null> {
+    const db = await storage.readSnapshot();
+    const target = db.scoreEvents.find((e) => e.id === eventId);
+    if (!target) return null;
+
+    // Remove the event; if it was an undo event, restore the target's undoable status;
+    // if it was undone by another event, remove that linked compensating event too so totals stay exact.
+    const idsToRemove = new Set<string>([eventId]);
+    if (target.undoneByEventId) {
+      idsToRemove.add(target.undoneByEventId);
+    }
+
+    db.scoreEvents = db.scoreEvents
+      .filter((e) => !idsToRemove.has(e.id))
+      .map((e) =>
+        target.targetEventId && e.id === target.targetEventId
+          ? { ...e, undoneByEventId: undefined }
+          : e
+      );
+
+    recomputePlayerStatsInMemory(db);
+    await storage.writeSnapshot(db);
+
+    const game = db.games.find((g) => g.id === target.gameId);
+    const player = db.players.find((p) => p.id === target.playerId);
+    const signStr = target.delta > 0 ? `+${target.delta}` : `${target.delta}`;
+
+    if (!game?.isDemo) {
+      await auditRepo.record({
+        actorUserId: byUserId,
+        action: 'score.delete',
+        entityType: 'score',
+        entityId: target.id,
+        summary: `Deleted ${signStr} pts record for ${player?.fullName ?? target.playerId}`,
+        summaryAr: `حذف حركة نقاط (${signStr}) للاعب ${player?.fullNameAr ?? target.playerId}`,
+        before: {
+          gameId: target.gameId,
+          playerId: target.playerId,
+          segmentId: target.segmentId,
+          delta: target.delta,
+          note: target.note ?? null,
+          kind: target.kind,
+        },
+        after: null,
+      });
+    }
+
+    feedback.play('score.undo');
+    feedback.haptic('warning');
+
+    realtime.publish('score.changed', {
+      gameId: target.gameId,
+      playerId: target.playerId,
+      delta: -target.delta,
+      scoreEventId: target.id,
+      isDelete: true,
+    });
+
+    return target;
   },
 
   async recordBuzz(input: {

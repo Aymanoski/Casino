@@ -56,7 +56,7 @@ A separate **registration quiz** (20 questions, 10 seconds each, randomized) was
 - **Players are added by admins** (create accounts, optionally bulk import from CSV).
 - **Buzzing:** the **scorer taps who buzzed first**. No phone buzzers.
 - **Each game has its own scorer** (several games can run at the same time, each with their own scorer).
-- **Points:** presets per segment (like +10, +5, -5) **plus** free number input, with an optional note and an undo.
+- **Points:** presets per segment (like +10, +5, -5) **plus** free number input, with an optional note and an undo. Full scoring history control (revert any entry, edit delta/note, delete entry, add retroactive adjustment, and reopen finished sessions with full audit logging) is built into the Session History drawer behind centralized role capability lists (`SCORE_HISTORY_MANAGER_ROLES` / `REOPEN_GAME_MANAGER_ROLES`) so the product owner can decide later which manager roles receive access.
 - **Language:** English first, **Arabic toggle with full RTL**.
 - **Public spectator pages** exist: bracket, live leaderboard, schedule, rules, sponsors, the final.
 - **Look:** bold "Casino El Al3ab" game-show theme: red sunburst stages, gold-to-orange outlined lettering, white as a primary surface and text color, and a hint of electric blue where it fits. Playful sticker style with dice, cards and chips, and Ramadan lanterns/crescent as a secondary accent. See `DESIGN.md` (this replaced the earlier midnight-and-gold theme).
@@ -172,7 +172,7 @@ Descriptions: short and original (write them yourself). **Do not copy text from 
 - Shows the 3 players (name, nickname, avatar, running total), current segment name, segment timer (start/pause/reset), and segment progress (e.g. 4 of 12).
 - **Big "Buzzed first" tap target per player.** Tapping records a `BuzzEvent`, highlights that player.
 - **Preset point buttons** (from the segment) for the selected player: one tap applies. **Custom amount** input (positive or negative) with optional note. **Undo last action.**
-- Next / previous segment, finish game (computes winner, handles tie by opening a Tie-Breaker segment), and confirm dialogs for destructive actions.
+- Next / previous segment, finish game (computes winner, handles tie by auto-inserting a Tie-Breaker segment), session history & score-control drawer (full edit/revert/delete/add & reopen controls gated by configurable manager-role permissions), and confirm dialogs for destructive actions.
 - Works well on a tablet in landscape and on a phone.
 - Every action writes `ScoreEvent` / `BuzzEvent` + `AuditEntry` and broadcasts in realtime.
 

@@ -41,14 +41,17 @@ All UI components and pages call async functions in `src/lib/repos/*` and never 
   - `gameRepo.changeSegment(id, nextIndex, actorUserId)` → updates `current_segment_index`, resets `active_buzz_player_id` and segment timer
   - `gameRepo.updateTimer(id, timer)` → updates `timer` JSONB state and broadcasts `timer.updated`
   - `gameRepo.openTieBreaker(id, actorUserId)` → appends `'seg-16'` to `segment_ids` and advances `current_segment_index`
-  - `gameRepo.finishGame(id, actorUserId)` → DB transaction computing totals, checking for Qualifying Ties across `round.advancePerGame`, marking non-advancing players `'eliminated'`, and advancing winners
+  - `gameRepo.finishGame(id, actorUserId, { autoOpenTieBreaker })` → DB transaction computing totals, checking for Qualifying Ties across `round.advancePerGame` (auto-inserting `'seg-16'` when enabled), marking non-advancing players `'eliminated'`, and advancing winners
+  - `gameRepo.reopenGame(id, actorUserId)` → restores a finished game back to `'live'`, clears winner/advancing locks, restores player statuses to `'active'`, and logs `game.reopen`
 - [ ] **`src/lib/repos/scoreRepo.ts`**:
   - `scoreRepo.list(filters)` / `listByGame` / `listByPlayer` → `SELECT * FROM score_events WHERE ... ORDER BY created_at DESC`
   - `scoreRepo.listBuzzByGame(gameId)` → `SELECT * FROM buzz_events WHERE game_id = $1 ORDER BY created_at DESC`
   - `scoreRepo.getGameTotals(gameId)` → `SELECT player_id, SUM(delta) FROM score_events WHERE game_id = $1 GROUP BY player_id`
   - `scoreRepo.getLeaderboard(options)` → aggregated SQL query joining `players`, `score_events`, and `games`
   - `scoreRepo.applyScore(input)` → transactional `INSERT INTO score_events` + `audit_entries` + realtime publish (`score.changed`)
-  - `scoreRepo.undoLastScore(gameId, byUserId)` → transactional compensating `INSERT INTO score_events (kind = 'undo', delta = -target.delta)` + marks `undone_by_event_id` on target event
+  - `scoreRepo.undoLastScore(gameId, byUserId, { onlyOwn })` / `scoreRepo.undoScoreEventById(gameId, targetEventId, byUserId)` → transactional compensating `INSERT INTO score_events (kind = 'undo', delta = -target.delta)` + marks `undone_by_event_id` on target event
+  - `scoreRepo.editScoreEvent(eventId, patch, byUserId)` → updates `score_events` (`delta`, `note`, `segment_id`), recomputes player stats, writes `before`/`after` `audit_entries`, publishes `score.changed`
+  - `scoreRepo.deleteScoreEvent(eventId, byUserId)` → deletes `score_events` row (and restores/cleans undo links), recomputes player stats, writes `before` `audit_entries`, publishes `score.changed`
   - `scoreRepo.recordBuzz(input)` / `scoreRepo.clearBuzz(gameId, byUserId)` → `INSERT INTO buzz_events` + updates `games.active_buzz_player_id`
 - [ ] **`src/lib/repos/auditRepo.ts`**:
   - `auditRepo.list(options)` → `SELECT * FROM audit_entries ORDER BY created_at DESC`
@@ -68,7 +71,8 @@ All UI components and pages call async functions in `src/lib/repos/*` and never 
 - `src/lib/auth/index.tsx` → calls `userRepo.list()`, `userRepo.get()`
 - `src/components/layout/PublicHeader.tsx` → calls `gameRepo.getLiveGames()` + subscribes to `realtime`
 - `src/components/layout/PublicFooter.tsx` → calls `settingsRepo.get()` + subscribes to `realtime`
-- `src/components/layout/StudioSidebarShell.tsx` → calls `settingsRepo.resetDemoData()`
+- `src/components/layout/StudioSidebarShell.tsx` → calls `gameRepo.list()`, `settingsRepo.resetDemoData()` + subscribes to `realtime`
+- `src/app/scorer/page.tsx`, `src/app/scorer/[gameId]/page.tsx` & `src/components/scorer/*` → calls `gameRepo.list()` / `get()` / `startGame()` / `changeSegment()` / `updateTimer()` / `finishGame()` / `reopenGame()`, `playerRepo.list()`, `roundRepo.list()` / `get()`, `segmentRepo.list()`, `userRepo.list()`, `settingsRepo.get()`, `scoreRepo.getGameTotals()` / `listByGame()` / `listBuzzByGame()` / `applyScore()` / `undoLastScore()` / `undoScoreEventById()` / `editScoreEvent()` / `deleteScoreEvent()` / `recordBuzz()` / `clearBuzz()` + subscribes to `realtime`
 - `src/components/layout/RouteShellPlaceholder.tsx` → calls `playerRepo.list()`, `segmentRepo.list()`, `roundRepo.list()`, `gameRepo.list()`, `scoreRepo.list()`, `scoreRepo.applyScore()`, `auditRepo.list()`, `settingsRepo.get()`, `settingsRepo.resetDemoData()`
 - `src/app/(public)/page.tsx` & `src/components/landing/*` → calls `settingsRepo.get()`, `playerRepo.list()` / `playerRepo.get()`, `gameRepo.list()` / `gameRepo.get()` / `gameRepo.changeSegment()` / `gameRepo.updateTimer()` / `gameRepo.resetDemoGame()`, `roundRepo.list()`, `segmentRepo.list()`, `scoreRepo.list()` / `scoreRepo.getGameTotals()` / `scoreRepo.applyScore()` / `scoreRepo.undoLastScore()` / `scoreRepo.recordBuzz()` / `scoreRepo.clearBuzz()`, `sponsorRepo.list()`
 - `src/app/(public)/styleguide/page.tsx` → calls `playerRepo.list()`, `segmentRepo.list()`, `settingsRepo.get()`
@@ -120,4 +124,18 @@ All UI components and pages call async functions in `src/lib/repos/*` and never 
 - [x] **1920px** Full HD Monitor (`1920x1080`, `3xl` tier) — EN & AR RTL (verified with screenshots)
 - [x] **2560px** QHD / Big Monitor (`2560x1440`) — EN & AR RTL (verified with screenshots)
 - [x] **Browser Zoom 125% & 150%** (`1366x768` & `1440x900` scaled) — EN & AR RTL (verified with screenshots)
+
+---
+
+## 6. Phase 4 Test Checklist — Scorer Dashboard (`/scorer`) & Scorer Console (`/scorer/[gameId]`)
+
+- [x] **Role Access & Assignment Isolation:** `Scorer 1` sees only their assigned tables on `/scorer` (4 tables) and is blocked from opening `Scorer 2`'s table (`/scorer/game-10`) with a clear guard message; `Super Admin` sees all 14 tables with scorer filters and can open any table (including `game-14` Final vs. Marwan Serry).
+- [x] **Scheduled Game Gate & Start Flow:** Opening a scheduled table (`/scorer/game-14`) displays the 3 seated players (including Marwan Serry's Golden Seat, name only, zero photos) and segment lineup behind a confirmed **Start Live Session** action before unlocking live scoring.
+- [x] **3 Player Panels & "Buzzed First":** `/scorer/game-11` renders 3 player panels with running totals, avatars, tie-aware ranks, and 56px+ **Buzzed First** buttons; tapping Buzz highlights the player in gold, selects them (white-buffered electric-blue ring), records a `BuzzEvent` + `AuditEntry`, and allows **Clear Buzz**.
+- [x] **Presets, Custom `±` + Note & Undo:** Tapping segment preset (`+10`, `+5`, `−5`) applies in one tap to the selected player; custom positive/negative amount (with `±` toggle) + optional note applies cleanly; **Undo** button previews the last action inline and reverts it cleanly via a compensating `ScoreEvent`.
+- [x] **Segment Navigation & Timer (Final 5s Warning):** Current segment displays both EN and AR titles + progress bar + Prev/Next steppers (with confirmation when stepping back or while running); timer Start/Pause/Reset (56px+ controls) counts down accurately and flashes a pulsing white-border visual warning in the final 5 seconds.
+- [x] **Finish Game & Automatic Tie-Breaker #16:** When top qualifying players are tied and the scorer confirms **Finish Game**, Segment #16 (`Tie-Breaker and Penalty Challenge`, 30s) is inserted automatically with a tie-breaker banner; once broken, confirming **Finish Game** computes the winner, locks final standings, and updates player statuses.
+- [x] **Full Scoring History Control & Reopen (Authorized Manager):** Opening **History & Control** as `Super Admin` allows adding a manual adjustment, editing an existing score entry's delta/note, reverting a specific entry, deleting an entry (with destructive confirm), and reopening a finished session (with destructive confirm)—each logged in `auditRepo`; `Scorer` sees the history drawer in read-only inspection mode.
+- [x] **Realtime BroadcastChannel Sync:** Updating buzz/score/segment/timer on `/scorer/game-11` immediately syncs across a second open browser tab listening to realtime updates.
+- [x] **Responsive & Bilingual RTL + Touch Targets (`>= 56px`):** Verified in **EN (LTR)** and **AR (RTL)** across **Tablet Landscape (`1024×768`)**, **Phone Portrait (`390×844` & `360×780`)**, and **Desktop (`1440×900`)** with zero horizontal overflow, zero console errors, and all primary scorer controls `>= 56px` tall (`32/32` Playwright assertions passed + screenshots visually inspected).
 
