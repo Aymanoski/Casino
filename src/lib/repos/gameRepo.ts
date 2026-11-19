@@ -1,9 +1,10 @@
-import type { Game, GameTimerState } from '@/lib/schemas';
+import type { Game, GameTimerState, Round } from '@/lib/schemas';
 import { feedback } from '@/lib/feedback';
 import { realtime } from '@/lib/realtime';
 import { createDemoSeedState } from '@/lib/seed';
 import { storage } from '@/lib/storage';
 import { auditRepo } from './auditRepo';
+import { assertRepoPermission } from './permissions';
 import { recomputePlayerStatsInMemory } from './playerRepo';
 
 export interface FinishGameResult {
@@ -12,6 +13,39 @@ export interface FinishGameResult {
   tiedPlayerIds?: string[];
   winners?: string[];
 }
+
+export interface BracketRoundSpec {
+  nameEn: string;
+  nameAr: string;
+  gamesCount: number;
+  advancePerGame: number;
+  isFinal?: boolean;
+}
+
+export interface GenerateBracketInput {
+  totalPlayers: number;
+  playersPerGame: number;
+  rounds: BracketRoundSpec[];
+  includeFinalWithMarwan: boolean;
+  startDateIso?: string;
+}
+
+export interface GenerateBracketResult {
+  rounds: Round[];
+  games: Game[];
+}
+
+const DEFAULT_TABLE_NAMES: Array<{ en: string; ar: string }> = [
+  { en: 'Lantern Court', ar: 'قاعة الفانوس' },
+  { en: 'Crescent Lounge', ar: 'صالون الهلال' },
+  { en: 'Velvet Stage', ar: 'المسرح المخملي' },
+  { en: 'Gold Majlis', ar: 'المجلس الذهبي' },
+  { en: 'Starlight Hall', ar: 'قاعة النجوم' },
+  { en: 'Nile Royale', ar: 'نايل رويال' },
+  { en: 'Emerald Club', ar: 'النادي الزمردي' },
+  { en: 'Cairo Crown', ar: 'تاج القاهرة' },
+  { en: 'Sovereign Deck', ar: 'جناح النخبة' },
+];
 
 export const gameRepo = {
   async list(options?: {
@@ -58,11 +92,28 @@ export const gameRepo = {
     actorUserId = 'user-admin'
   ): Promise<Game> {
     const db = await storage.readSnapshot();
+    assertRepoPermission(db, actorUserId, 'bracket.manage');
+
     const newGame: Game = {
       ...input,
       id: `game-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
     };
+
+    // If marked as Final, ensure Marwan Serry is seated & unmark previous final
+    if (newGame.isFinal) {
+      db.games = db.games.map((g) =>
+        !g.isDemo && g.isFinal ? { ...g, isFinal: false } : g
+      );
+      if (!newGame.playerIds.includes('player-marwan')) {
+        newGame.playerIds = [
+          ...newGame.playerIds.slice(0, 2),
+          'player-marwan',
+        ];
+      }
+    }
+
     db.games.push(newGame);
+    recomputePlayerStatsInMemory(db);
     await storage.writeSnapshot(db);
 
     await auditRepo.record({
@@ -70,10 +121,16 @@ export const gameRepo = {
       action: 'game.create',
       entityType: 'game',
       entityId: newGame.id,
-      summary: `Created game "${newGame.tableName}"`,
-      summaryAr: `تم إنشاء مباراة "${newGame.tableNameAr || newGame.tableName}"`,
+      summary: `Created game "${newGame.tableName}"${newGame.isFinal ? ' (Grand Final)' : ''}`,
+      summaryAr: `تم إنشاء مباراة "${newGame.tableNameAr || newGame.tableName}"${newGame.isFinal ? ' (النهائي الكبير)' : ''}`,
       before: null,
-      after: { tableName: newGame.tableName, playerIds: newGame.playerIds },
+      after: {
+        tableName: newGame.tableName,
+        roundId: newGame.roundId,
+        scorerUserId: newGame.scorerUserId,
+        playerIds: newGame.playerIds,
+        isFinal: newGame.isFinal,
+      },
     });
 
     realtime.publish('bracket.updated', { gameId: newGame.id });
@@ -86,11 +143,28 @@ export const gameRepo = {
     actorUserId = 'user-admin'
   ): Promise<Game | null> {
     const db = await storage.readSnapshot();
+    assertRepoPermission(db, actorUserId, 'bracket.manage');
+
     const idx = db.games.findIndex((g) => g.id === id);
     if (idx === -1) return null;
 
     const before = { ...db.games[idx] };
-    const updated: Game = { ...db.games[idx], ...patch };
+    const updated: Game = { ...before, ...patch };
+
+    // If promoted to Grand Final, seat Marwan Serry and clear previous isFinal flag
+    if (patch.isFinal === true) {
+      db.games = db.games.map((g) =>
+        g.id !== id && !g.isDemo && g.isFinal ? { ...g, isFinal: false } : g
+      );
+      if (!updated.playerIds.includes('player-marwan')) {
+        const finalists = updated.playerIds.filter((pid) => pid !== 'player-marwan').slice(0, 2);
+        while (finalists.length < 2) {
+          finalists.push(`tbd-final-${finalists.length + 1}`);
+        }
+        updated.playerIds = [...finalists, 'player-marwan'];
+      }
+    }
+
     db.games[idx] = updated;
     recomputePlayerStatsInMemory(db);
     await storage.writeSnapshot(db);
@@ -102,12 +176,236 @@ export const gameRepo = {
       entityId: id,
       summary: `Updated game "${updated.tableName}"`,
       summaryAr: `تم تحديث المباراة "${updated.tableNameAr || updated.tableName}"`,
-      before: { status: before.status, scorerUserId: before.scorerUserId },
-      after: { status: updated.status, scorerUserId: updated.scorerUserId },
+      before: {
+        tableName: before.tableName,
+        status: before.status,
+        scorerUserId: before.scorerUserId,
+        scheduledAt: before.scheduledAt,
+        playerIds: before.playerIds,
+        isFinal: before.isFinal,
+      },
+      after: {
+        tableName: updated.tableName,
+        status: updated.status,
+        scorerUserId: updated.scorerUserId,
+        scheduledAt: updated.scheduledAt,
+        playerIds: updated.playerIds,
+        isFinal: updated.isFinal,
+      },
     });
 
     realtime.publish('bracket.updated', { gameId: id });
     return updated;
+  },
+
+  async remove(id: string, actorUserId = 'user-admin'): Promise<boolean> {
+    const db = await storage.readSnapshot();
+    assertRepoPermission(db, actorUserId, 'bracket.manage');
+
+    const target = db.games.find((g) => g.id === id && !g.isDemo);
+    if (!target) return false;
+
+    db.games = db.games.filter((g) => g.id !== id);
+    recomputePlayerStatsInMemory(db);
+    await storage.writeSnapshot(db);
+
+    await auditRepo.record({
+      actorUserId,
+      action: 'game.remove',
+      entityType: 'game',
+      entityId: id,
+      summary: `Removed game "${target.tableName}"`,
+      summaryAr: `تم حذف المباراة "${target.tableNameAr || target.tableName}"`,
+      before: {
+        tableName: target.tableName,
+        roundId: target.roundId,
+        playerIds: target.playerIds,
+      },
+      after: null,
+    });
+
+    realtime.publish('bracket.updated', { gameId: id });
+    return true;
+  },
+
+  async generateBracket(
+    input: GenerateBracketInput,
+    actorUserId = 'user-admin'
+  ): Promise<GenerateBracketResult> {
+    const db = await storage.readSnapshot();
+    assertRepoPermission(db, actorUserId, 'bracket.manage');
+
+    const prevRoundsCount = db.rounds.length;
+    const prevGamesCount = db.games.filter((g) => !g.isDemo).length;
+
+    const scorers = db.users.filter((u) => u.role === 'scorer');
+    const fallbackScorerId = scorers[0]?.id ?? 'user-admin';
+    const availableSegments = [...db.segments]
+      .filter((s) => s.id !== 'seg-16')
+      .sort((a, b) => a.order - b.order);
+    const defaultSegIds =
+      availableSegments.length >= 6
+        ? availableSegments.slice(0, 6).map((s) => s.id)
+        : availableSegments.map((s) => s.id);
+    const safeSegIds = defaultSegIds.length > 0 ? defaultSegIds : ['seg-1'];
+
+    const seededPlayers = [...db.players]
+      .filter((p) => !p.isHost)
+      .sort((a, b) => a.seed - b.seed);
+
+    const baseStartMs = input.startDateIso
+      ? new Date(input.startDateIso).getTime()
+      : new Date('2026-11-20T20:00:00.000Z').getTime();
+    const safeBaseMs = Number.isNaN(baseStartMs)
+      ? Date.now() + 86_400_000
+      : baseStartMs;
+
+    const newRounds: Round[] = [];
+    const newGames: Game[] = [];
+    let gameSeq = 1;
+    let scorerCursor = 0;
+
+    input.rounds.forEach((spec, roundIdx) => {
+      const isFinalRound = Boolean(spec.isFinal);
+      const roundId = isFinalRound
+        ? 'round-final'
+        : roundIdx === input.rounds.length - (input.includeFinalWithMarwan ? 2 : 1) &&
+            input.rounds.length >= 2
+          ? 'round-semi'
+          : `round-${roundIdx + 1}`;
+
+      newRounds.push({
+        id: roundId,
+        name: { en: spec.nameEn, ar: spec.nameAr },
+        order: roundIdx + 1,
+        advancePerGame: Math.max(1, spec.advancePerGame),
+        status: 'upcoming',
+      });
+
+      const gamesCount = isFinalRound ? 1 : Math.max(1, spec.gamesCount);
+      for (let gIdx = 0; gIdx < gamesCount; gIdx++) {
+        const scorerUserId =
+          scorers.length > 0
+            ? scorers[scorerCursor++ % scorers.length].id
+            : fallbackScorerId;
+
+        const scheduledAt = new Date(
+          safeBaseMs + roundIdx * 86_400_000 + gIdx * 45 * 60_000
+        ).toISOString();
+
+        let playerIds: string[];
+        if (isFinalRound && input.includeFinalWithMarwan) {
+          playerIds = ['tbd-final-1', 'tbd-final-2', 'player-marwan'];
+        } else if (roundIdx === 0) {
+          const seatCount = Math.max(2, input.playersPerGame);
+          playerIds = Array.from({ length: seatCount }, (_, sIdx) => {
+            const globalSeat = gIdx * seatCount + sIdx;
+            if (globalSeat < input.totalPlayers && seededPlayers[globalSeat]) {
+              return seededPlayers[globalSeat].id;
+            }
+            return `tbd-r1-g${gIdx + 1}-s${sIdx + 1}`;
+          });
+        } else {
+          const seatCount = Math.max(2, input.playersPerGame);
+          playerIds = Array.from(
+            { length: seatCount },
+            (_, sIdx) => `tbd-r${roundIdx + 1}-g${gIdx + 1}-s${sIdx + 1}`
+          );
+        }
+
+        const tableTheme =
+          DEFAULT_TABLE_NAMES[(gameSeq - 1) % DEFAULT_TABLE_NAMES.length];
+        const tableName = isFinalRound
+          ? 'The Grand Final — Against Marwan Serry'
+          : gamesCount === 1
+            ? `${spec.nameEn}`
+            : `Table ${gameSeq} — ${tableTheme.en}`;
+        const tableNameAr = isFinalRound
+          ? 'النهائي الكبير — في مواجهة مروان سري'
+          : gamesCount === 1
+            ? `${spec.nameAr}`
+            : `طاولة ${gameSeq} — ${tableTheme.ar}`;
+
+        newGames.push({
+          id: `game-gen-${gameSeq++}`,
+          roundId,
+          tableName,
+          tableNameAr,
+          scheduledAt,
+          status: 'scheduled',
+          scorerUserId,
+          playerIds,
+          currentSegmentIndex: 0,
+          segmentIds: isFinalRound
+            ? availableSegments.slice(0, Math.min(8, availableSegments.length)).map((s) => s.id)
+            : safeSegIds,
+          isFinal: isFinalRound,
+          isDemo: false,
+          podOrder: gIdx + 1,
+          timer: { status: 'idle', durationSec: 45, remainingSec: 45 },
+        });
+      }
+    });
+
+    const preservedDemoGames = db.games.filter((g) => g.isDemo);
+    const demoGameIds = new Set(preservedDemoGames.map((g) => g.id));
+
+    db.rounds = newRounds;
+    db.games = [...newGames, ...preservedDemoGames];
+    // Preserve demo score/buzz events while clearing stale non-demo events from previous bracket topology
+    db.scoreEvents = db.scoreEvents.filter((e) => demoGameIds.has(e.gameId));
+    db.buzzEvents = db.buzzEvents.filter((b) => demoGameIds.has(b.gameId));
+
+    // Sync bracketConfig inside settings
+    const r1 = input.rounds[0]?.gamesCount ?? 1;
+    const r2 = input.rounds[1]?.gamesCount ?? 1;
+    const semiRound = input.rounds.find(
+      (r, idx) =>
+        !r.isFinal &&
+        idx === input.rounds.length - (input.includeFinalWithMarwan ? 2 : 1)
+    );
+    db.settings = {
+      ...db.settings,
+      bracketConfig: {
+        totalPlayers: input.totalPlayers,
+        playersPerGame: input.playersPerGame,
+        round1Games: r1,
+        round2Games: r2,
+        semiGames: semiRound?.gamesCount ?? 1,
+        semiAdvanceCount: semiRound?.advancePerGame ?? 2,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Reset player statuses to registered (except Marwan host)
+    db.players = db.players.map((p) =>
+      p.isHost ? p : { ...p, status: 'registered' }
+    );
+    recomputePlayerStatsInMemory(db);
+    await storage.writeSnapshot(db);
+
+    await auditRepo.record({
+      actorUserId,
+      action: 'bracket.generate',
+      entityType: 'bracket',
+      entityId: 'tournament-bracket',
+      summary: `Generated flexible bracket: ${input.totalPlayers} players (${input.playersPerGame}/table) across ${newRounds.length} rounds and ${newGames.length} games${input.includeFinalWithMarwan ? ' + Marwan Serry Final' : ''}`,
+      summaryAr: `تم توليد شجرة البطولة: ${input.totalPlayers} لاعب (${input.playersPerGame} لكل طاولة) عبر ${newRounds.length} جولات و${newGames.length} مباراة`,
+      before: { roundsCount: prevRoundsCount, gamesCount: prevGamesCount },
+      after: {
+        totalPlayers: input.totalPlayers,
+        playersPerGame: input.playersPerGame,
+        roundsCount: newRounds.length,
+        gamesCount: newGames.length,
+        includeFinalWithMarwan: input.includeFinalWithMarwan,
+      },
+    });
+
+    realtime.publish('bracket.updated', {});
+    realtime.publish('settings.updated', { keys: ['bracketConfig'] });
+    realtime.publish('player.updated', {});
+
+    return { rounds: newRounds, games: newGames };
   },
 
   async startGame(id: string, actorUserId: string): Promise<Game | null> {
@@ -116,7 +414,10 @@ export const gameRepo = {
     if (idx === -1) return null;
 
     const current = db.games[idx];
-    const firstSegId = current.segmentIds[current.currentSegmentIndex] ?? current.segmentIds[0];
+    assertRepoPermission(db, actorUserId, 'game.operate', { game: current });
+
+    const firstSegId =
+      current.segmentIds[current.currentSegmentIndex] ?? current.segmentIds[0];
     const firstSeg = db.segments.find((s) => s.id === firstSegId);
     const dur = firstSeg?.durationSec ?? 60;
 
@@ -160,6 +461,8 @@ export const gameRepo = {
     if (idx === -1) return null;
 
     const current = db.games[idx];
+    assertRepoPermission(db, actorUserId, 'game.operate', { game: current });
+
     const clampedIndex = Math.max(
       0,
       Math.min(nextIndex, current.segmentIds.length - 1)
@@ -246,14 +549,17 @@ export const gameRepo = {
   async updateTimer(
     id: string,
     timer: GameTimerState,
-    _actorUserId?: string
+    actorUserId?: string
   ): Promise<Game | null> {
     const db = await storage.readSnapshot();
     const idx = db.games.findIndex((g) => g.id === id);
     if (idx === -1) return null;
 
+    const current = db.games[idx];
+    assertRepoPermission(db, actorUserId, 'game.operate', { game: current });
+
     const updated: Game = {
-      ...db.games[idx],
+      ...current,
       timer,
     };
     db.games[idx] = updated;
@@ -275,6 +581,8 @@ export const gameRepo = {
     if (idx === -1) return null;
 
     const current = db.games[idx];
+    assertRepoPermission(db, actorUserId, 'game.operate', { game: current });
+
     const tieBreakerSegId = 'seg-16';
     const nextSegIds = [...current.segmentIds, tieBreakerSegId];
     const newIndex = nextSegIds.length - 1;
@@ -327,10 +635,11 @@ export const gameRepo = {
     if (idx === -1) return null;
 
     const game = db.games[idx];
+    assertRepoPermission(db, actorUserId, 'game.operate', { game });
+
     const round = db.rounds.find((r) => r.id === game.roundId);
     const advanceCount = round?.advancePerGame ?? 1;
 
-    // Compute totals for the 3 players
     const totals = game.playerIds.map((pid) => {
       const score = db.scoreEvents
         .filter((e) => e.gameId === id && e.playerId === pid)
@@ -340,7 +649,6 @@ export const gameRepo = {
 
     totals.sort((a, b) => b.score - a.score);
 
-    // Check if there is a Qualifying Tie across the advancement cutoff (advanceCount - 1 vs advanceCount)
     if (
       advanceCount < totals.length &&
       totals[advanceCount - 1].score === totals[advanceCount].score
@@ -388,7 +696,11 @@ export const gameRepo = {
             summary: `Qualifying tie (${cutoffScore} pts: ${tiedNamesEn}) — auto-inserted Tie-Breaker segment in "${updatedWithTb.tableName}"`,
             summaryAr: `تعادل على التأهل (${cutoffScore} نقطة: ${tiedNamesAr}) — تم إدراج جولة الحسم تلقائياً في "${updatedWithTb.tableNameAr || updatedWithTb.tableName}"`,
             before: { segmentCount: game.segmentIds.length, cutoffScore, tiedPlayerIds },
-            after: { segmentCount: nextSegIds.length, currentSegmentIndex: newIndex, segmentId: tieBreakerSegId },
+            after: {
+              segmentCount: nextSegIds.length,
+              currentSegmentIndex: newIndex,
+              segmentId: tieBreakerSegId,
+            },
           });
         }
 
@@ -436,7 +748,6 @@ export const gameRepo = {
 
     db.games[idx] = updated;
 
-    // Update player statuses (non-advancing become 'eliminated', finalists become 'finalist')
     const advSet = new Set(advancingPlayerIds);
     db.players = db.players.map((p) => {
       if (!game.playerIds.includes(p.id) || p.isHost) return p;
@@ -486,7 +797,10 @@ export const gameRepo = {
     if (idx === -1) return null;
 
     const current = db.games[idx];
-    const segId = current.segmentIds[current.currentSegmentIndex] ?? current.segmentIds[0];
+    assertRepoPermission(db, actorUserId, 'game.reopen', { game: current });
+
+    const segId =
+      current.segmentIds[current.currentSegmentIndex] ?? current.segmentIds[0];
     const seg = db.segments.find((s) => s.id === segId);
     const dur = seg?.durationSec ?? 45;
 

@@ -1,6 +1,7 @@
 export * from './auditRepo';
 export * from './contentRepo';
 export * from './gameRepo';
+export * from './permissions';
 export * from './playerRepo';
 export * from './roundRepo';
 export * from './scoreRepo';

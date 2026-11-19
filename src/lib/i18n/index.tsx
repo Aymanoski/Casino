@@ -42,7 +42,7 @@ const dictionary = {
     },
     adminNav: {
       dashboard: 'Overview',
-      players: 'Players (27)',
+      players: 'Players',
       managers: 'Managers & Roles',
       bracket: 'Bracket Config',
       games: 'Games & Sessions',
@@ -106,7 +106,7 @@ const dictionary = {
     },
     adminNav: {
       dashboard: 'نظرة عامة',
-      players: 'اللاعبون (٢٧)',
+      players: 'اللاعبون',
       managers: 'المديرون والصلاحيات',
       bracket: 'إعدادات التصفيات',
       games: 'المباريات والجلسات',

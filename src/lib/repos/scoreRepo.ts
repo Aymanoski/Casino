@@ -8,6 +8,7 @@ import { feedback } from '@/lib/feedback';
 import { realtime } from '@/lib/realtime';
 import { storage } from '@/lib/storage';
 import { auditRepo } from './auditRepo';
+import { assertRepoPermission } from './permissions';
 import { recomputePlayerStatsInMemory } from './playerRepo';
 
 export interface LeaderboardEntry {
@@ -164,6 +165,9 @@ export const scoreRepo = {
     byUserId: string;
   }): Promise<ScoreEvent> {
     const db = await storage.readSnapshot();
+    const game = db.games.find((g) => g.id === input.gameId);
+    assertRepoPermission(db, input.byUserId, 'score.operate', { game });
+
     const event: ScoreEvent = {
       id: `score-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       gameId: input.gameId,
@@ -180,7 +184,6 @@ export const scoreRepo = {
     recomputePlayerStatsInMemory(db);
     await storage.writeSnapshot(db);
 
-    const game = db.games.find((g) => g.id === input.gameId);
     const player = db.players.find((p) => p.id === input.playerId);
     const signStr = input.delta > 0 ? `+${input.delta}` : `${input.delta}`;
 
@@ -226,13 +229,18 @@ export const scoreRepo = {
     options?: { onlyOwn?: boolean }
   ): Promise<ScoreEvent | null> {
     const db = await storage.readSnapshot();
-    // Find newest non-undo event in this game that hasn't been undone yet
+    const game = db.games.find((g) => g.id === gameId);
+    const actor = assertRepoPermission(db, byUserId, 'score.operate', { game });
+
+    // Scorers may only undo their own last action per AGENTS.md §4
+    const enforceOwn = options?.onlyOwn || actor?.role === 'scorer';
+
     const targetIdx = db.scoreEvents.findIndex(
       (e) =>
         e.gameId === gameId &&
         e.kind !== 'undo' &&
         !e.undoneByEventId &&
-        (!options?.onlyOwn || e.byUserId === byUserId)
+        (!enforceOwn || e.byUserId === byUserId)
     );
     if (targetIdx === -1) return null;
 
@@ -245,6 +253,7 @@ export const scoreRepo = {
     byUserId: string
   ): Promise<ScoreEvent | null> {
     const db = await storage.readSnapshot();
+    const game = db.games.find((g) => g.id === gameId);
     const targetIdx = db.scoreEvents.findIndex(
       (e) =>
         e.id === targetEventId &&
@@ -255,6 +264,13 @@ export const scoreRepo = {
     if (targetIdx === -1) return null;
 
     const target = db.scoreEvents[targetIdx];
+    const isOwnScorerUndo = target.byUserId === byUserId;
+    if (isOwnScorerUndo) {
+      assertRepoPermission(db, byUserId, 'score.operate', { game });
+    } else {
+      assertRepoPermission(db, byUserId, 'score.manageHistory', { game });
+    }
+
     const undoEvent: ScoreEvent = {
       id: `score-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       gameId,
@@ -276,7 +292,6 @@ export const scoreRepo = {
     recomputePlayerStatsInMemory(db);
     await storage.writeSnapshot(db);
 
-    const game = db.games.find((g) => g.id === gameId);
     const player = db.players.find((p) => p.id === target.playerId);
 
     if (!game?.isDemo) {
@@ -316,6 +331,9 @@ export const scoreRepo = {
     if (idx === -1) return null;
 
     const before = { ...db.scoreEvents[idx] };
+    const game = db.games.find((g) => g.id === before.gameId);
+    assertRepoPermission(db, byUserId, 'score.manageHistory', { game });
+
     const updated: ScoreEvent = {
       ...before,
       delta: patch.delta,
@@ -327,7 +345,6 @@ export const scoreRepo = {
     recomputePlayerStatsInMemory(db);
     await storage.writeSnapshot(db);
 
-    const game = db.games.find((g) => g.id === updated.gameId);
     const player = db.players.find((p) => p.id === updated.playerId);
     const beforeSign = before.delta > 0 ? `+${before.delta}` : `${before.delta}`;
     const afterSign = updated.delta > 0 ? `+${updated.delta}` : `${updated.delta}`;
@@ -375,8 +392,9 @@ export const scoreRepo = {
     const target = db.scoreEvents.find((e) => e.id === eventId);
     if (!target) return null;
 
-    // Remove the event; if it was an undo event, restore the target's undoable status;
-    // if it was undone by another event, remove that linked compensating event too so totals stay exact.
+    const game = db.games.find((g) => g.id === target.gameId);
+    assertRepoPermission(db, byUserId, 'score.manageHistory', { game });
+
     const idsToRemove = new Set<string>([eventId]);
     if (target.undoneByEventId) {
       idsToRemove.add(target.undoneByEventId);
@@ -393,7 +411,6 @@ export const scoreRepo = {
     recomputePlayerStatsInMemory(db);
     await storage.writeSnapshot(db);
 
-    const game = db.games.find((g) => g.id === target.gameId);
     const player = db.players.find((p) => p.id === target.playerId);
     const signStr = target.delta > 0 ? `+${target.delta}` : `${target.delta}`;
 
@@ -438,6 +455,9 @@ export const scoreRepo = {
     byUserId: string;
   }): Promise<BuzzEvent> {
     const db = await storage.readSnapshot();
+    const game = db.games.find((g) => g.id === input.gameId);
+    assertRepoPermission(db, input.byUserId, 'score.operate', { game });
+
     const buzz: BuzzEvent = {
       id: `buzz-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       gameId: input.gameId,
@@ -459,7 +479,6 @@ export const scoreRepo = {
 
     await storage.writeSnapshot(db);
 
-    const game = db.games.find((g) => g.id === input.gameId);
     const player = db.players.find((p) => p.id === input.playerId);
     if (!game?.isDemo) {
       await auditRepo.record({
@@ -470,7 +489,11 @@ export const scoreRepo = {
         summary: `${player?.fullName ?? input.playerId} buzzed first`,
         summaryAr: `${player?.fullNameAr ?? input.playerId} ضغط الجرس أولاً`,
         before: null,
-        after: { gameId: input.gameId, playerId: input.playerId, segmentId: input.segmentId },
+        after: {
+          gameId: input.gameId,
+          playerId: input.playerId,
+          segmentId: input.segmentId,
+        },
       });
     }
 
@@ -492,10 +515,13 @@ export const scoreRepo = {
     const gameIdx = db.games.findIndex((g) => g.id === gameId);
     if (gameIdx === -1) return;
 
-    const prevPlayerId = db.games[gameIdx].activeBuzzPlayerId;
-    const isDemo = db.games[gameIdx].isDemo;
+    const game = db.games[gameIdx];
+    assertRepoPermission(db, byUserId, 'score.operate', { game });
+
+    const prevPlayerId = game.activeBuzzPlayerId;
+    const isDemo = game.isDemo;
     db.games[gameIdx] = {
-      ...db.games[gameIdx],
+      ...game,
       activeBuzzPlayerId: null,
     };
     await storage.writeSnapshot(db);

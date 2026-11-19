@@ -202,3 +202,28 @@
 ### 30. Pluggable Realtime Broker & Message Deduplication + Bonus Broadcast Lower-Third
 - **Architecture:** Upgraded `src/lib/realtime/index.ts` with a stable `RealtimeBroker` (`setRealtimeTransport`, `getRealtimeTransport`, `createRealtimeTransport`, `HostedRealtimeConfig`, `RealtimeConnectionStatus`, `onStatusChange`, `RealtimeEventPayloadMap`) and message-ID deduplication in `BrowserRealtimeTransport` so simultaneous `BroadcastChannel` + `storage` events never fire duplicate floating deltas across tabs.
 - **Bonus Idea (Built in Phase 5):** Added a TV-style **Broadcast Lower-Third Event Ribbon** on `/screen/[gameId]` that briefly slides up for 3.4s whenever the scorer awards/deducts points, records a first buzz, or triggers Sudden-Death Tie-Breaker #16—delivering instant crowd context without adding any permanent on-screen clutter.
+
+---
+
+## Phase 6 Admin Studio & Role-Based Access Control Decisions (2026-11-19)
+
+### 31. Dual-Layer Role Enforcement (UI Guards + Repository Permission Assertions)
+- **Context:** `AGENTS.md §4` requires strict role isolation across `superAdmin`, `scorer`, `checkIn`, `content`, `player`, and visitors—and Phase 6 mandates enforcing permissions on both UI and repo calls, with every create/update/delete writing an `AuditEntry`.
+- **Decision:** Created `src/lib/repos/permissions.ts` (`assertRepoPermission`, `PermissionDeniedError`, `canRolePerformAction`, `MANAGER_ROLE_SPECS`) as the single source of truth for both repository write/audit guards and the `/admin/managers` Role Permission Matrix UI:
+  - `superAdmin`: unrestricted across all repos and admin pages.
+  - `scorer`: `game.operate` and `score.operate` strictly on assigned tables (`game.scorerUserId === actor.id`, plus open exhibition `game-demo`); own-last-action undo only; blocked from all admin mutations and `auditRepo.list`.
+  - `checkIn`: `playerRepo.updateStatus` limited strictly to `'registered' | 'checkedIn' | 'absent'`; blocked from player profile CRUD, scoring, bracket, settings, content, sponsors, and audit log.
+  - `content`: `contentRepo.*`, `sponsorRepo.*`, and copy-only edits (`nameEn`, `nameAr`, `descriptionEn`, `descriptionAr`) on `segmentRepo.update`—explicitly throwing `PermissionDeniedError` if attempting to alter `presetPoints`, `durationSec`, `category`, or `order`.
+  - `auditRepo.list({ requesterUserId })`: enforces `superAdmin`-only access at the repository boundary.
+
+### 32. Flexible Bracket Size & Open Qualifier Slots (`tbd-*`)
+- **Context:** `AGENTS.md §3` specifies flexible bracket configuration (admin sets number of players, table size defaulting to `3`, and how many advance per round) with auto-generated rounds/games and a Grand Final of 2 finalists + Marwan Serry.
+- **Decision:** Widened `GameSchema.playerIds` from a rigid 3-tuple to `z.array(z.string()).min(2)` (defaulting to `3` across all presets) and added `gameRepo.generateBracket(config, actorUserId)` + `gameRepo.remove`, `roundRepo.create`/`remove`, `segmentRepo.reorder`, `contentRepo.reorder`, and `sponsorRepo.reorder`. Auto-generation preserves `game-demo`, seeds available players into Round 1, creates `tbd-*` open qualifier slots for subsequent rounds (which render gracefully across `BracketNode`, `/admin/bracket`, `/admin/check-in`, and `/admin/games`), assigns scorers round-robin, and automatically locks `player-marwan` into the Golden Seat when `includeFinalWithMarwan` or `isFinal` is enabled.
+
+### 33. Calm Paper Admin Row Controls & Classic 4-Color Count Chips
+- **Decision:** Per `DESIGN.md §4 & §8` ("Calm style for admin and dense data: 1px `--border-paper` and `--shadow-soft`, with only primary actions and key stat chips keeping the sticker look"), added a `calm` button variant (`1px` `--border-paper`, no offset shadow) for dense in-table/in-row utility controls (`View`, `Edit`, `Delete`, `Move Up/Down`, `Inspect Diff`, `Test Role`), reserving sticker borders and hard shadows for page-level primary CTAs and poker-chip key stat badges. Count stat chips use the classic 4 non-signed casino chip colors (`red`, `gold`, `blue`, `white`) while signed `+`/`−` chips remain strictly for score deltas.
+
+### 34. Bonus Ideas Built in Phase 6
+- **Live Manager-to-Switcher Sync + One-Click "Test Role":** Adding or updating a manager in `/admin/managers` broadcasts `user.updated` so `AuthProvider` refreshes `demoUsers` immediately—making new staff accounts appear instantly in the Quick Role Switcher and providing a 1-click **"Test Role"** button per manager row to demonstrate RBAC live during the pitch.
+- **One-Click Sample CSV Validator & Live Bracket Math Pipeline:** `/admin/players` CSV bulk import includes a 1-click **"Load Sample CSV (3 valid + 1 error)"** button alongside file upload and template download so presenters can showcase live Zod row-by-row validation + UTF-8 BOM Excel-safe CSV exports in seconds; `/admin/bracket` displays a live visual advancement pipeline (`27 Players → Round 1: 9×3 → Round 2: 3×3 → Semi-Final: 1×3 (adv 2) → Final (2 + Marwan Serry)`) before confirming generation.
+

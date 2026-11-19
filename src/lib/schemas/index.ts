@@ -123,7 +123,7 @@ export const GameSchema = z.object({
   scheduledAt: z.string(),
   status: GameStatusSchema,
   scorerUserId: z.string(),
-  playerIds: z.tuple([z.string(), z.string(), z.string()]),
+  playerIds: z.array(z.string()).min(2),
   currentSegmentIndex: z.number().int().nonnegative(),
   segmentIds: z.array(z.string()).min(1),
   winnerPlayerId: z.string().optional(),

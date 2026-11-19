@@ -26,17 +26,19 @@ All UI components and pages call async functions in `src/lib/repos/*` and never 
 - [ ] **`src/lib/repos/roundRepo.ts`**:
   - `roundRepo.list()` → `SELECT * FROM rounds ORDER BY "order" ASC`
   - `roundRepo.get(id)` → `SELECT * FROM rounds WHERE id = $1`
-  - `roundRepo.update(id, patch, actorUserId)` → `UPDATE rounds SET ... WHERE id = $1`
+  - `roundRepo.create(input, actorUserId)` / `update(id, patch, actorUserId)` / `remove(id, actorUserId)` → transactional round CRUD + audit
 - [ ] **`src/lib/repos/segmentRepo.ts`**:
   - `segmentRepo.list()` → `SELECT * FROM segments ORDER BY "order" ASC`
   - `segmentRepo.get(id)` → `SELECT * FROM segments WHERE id = $1`
   - `segmentRepo.create(input, actorUserId)` → `INSERT INTO segments ...`
-  - `segmentRepo.update(id, patch, actorUserId)` → `UPDATE segments SET ... WHERE id = $1`
-  - `segmentRepo.remove(id, actorUserId)` → `DELETE FROM segments WHERE id = $1`
+  - `segmentRepo.update(id, patch, actorUserId)` → `UPDATE segments SET ... WHERE id = $1` (enforces copy-only scope for `content` role)
+  - `segmentRepo.reorder(orderedIds, actorUserId)` → transactional order update + audit
+  - `segmentRepo.remove(id, actorUserId)` → `DELETE FROM segments WHERE id = $1` (protects `seg-16`)
 - [ ] **`src/lib/repos/gameRepo.ts`**:
   - `gameRepo.list({ roundId, scorerUserId, status })` → filtered `SELECT * FROM games`
   - `gameRepo.get(id)` / `gameRepo.getByRound` / `gameRepo.getByScorer` / `gameRepo.getLiveGames` → indexed queries on `games`
-  - `gameRepo.create(input, actorUserId)` / `gameRepo.update(id, patch, actorUserId)` → `INSERT` / `UPDATE games`
+  - `gameRepo.create(input, actorUserId)` / `update(id, patch, actorUserId)` / `remove(id, actorUserId)` → `INSERT` / `UPDATE` / `DELETE` games
+  - `gameRepo.generateBracket(config, actorUserId)` → transactional replacement of tournament `rounds` + `games`, seating players & Marwan Serry Final + updating `settings.bracketConfig` + audit entry
   - `gameRepo.startGame(id, actorUserId)` → sets `status = 'live'`, `started_at = NOW()`, initializes segment timer
   - `gameRepo.changeSegment(id, nextIndex, actorUserId)` → updates `current_segment_index`, resets `active_buzz_player_id` and segment timer
   - `gameRepo.updateTimer(id, timer)` → updates `timer` JSONB state and broadcasts `timer.updated`
@@ -57,9 +59,11 @@ All UI components and pages call async functions in `src/lib/repos/*` and never 
   - `auditRepo.list(options)` → `SELECT * FROM audit_entries ORDER BY created_at DESC`
   - `auditRepo.record(input)` → append-only `INSERT INTO audit_entries`
 - [ ] **`src/lib/repos/sponsorRepo.ts`**:
-  - `sponsorRepo.list` / `get` / `create` / `update` / `remove` → CRUD on `sponsors` table
+  - `sponsorRepo.list` / `get` / `create` / `update` / `reorder` / `remove` → CRUD on `sponsors` table
 - [ ] **`src/lib/repos/contentRepo.ts`**:
-  - `contentRepo.list` / `getByKey` / `create` / `update` / `remove` → CRUD on `content_items` table
+  - `contentRepo.list` / `getByKey` / `create` / `update` / `reorder` / `remove` → CRUD on `content_items` table
+- [ ] **`src/lib/repos/permissions.ts`**:
+  - Mirror `assertRepoPermission` and `MANAGER_ROLE_SPECS` inside server-side API route handlers / Server Actions + PostgreSQL RLS policies when moving off `localStorage`.
 - [ ] **`src/lib/repos/settingsRepo.ts`**:
   - `settingsRepo.get()` / `settingsRepo.update(patch, actorUserId)` → `SELECT` / `UPDATE settings`
   - `settingsRepo.resetDemoData()` → disable or gate behind development environment flag in production
@@ -74,6 +78,7 @@ All UI components and pages call async functions in `src/lib/repos/*` and never 
 - `src/components/layout/StudioSidebarShell.tsx` → calls `gameRepo.list()`, `settingsRepo.resetDemoData()` + subscribes to `realtime`
 - `src/app/scorer/page.tsx`, `src/app/scorer/[gameId]/page.tsx` & `src/components/scorer/*` → calls `gameRepo.list()` / `get()` / `startGame()` / `changeSegment()` / `updateTimer()` / `finishGame()` / `reopenGame()`, `playerRepo.list()`, `roundRepo.list()` / `get()`, `segmentRepo.list()`, `userRepo.list()`, `settingsRepo.get()`, `scoreRepo.getGameTotals()` / `listByGame()` / `listBuzzByGame()` / `applyScore()` / `undoLastScore()` / `undoScoreEventById()` / `editScoreEvent()` / `deleteScoreEvent()` / `recordBuzz()` / `clearBuzz()` + subscribes to `realtime`
 - `src/app/screen/[gameId]/page.tsx`, `src/app/screen/leaderboard/page.tsx` & `src/components/screen/*` → calls `gameRepo.get()` / `list({ includeDemo: true })`, `playerRepo.list({ includeHost: true })`, `roundRepo.get()` / `list()`, `segmentRepo.list()`, `scoreRepo.getGameTotals()` / `getLeaderboard()`, `settingsRepo.get()` + subscribes to `realtime` and `realtime.onStatusChange()`
+- `src/app/admin/**/page.tsx` & `src/components/admin/*` → calls `playerRepo`, `userRepo`, `roundRepo`, `gameRepo`, `segmentRepo`, `scoreRepo`, `auditRepo`, `sponsorRepo`, `contentRepo`, `settingsRepo` (passing `user.id` for repo-level RBAC + audit trail) + subscribes to `realtime`
 - `src/components/layout/RouteShellPlaceholder.tsx` → calls `playerRepo.list()`, `segmentRepo.list()`, `roundRepo.list()`, `gameRepo.list()`, `scoreRepo.list()`, `scoreRepo.applyScore()`, `auditRepo.list()`, `settingsRepo.get()`, `settingsRepo.resetDemoData()`
 - `src/app/(public)/page.tsx` & `src/components/landing/*` → calls `settingsRepo.get()`, `playerRepo.list()` / `playerRepo.get()`, `gameRepo.list()` / `gameRepo.get()` / `gameRepo.changeSegment()` / `gameRepo.updateTimer()` / `gameRepo.resetDemoGame()`, `roundRepo.list()`, `segmentRepo.list()`, `scoreRepo.list()` / `scoreRepo.getGameTotals()` / `scoreRepo.applyScore()` / `scoreRepo.undoLastScore()` / `scoreRepo.recordBuzz()` / `scoreRepo.clearBuzz()`, `sponsorRepo.list()`
 - `src/app/(public)/styleguide/page.tsx` → calls `playerRepo.list()`, `segmentRepo.list()`, `settingsRepo.get()`
@@ -156,4 +161,18 @@ To upgrade from same-browser multi-window sync (`BrowserRealtimeTransport` via `
 - [x] **Grand Final Mode (`game-14` vs. Marwan Serry) & Winner Celebration:** Verified Scheduled `"Coming Up Next / VS Lineup"` slate → automatic live flip when started from Scorer Console → center **Golden Seat** boss layout for Marwan Serry (name only, zero real-person `<img>` photos) → baseline Framer Motion **Victory Stage Champion Celebration** when finished (`delightersEnabled: false` respected for Phase 10).
 - [x] **Presenter Mode & Auto-Hiding Control Pill:** Verified **Presenter Mode** toggle (button + `F` shortcut + `Esc` exit) hides mouse cursor (`cursor-none`) and fades out the floating control pill after 2.2s inactivity and immediately restores both on mouse movement, with Feed Switcher, Leaderboard/Live jump, Realtime Sync dot, and always-reachable `EN | عربي` toggle (`>= 44px × 44px` touch targets).
 - [x] **EN (LTR) & AR (RTL) Parity + Clean Diagnostics:** Verified `74/74` automated Playwright assertions (0 failures, 0 console errors, 0 uncaught page errors), `0` Impeccable detector violations across all new screen files, clean `tsc --noEmit` and `next build`, and visual screenshot inspection across EN/AR desktop, short laptop, mobile, live sync, rank overtake, Final Mode, and Victory Stage.
+
+---
+
+## 8. Phase 6 Test Checklist — Admin Studio (`/admin/*`) & Dual-Layer RBAC
+
+- [x] **`/admin` Dashboard:** Live game cards (Quarter-Final B with active buzzer highlight, running scores, Big Screen & Scorer deep links), classic 4-color poker-chip key stat badges (Players, Games Done, Live Now, Pending Check-In), chronological recent results feed, and role-aware quick actions (`superAdmin`, `checkIn`, `content`).
+- [x] **`/admin/players` Roster, CSV Import & Profile Drawer:** Search, status filter, sortable columns, inline status control, create/edit/delete with Zod validation and destructive confirm, RFC-4180 CSV bulk import with live row-by-row validation preview (3 valid + 1 invalid sample verified), and slide-over Profile Drawer with stats chips, assigned tables, and chronological `ScoreEvent` history.
+- [x] **`/admin/managers` & Role Capability Matrix:** Create/edit/remove staff managers (`superAdmin`, `scorer`, `checkIn`, `content`), live sync to Quick Role Switcher via `user.updated`, 1-click **Test Role**, and authoritative Can-Do / Cannot-Do permission cards synced with `src/lib/repos/permissions.ts`.
+- [x] **`/admin/bracket` & `/admin/games`:** Flexible bracket generator (configurable player count, game size 2–4 default 3, per-round advancement, Grand Final vs. Marwan Serry), live advancement topology preview, auto-generation of rounds & games, drag-and-drop + tap-to-assign player seeding, scorer/table/time/segment/Final editor modal, and interactive pan/zoom visual `BracketTrack` preview.
+- [x] **`/admin/segments`, `/admin/content`, `/admin/sponsors`:** Full CRUD, Up/Down + drag reorder, category filtering, preset point chip editor, optional timer toggle, bilingual EN/AR copy, brand-safety text-only sponsor lockups (`Contact us` instead of prices), and enforced Copy-Edit Scope on `/admin/segments` for `content` role.
+- [x] **`/admin/results` & `/admin/audit`:** Chronological results feed (newest/oldest toggle, game/round/player/scorer filters, UTF-8 BOM CSV export) and Super Admin–only Audit Log with entity/actor filters, Before/After structured diff modal, and UTF-8 BOM CSV export.
+- [x] **`/admin/check-in` & `/admin/settings`:** Fast Gate Check-In console (Today's/Upcoming tables + All Players walk-up lookup, 1-tap emerald Check In / Absent / Reset) and Settings form (editable Ramadan 2027 placeholders, bracket defaults, language & Arabic-Indic numeral toggles, Phase 10 Delighters status, and confirmed Reset Demo Data).
+- [x] **Dual-Layer RBAC, RTL, Responsive & Visual Verification:** `47/47` repo-level `PermissionDeniedError` assertions passed, `88/88` Playwright end-to-end assertions passed across all 12 admin routes in EN (LTR) & AR (RTL) at `1440px`, `768px`, `390px`, and `320px` (0 horizontal overflow, 0 console/page errors, `0` Impeccable detector findings), plus post-polish visual screenshot confirmation.
+
 

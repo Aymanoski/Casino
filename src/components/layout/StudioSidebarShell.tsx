@@ -33,6 +33,7 @@ import { gameRepo, settingsRepo } from '@/lib/repos';
 import { cn, localizeText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/dialog';
 import { FanousIcon } from '@/components/motifs/RamadanMotifs';
 import { RoleGuard } from './RoleGuard';
 import { SkipLink } from './SkipLink';
@@ -181,8 +182,9 @@ export function StudioSidebarShell({
   const bottomBarLinks = visibleLinks.slice(0, 3);
 
   const handleResetDemo = async () => {
+    if (!user || user.role !== 'superAdmin') return;
     try {
-      await settingsRepo.resetDemoData(user?.id ?? 'user-admin');
+      await settingsRepo.resetDemoData(user.id);
       setResetMessage(t.common.resetConfirm);
       if (resetTimerRef.current !== null) {
         window.clearTimeout(resetTimerRef.current);
@@ -396,27 +398,46 @@ export function StudioSidebarShell({
 
         {/* Bottom Sidebar Controls */}
         <div className="space-y-2 border-t-2 border-outline/40 bg-red-900/40 p-3">
-          <button
-            type="button"
-            onClick={handleResetDemo}
-            title={t.common.resetDemoData}
-            className={cn(
-              'flex min-h-[44px] w-full items-center justify-center gap-2 rounded-button border-2 border-outline bg-white px-3 py-2 text-xs font-extrabold text-red-900 shadow-sticker-sm sticker-press hover:bg-paper focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
-              !tabletExpanded && 'md:px-0',
-              desktopCollapsed && 'xl:px-0'
-            )}
-          >
-            <RotateCcw className="h-4 w-4 shrink-0 text-red-600" />
-            <span
-              className={cn(
-                'truncate',
-                !tabletExpanded && 'md:hidden',
-                desktopCollapsed ? 'xl:hidden' : 'xl:inline'
-              )}
-            >
-              {t.common.resetDemoData}
-            </span>
-          </button>
+          {user?.role === 'superAdmin' && (
+            <ConfirmDialog
+              destructive
+              title={
+                lang === 'ar'
+                  ? 'إعادة ضبط البيانات التجريبية؟'
+                  : 'Reset Demo Data?'
+              }
+              description={
+                lang === 'ar'
+                  ? 'سيتم مسح جميع التعديلات الحالية واستعادة بيانات بطولة رمضان ٢٠٢٧ التجريبية الأصلية.'
+                  : 'All current edits will be cleared and restored to the original Ramadan 2027 tournament seed.'
+              }
+              confirmLabel={t.common.resetDemoData}
+              cancelLabel={lang === 'ar' ? 'إلغاء' : 'Cancel'}
+              onConfirm={handleResetDemo}
+              trigger={
+                <button
+                  type="button"
+                  title={t.common.resetDemoData}
+                  className={cn(
+                    'flex min-h-[44px] w-full items-center justify-center gap-2 rounded-button border-2 border-outline bg-white px-3 py-2 text-xs font-extrabold text-red-900 shadow-sticker-sm sticker-press hover:bg-paper focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+                    !tabletExpanded && 'md:px-0',
+                    desktopCollapsed && 'xl:px-0'
+                  )}
+                >
+                  <RotateCcw className="h-4 w-4 shrink-0 text-red-600" />
+                  <span
+                    className={cn(
+                      'truncate',
+                      !tabletExpanded && 'md:hidden',
+                      desktopCollapsed ? 'xl:hidden' : 'xl:inline'
+                    )}
+                  >
+                    {t.common.resetDemoData}
+                  </span>
+                </button>
+              }
+            />
+          )}
 
           <Link
             href="/"

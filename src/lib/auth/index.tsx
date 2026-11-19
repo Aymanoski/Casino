@@ -9,7 +9,11 @@ import React, {
   useState,
 } from 'react';
 import type { User, UserRole } from '@/lib/schemas';
-import { userRepo } from '@/lib/repos';
+import {
+  REOPEN_GAME_MANAGER_ROLES,
+  SCORE_HISTORY_MANAGER_ROLES,
+  userRepo,
+} from '@/lib/repos';
 import { realtime } from '@/lib/realtime';
 
 const AUTH_STORAGE_KEY = 'casino_el_al3ab_auth_user_v1';
@@ -61,10 +65,9 @@ export function canAccessPath(role: UserRole | null, pathname: string): boolean 
 
 /**
  * Centralized Scoring History & Table Lifecycle Permissions
- * Add or remove manager roles here as product permissions evolve (no UI rewrites needed).
+ * Re-exported from src/lib/repos/permissions.ts (single source of truth for UI + repo enforcement).
  */
-export const SCORE_HISTORY_MANAGER_ROLES: readonly UserRole[] = ['superAdmin'];
-export const REOPEN_GAME_MANAGER_ROLES: readonly UserRole[] = ['superAdmin'];
+export { SCORE_HISTORY_MANAGER_ROLES, REOPEN_GAME_MANAGER_ROLES };
 
 export function canManageScoreHistory(role: UserRole | null): boolean {
   return Boolean(role && SCORE_HISTORY_MANAGER_ROLES.includes(role));
@@ -142,10 +145,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     loadUsersAndSession();
-    const unsub = realtime.subscribe('data.reset', () => {
+    const unsubReset = realtime.subscribe('data.reset', () => {
       loadUsersAndSession();
     });
-    return unsub;
+    const unsubUsers = realtime.subscribe('user.updated', () => {
+      loadUsersAndSession();
+    });
+    return () => {
+      unsubReset();
+      unsubUsers();
+    };
   }, [loadUsersAndSession]);
 
   const loginAs = useCallback(async (userId: string): Promise<User | null> => {

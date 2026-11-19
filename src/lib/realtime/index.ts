@@ -24,6 +24,10 @@ export type RealtimeEventName =
   | 'game.finished'
   | 'final.revealed'
   | 'player.updated'
+  | 'user.updated'
+  | 'segment.updated'
+  | 'content.updated'
+  | 'sponsor.updated'
   | 'bracket.updated'
   | 'settings.updated'
   | 'data.reset';
@@ -74,6 +78,18 @@ export interface RealtimeEventPayloadMap {
   };
   'player.updated': {
     playerId?: string;
+  };
+  'user.updated': {
+    userId?: string;
+  };
+  'segment.updated': {
+    segmentId?: string;
+  };
+  'content.updated': {
+    contentId?: string;
+  };
+  'sponsor.updated': {
+    sponsorId?: string;
   };
   'bracket.updated': {
     gameId?: string;

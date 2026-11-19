@@ -1,5 +1,6 @@
 import type { AuditEntityType, AuditEntry } from '@/lib/schemas';
 import { storage } from '@/lib/storage';
+import { assertRepoPermission } from './permissions';
 
 export interface RecordAuditInput {
   actorUserId: string;
@@ -17,8 +18,14 @@ export const auditRepo = {
     entityType?: AuditEntityType;
     actorUserId?: string;
     order?: 'newest' | 'oldest';
+    /** When provided, enforces superAdmin-only read permission at repo layer */
+    requesterUserId?: string | null;
   }): Promise<AuditEntry[]> {
     const db = await storage.readSnapshot();
+    if (options && 'requesterUserId' in options) {
+      assertRepoPermission(db, options.requesterUserId, 'audit.read');
+    }
+
     let entries = [...db.auditEntries];
 
     if (options?.entityType) {

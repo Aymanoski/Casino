@@ -176,6 +176,8 @@ export function ScoreChip({
 
   const isButton = interactive || Boolean(onClick);
 
+  const isCompactDigits = displayText.length >= 4;
+
   const chipContent = (
     <span
       className={cn(
@@ -186,7 +188,7 @@ export function ScoreChip({
       <span
         className={cn(
           'inline-flex items-center justify-center gap-0.5 font-score font-black tracking-normal tabular-nums',
-          dims.text,
+          isCompactDigits && size === 'md' ? 'text-sm' : dims.text,
           styles.text
         )}
       >

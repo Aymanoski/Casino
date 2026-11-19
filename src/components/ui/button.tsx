@@ -32,6 +32,9 @@ export const buttonVariants = cva(
         // Clean white surface sticker button
         surface:
           'bg-white text-ink border-2 border-outline shadow-sticker-sm sticker-press hover:bg-paper',
+        // Calm Paper utility button for dense admin tables & toolbars (DESIGN.md §4 & §8)
+        calm:
+          'bg-white text-ink border border-border-paper hover:bg-paper-2 hover:border-red-900/30 active:bg-paper-2',
         // Subtle ghost button adapting to active surface theme
         ghost:
           'text-[color:var(--theme-fg)] hover:bg-red-900/10 border border-transparent',
