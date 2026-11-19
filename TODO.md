@@ -73,15 +73,23 @@ All UI components and pages call async functions in `src/lib/repos/*` and never 
 - `src/components/layout/PublicFooter.tsx` → calls `settingsRepo.get()` + subscribes to `realtime`
 - `src/components/layout/StudioSidebarShell.tsx` → calls `gameRepo.list()`, `settingsRepo.resetDemoData()` + subscribes to `realtime`
 - `src/app/scorer/page.tsx`, `src/app/scorer/[gameId]/page.tsx` & `src/components/scorer/*` → calls `gameRepo.list()` / `get()` / `startGame()` / `changeSegment()` / `updateTimer()` / `finishGame()` / `reopenGame()`, `playerRepo.list()`, `roundRepo.list()` / `get()`, `segmentRepo.list()`, `userRepo.list()`, `settingsRepo.get()`, `scoreRepo.getGameTotals()` / `listByGame()` / `listBuzzByGame()` / `applyScore()` / `undoLastScore()` / `undoScoreEventById()` / `editScoreEvent()` / `deleteScoreEvent()` / `recordBuzz()` / `clearBuzz()` + subscribes to `realtime`
+- `src/app/screen/[gameId]/page.tsx`, `src/app/screen/leaderboard/page.tsx` & `src/components/screen/*` → calls `gameRepo.get()` / `list({ includeDemo: true })`, `playerRepo.list({ includeHost: true })`, `roundRepo.get()` / `list()`, `segmentRepo.list()`, `scoreRepo.getGameTotals()` / `getLeaderboard()`, `settingsRepo.get()` + subscribes to `realtime` and `realtime.onStatusChange()`
 - `src/components/layout/RouteShellPlaceholder.tsx` → calls `playerRepo.list()`, `segmentRepo.list()`, `roundRepo.list()`, `gameRepo.list()`, `scoreRepo.list()`, `scoreRepo.applyScore()`, `auditRepo.list()`, `settingsRepo.get()`, `settingsRepo.resetDemoData()`
 - `src/app/(public)/page.tsx` & `src/components/landing/*` → calls `settingsRepo.get()`, `playerRepo.list()` / `playerRepo.get()`, `gameRepo.list()` / `gameRepo.get()` / `gameRepo.changeSegment()` / `gameRepo.updateTimer()` / `gameRepo.resetDemoGame()`, `roundRepo.list()`, `segmentRepo.list()`, `scoreRepo.list()` / `scoreRepo.getGameTotals()` / `scoreRepo.applyScore()` / `scoreRepo.undoLastScore()` / `scoreRepo.recordBuzz()` / `scoreRepo.clearBuzz()`, `sponsorRepo.list()`
 - `src/app/(public)/styleguide/page.tsx` → calls `playerRepo.list()`, `segmentRepo.list()`, `settingsRepo.get()`
 
 ---
 
-## 3. Realtime Synchronization (`src/lib/realtime/index.ts` → Hosted WebSockets)
+## 3. Realtime Synchronization (`src/lib/realtime/index.ts` → Hosted Multi-Device WebSockets)
 
-- [ ] Replace `BrowserRealtimeTransport` (`BroadcastChannel` + `localStorage` fallback) with a hosted WebSocket/Realtime transport implementing `RealtimeTransport` (`publish`, `subscribe`) so multi-device venue setups (Scorer iPad → Big Screen projector PC) sync over the network.
+All repositories and UI screens communicate exclusively through the `realtime` singleton (`RealtimeBroker`) implementing the `RealtimeTransport` interface (`name`, `connect`, `disconnect`, `getStatus`, `onStatusChange`, `publish`, `subscribe`) with typed payloads (`RealtimeEventPayloadMap`) and message-ID deduplication.
+
+To upgrade from same-browser multi-window sync (`BrowserRealtimeTransport` via `BroadcastChannel` + `storage` fallback) to **multi-device venue sync** (e.g., Scorer iPad → Projector Big Screen PC → Spectator phones):
+
+- [ ] Implement a hosted adapter class (`SupabaseRealtimeTransport`, `AblyRealtimeTransport`, `PusherRealtimeTransport`, or `WebSocketRealtimeTransport`) satisfying `RealtimeTransport` in `src/lib/realtime/`.
+- [ ] Wire the new driver inside `createRealtimeTransport(config: HostedRealtimeConfig)` in `src/lib/realtime/index.ts` (keyed off `NEXT_PUBLIC_REALTIME_DRIVER` / `NEXT_PUBLIC_REALTIME_URL` env vars), or hot-swap at runtime via `setRealtimeTransport(adapter)` without losing active component subscriptions.
+- [ ] Pair with the database swap in §1 so receiving a `score.changed` / `buzz.recorded` / `segment.changed` / `timer.updated` / `game.finished` message causes Big Screens to read canonical state from the shared backend rather than device-local `localStorage`.
+- [ ] Optional: emit `final.revealed` from server/admin workflow when unlocking the Grand Final broadcast reveal (Phase 10 Delighters hook).
 
 ---
 
@@ -138,4 +146,14 @@ All UI components and pages call async functions in `src/lib/repos/*` and never 
 - [x] **Full Scoring History Control & Reopen (Authorized Manager):** Opening **History & Control** as `Super Admin` allows adding a manual adjustment, editing an existing score entry's delta/note, reverting a specific entry, deleting an entry (with destructive confirm), and reopening a finished session (with destructive confirm)—each logged in `auditRepo`; `Scorer` sees the history drawer in read-only inspection mode.
 - [x] **Realtime BroadcastChannel Sync:** Updating buzz/score/segment/timer on `/scorer/game-11` immediately syncs across a second open browser tab listening to realtime updates.
 - [x] **Responsive & Bilingual RTL + Touch Targets (`>= 56px`):** Verified in **EN (LTR)** and **AR (RTL)** across **Tablet Landscape (`1024×768`)**, **Phone Portrait (`390×844` & `360×780`)**, and **Desktop (`1440×900`)** with zero horizontal overflow, zero console errors, and all primary scorer controls `>= 56px` tall (`32/32` Playwright assertions passed + screenshots visually inspected).
+
+---
+
+## 7. Phase 5 Test Checklist — Venue Big Screen (`/screen/[gameId]`) & Broadcast Leaderboard (`/screen/leaderboard`)
+
+- [x] **Broadcast Stage Layout & 10-Meter Legibility (`1920×1080` & `1366×768`):** Full-bleed crimson `SunburstStage` framed inside chasing gold perimeter `MarqueeBulbs` with swaying Ramadan `Lantern` corner accents, pulsing `LIVE` pill, giant dual-language EN + AR segment titles (`>= 52px`), `TimerRing` countdown, and 3 equal-height player broadcast panels with massive glossy-gold tabular `AnimatedNumber` scores (`>= 80px`) and floating `+`/`−` delta badges (`Plus`/`Minus` icons). Locked `100dvh` TV frame with zero vertical/horizontal scroll on desktop/TV and clean scrollable stack on phones (`320px`, `390px`).
+- [x] **Two-Window Side-by-Side Realtime Sync (`/scorer/[gameId]` → `/screen/[gameId]` & `/screen/leaderboard`):** Verified simultaneous live sync across open windows via `/lib/realtime` (`storage`-ordered primary delivery + `BroadcastChannel` fallback with message-ID deduplication): Buzz highlight (`BUZZED FIRST!`), `+10` preset score + floating delta + Broadcast Lower-Third Event Ribbon, live `/screen/leaderboard` rank overtake (`#5 65 → #4 75` with `↑1`/`↓1` pills and Framer Motion `layout` animation), Timer Start/Pause countdown, and Segment Next dual EN/AR title transition.
+- [x] **Grand Final Mode (`game-14` vs. Marwan Serry) & Winner Celebration:** Verified Scheduled `"Coming Up Next / VS Lineup"` slate → automatic live flip when started from Scorer Console → center **Golden Seat** boss layout for Marwan Serry (name only, zero real-person `<img>` photos) → baseline Framer Motion **Victory Stage Champion Celebration** when finished (`delightersEnabled: false` respected for Phase 10).
+- [x] **Presenter Mode & Auto-Hiding Control Pill:** Verified **Presenter Mode** toggle (button + `F` shortcut + `Esc` exit) hides mouse cursor (`cursor-none`) and fades out the floating control pill after 2.2s inactivity and immediately restores both on mouse movement, with Feed Switcher, Leaderboard/Live jump, Realtime Sync dot, and always-reachable `EN | عربي` toggle (`>= 44px × 44px` touch targets).
+- [x] **EN (LTR) & AR (RTL) Parity + Clean Diagnostics:** Verified `74/74` automated Playwright assertions (0 failures, 0 console errors, 0 uncaught page errors), `0` Impeccable detector violations across all new screen files, clean `tsc --noEmit` and `next build`, and visual screenshot inspection across EN/AR desktop, short laptop, mobile, live sync, rank overtake, Final Mode, and Victory Stage.
 

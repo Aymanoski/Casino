@@ -178,3 +178,27 @@
   - Added fast desktop/tablet keyboard shortcuts inside `/scorer/[gameId]` (`1`/`2`/`3` select contestant, `B` buzz selected, `Space` start/pause timer, `Ctrl+Z` undo last score) documented in a clean `?` popover without cluttering the Stage-Dark workspace.
   - Added a dedicated `>= 56px` **`±` Sign Toggle** beside every custom points input (`type="text" inputMode="numeric"`) so scorers on iOS/Android numeric keypads can flip between positive and negative amounts in one tap without hunting for a minus key.
   - Upgraded `StudioSidebarShell` to resolve each scorer's own active/scheduled table dynamically (instead of hardcoding `game-11`) and to yield the bottom safe area on phones when `/scorer/[gameId]` is active so the sticky Action Dock owns the thumb zone cleanly.
+
+---
+
+## Phase 5 Venue Big Screen (`/screen/[gameId]` & `/screen/leaderboard`) Decisions (2026-11-19)
+
+### 27. Full-Bleed Broadcast Frame, Auto-Hiding Control Pill & Presenter Mode
+- **Decision (confirmed via Phase 5 shape interview):**
+  - Both `/screen/[gameId]` and `/screen/leaderboard` render inside a dedicated full-bleed crimson sunburst + chasing gold perimeter `MarqueeBulbs` proscenium (`BroadcastFrame`) flanked by swaying Ramadan `Lantern` corner accents—omitting the standard site `PublicHeader` so the entire `1920px–4K` (`16:9`/`16:10`/`21:9`) viewport locks to `100dvh` with zero page scroll on venue projectors and unlocks vertical scroll cleanly on phones (`320px–430px`) and short landscape windows.
+  - All navigation and controls (Realtime Sync dot, Broadcast Feeds table switcher, Leaderboard/Live toggle, EN/AR language toggle, and **Presenter Mode**) live inside one compact `PresenterControlPill` docked at the bottom edge. Activating **Presenter Mode** (button or `F` key) requests native Fullscreen (with graceful chromeless fallback if blocked), hides the mouse cursor (`cursor-none`), and fades out the control pill after 2.2s of inactivity; moving the mouse, tapping, or pressing `Esc`/`F` restores controls immediately.
+
+### 28. Grand Final Center-Seat Boss Symmetry, Victory Stage & Scheduled Slate
+- **Decision (confirmed via Phase 5 shape interview):**
+  - When `game.isFinal` is true (`game-14`), `BigScreenGameView` visually positions **Marwan Serry** (`isHost: true`, name only, crowned geometric avatar, chasing top marquee strip, gold aura) dead-center between the two finalists (`[Finalist 1 | Marwan Serry | Finalist 2]`) on desktop/TV screens.
+  - Scheduled games (`status === 'scheduled'`) display a dramatic **"Coming Up Next / VS Lineup"** broadcast slate with `VS` casino chip dividers and flip live automatically the instant the scorer starts the session.
+  - Finished games (`status === 'finished'`) transition to a baseline Framer Motion **Victory Stage Celebration** (golden crown banner, marquee-framed Champion Hero Card with pulsing golden halo, animated final scores, and runners-up tally), leaving heavy Phase 10 Delighters (confetti burst, floating lanterns release, screen shake, audio) cleanly off behind `settings.delightersEnabled`.
+
+### 29. Top-3 Podium + 8-Row Two-Column Auto-Cycling Board on `/screen/leaderboard`
+- **Decision (confirmed via Phase 5 shape interview):**
+  - To maintain 10-meter legibility across all 27 contestants without page scrolling on `1366×768` through `4K` displays, `/screen/leaderboard` pairs a **Top-3 Podium Spotlight** (`#2 | #1 elevated | #3` on `md+`) with a **2-column × 4-row (8 players/page)** board cycling across 3 pages (`#4–#11`, `#12–#19`, `#20–#27`) every 8.5s (with Play/Pause, manual Prev/Next, page dots, and Round filter pills, pausing automatically under `prefers-reduced-motion`).
+  - Both podium cards and lower rows use Framer Motion `LayoutGroup` + `layout` animations so live rank swaps physically glide into place. Whenever a live `score.changed` event updates any player on another page, the screen automatically jumps to their page, pulses their row in gold, and flashes their floating `+/-` delta and `▲`/`▼` rank-shift badge.
+
+### 30. Pluggable Realtime Broker & Message Deduplication + Bonus Broadcast Lower-Third
+- **Architecture:** Upgraded `src/lib/realtime/index.ts` with a stable `RealtimeBroker` (`setRealtimeTransport`, `getRealtimeTransport`, `createRealtimeTransport`, `HostedRealtimeConfig`, `RealtimeConnectionStatus`, `onStatusChange`, `RealtimeEventPayloadMap`) and message-ID deduplication in `BrowserRealtimeTransport` so simultaneous `BroadcastChannel` + `storage` events never fire duplicate floating deltas across tabs.
+- **Bonus Idea (Built in Phase 5):** Added a TV-style **Broadcast Lower-Third Event Ribbon** on `/screen/[gameId]` that briefly slides up for 3.4s whenever the scorer awards/deducts points, records a first buzz, or triggers Sudden-Death Tie-Breaker #16—delivering instant crowd context without adding any permanent on-screen clutter.

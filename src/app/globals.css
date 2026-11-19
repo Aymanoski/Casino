@@ -313,6 +313,16 @@ html[dir="rtl"] {
     -webkit-text-stroke: 0.052em var(--red-900);
   }
 
+  /* Condensed score numerals (Bebas Neue) need a crisp slim stroke so the bright gold fill shines from 10m */
+  .font-score.text-gold-sticker {
+    -webkit-text-stroke: 0.042em var(--red-900);
+    filter: drop-shadow(var(--shadow-x-sm) 3px 0 var(--red-900));
+  }
+  .font-score.text-gold-sticker-lg {
+    -webkit-text-stroke: 0.046em var(--red-900);
+    filter: drop-shadow(var(--shadow-x) 4px 0 var(--red-900));
+  }
+
   /* Crisp white sticker headline with maroon outline (for secondary Stage callouts) */
   .text-white-sticker {
     color: var(--white);
