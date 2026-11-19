@@ -229,7 +229,7 @@ export function PlayerPanel({
           {lang === 'ar' ? 'إجمالي النقاط' : 'TOTAL POINTS'}
         </span>
 
-        <div className="relative ms-auto flex items-baseline gap-2">
+        <div className="relative ms-auto flex min-w-0 max-w-full items-baseline gap-2">
           <AnimatePresence>
             {flashDelta && (
               <motion.span
@@ -247,7 +247,7 @@ export function PlayerPanel({
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.35, ease: 'easeOut' }}
                 className={cn(
-                  'inline-flex items-center gap-1 rounded-pill border-2 border-outline px-2.5 py-0.5 font-score text-lg @sm:text-xl font-black tabular-nums shadow-sticker-sm',
+                  'inline-flex shrink-0 items-center gap-1 rounded-pill border-2 border-outline px-2.5 py-0.5 font-score text-lg @sm:text-xl font-black tabular-nums shadow-sticker-sm',
                   flashDelta.delta > 0
                     ? 'bg-positive-soft text-positive-ink'
                     : 'bg-negative text-white'
@@ -271,7 +271,7 @@ export function PlayerPanel({
             value={score}
             useArabicIndicDigits={useArabicIndicDigits}
             className={cn(
-              'font-score font-black leading-none tracking-normal',
+              'min-w-0 truncate font-score font-black leading-none tracking-normal',
               isLargeScreen
                 ? 'text-[clamp(2.5rem,13cqi,5rem)]'
                 : isScorerCard

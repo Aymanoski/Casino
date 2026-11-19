@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
+  AlertTriangle,
   ArrowRight,
   CalendarClock,
   CheckCircle2,
@@ -12,6 +13,7 @@ import {
   MonitorPlay,
   Play,
   Radio,
+  RotateCcw,
   Trophy,
   UserCheck,
   Zap,
@@ -37,7 +39,7 @@ import type {
   Settings,
   User,
 } from '@/lib/schemas';
-import { cn, formatNumber, localizeText } from '@/lib/utils';
+import { cn, formatArabicCount, formatNumber, localizeText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -77,45 +79,70 @@ export function ScorerDashboardView() {
     Record<string, Record<string, number>>
   >({});
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [scorerFilter, setScorerFilter] = useState<string>('all');
+
+  const mountedRef = useRef<boolean>(true);
+  const loadSeqRef = useRef<number>(0);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const isSuperAdmin = user?.role === 'superAdmin';
   const useArabicIndic = settings?.useArabicIndicDigits ?? false;
 
   const loadDashboard = useCallback(async () => {
-    const [allGames, allPlayers, allRounds, allSegments, allUsers, appSettings] =
-      await Promise.all([
-        gameRepo.list(),
-        playerRepo.list({ includeHost: true }),
-        roundRepo.list(),
-        segmentRepo.list(),
-        userRepo.list(),
-        settingsRepo.get(),
-      ]);
+    const seq = ++loadSeqRef.current;
+    try {
+      const [allGames, allPlayers, allRounds, allSegments, allUsers, appSettings] =
+        await Promise.all([
+          gameRepo.list(),
+          playerRepo.list({ includeHost: true }),
+          roundRepo.list(),
+          segmentRepo.list(),
+          userRepo.list(),
+          settingsRepo.get(),
+        ]);
 
-    const scopedGames =
-      user?.role === 'scorer'
-        ? allGames.filter((g) => g.scorerUserId === user.id)
-        : allGames;
+      const scopedGames =
+        user?.role === 'scorer'
+          ? allGames.filter((g) => g.scorerUserId === user.id)
+          : allGames;
 
-    const totalsEntries = await Promise.all(
-      scopedGames.map(async (g) => [g.id, await scoreRepo.getGameTotals(g.id)] as const)
-    );
+      const totalsEntries = await Promise.all(
+        scopedGames.map(async (g) => [g.id, await scoreRepo.getGameTotals(g.id)] as const)
+      );
 
-    const totalsMap: Record<string, Record<string, number>> = {};
-    for (const [gid, map] of totalsEntries) {
-      totalsMap[gid] = map;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
+
+      const totalsMap: Record<string, Record<string, number>> = {};
+      for (const [gid, map] of totalsEntries) {
+        totalsMap[gid] = map;
+      }
+
+      setGames(scopedGames);
+      setPlayers(allPlayers);
+      setRounds(allRounds);
+      setSegments(allSegments);
+      setUsers(allUsers);
+      setSettings(appSettings);
+      setTotalsByGame(totalsMap);
+      setLoadError(null);
+      setLoading(false);
+    } catch (err) {
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
+      setLoadError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Unable to load tournament tables.'
+      );
+      setLoading(false);
     }
-
-    setGames(scopedGames);
-    setPlayers(allPlayers);
-    setRounds(allRounds);
-    setSegments(allSegments);
-    setUsers(allUsers);
-    setSettings(appSettings);
-    setTotalsByGame(totalsMap);
-    setLoading(false);
   }, [user?.id, user?.role]);
 
   useEffect(() => {
@@ -234,7 +261,7 @@ export function ScorerDashboardView() {
       {/* Stage-Dark Top Header */}
       <section className="flex flex-col gap-4 border-b-2 border-red-800 pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0 space-y-2">
-          <h1 className="font-display text-fluid-3xl leading-tight text-white [text-shadow:0_3px_0_#2A0A10]">
+          <h1 className="font-display text-fluid-3xl leading-tight text-white [text-shadow:0_3px_0_var(--ink)]">
             {isSuperAdmin
               ? lang === 'ar'
                 ? 'جميع طاولات التحكيم'
@@ -357,8 +384,45 @@ export function ScorerDashboardView() {
         </div>
       )}
 
+      {/* Error State with Recovery Retry */}
+      {!loading && loadError && (
+        <section
+          role="alert"
+          className="flex flex-col items-center gap-4 rounded-card border-[3px] border-gold-400 bg-red-800 p-6 text-center shadow-sticker"
+        >
+          <span className="flex h-14 w-14 items-center justify-center rounded-pill border-2 border-outline bg-negative text-white shadow-sticker-sm">
+            <AlertTriangle className="h-7 w-7" aria-hidden="true" />
+          </span>
+          <div className="space-y-1.5">
+            <h2 className="font-display text-fluid-xl text-white">
+              {lang === 'ar'
+                ? 'تعذر تحميل طاولات التحكيم'
+                : 'Failed to Load Scoring Tables'}
+            </h2>
+            <p className="max-w-lg text-sm text-red-100 break-words">
+              {lang === 'ar'
+                ? 'حدث خطأ أثناء قراءة بيانات الطاولات. اضغط إعادة المحاولة لتحديث البيانات.'
+                : `We couldn't load the tournament tables (${loadError}). Tap Retry to refresh.`}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="gold"
+            size="scorer"
+            onClick={() => {
+              setLoading(true);
+              setLoadError(null);
+              loadDashboard();
+            }}
+          >
+            <RotateCcw className="h-5 w-5 shrink-0" aria-hidden="true" />
+            <span>{lang === 'ar' ? 'إعادة المحاولة' : 'Try Again'}</span>
+          </Button>
+        </section>
+      )}
+
       {/* Empty State */}
-      {!loading && filteredGames.length === 0 && (
+      {!loading && !loadError && filteredGames.length === 0 && (
         <div className="rounded-card border-[2.5px] border-outline bg-white p-2 shadow-sticker">
           <EmptyState
             title={
@@ -452,7 +516,7 @@ export function ScorerDashboardView() {
                         )}
                       </div>
 
-                      <h3 className="font-display text-fluid-2xl leading-tight text-white">
+                      <h3 className="font-display text-fluid-2xl leading-tight text-white break-words [overflow-wrap:anywhere]">
                         {localizeText(lang, game.tableName, game.tableNameAr)}
                       </h3>
 
@@ -630,7 +694,7 @@ export function ScorerDashboardView() {
 
                     {/* Table Name & Round */}
                     <div className="space-y-1">
-                      <h3 className="font-display text-fluid-xl leading-snug text-white">
+                      <h3 className="font-display text-fluid-xl leading-snug text-white break-words [overflow-wrap:anywhere]">
                         {localizeText(lang, game.tableName, game.tableNameAr)}
                       </h3>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-red-100">
@@ -639,8 +703,17 @@ export function ScorerDashboardView() {
                         )}
                         <span>
                           {lang === 'ar'
-                            ? `${formatNumber(game.segmentIds.length, { useArabicIndicDigits: useArabicIndic })} فقرات`
-                            : `${game.segmentIds.length} segments`}
+                            ? formatArabicCount(
+                                game.segmentIds.length,
+                                {
+                                  one: 'فقرة واحدة',
+                                  two: 'فقرتان',
+                                  few: 'فقرات',
+                                  many: 'فقرة',
+                                },
+                                useArabicIndic
+                              )
+                            : `${game.segmentIds.length} ${game.segmentIds.length === 1 ? 'segment' : 'segments'}`}
                         </span>
                         {isSuperAdmin && scorer && (
                           <span className="inline-flex items-center gap-1 text-white">

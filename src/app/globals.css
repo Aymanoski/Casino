@@ -249,6 +249,13 @@ html[dir="rtl"] {
   select,
   textarea {
     font-size: max(16px, 1rem);
+    caret-color: var(--red-600);
+  }
+
+  /* Branded browser selection highlight */
+  ::selection {
+    background-color: var(--gold-300);
+    color: var(--red-900);
   }
 
   h1,

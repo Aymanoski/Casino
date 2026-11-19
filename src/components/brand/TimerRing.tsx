@@ -93,8 +93,8 @@ export function TimerRing({
         : 'var(--red-600)';
 
   const trackStroke = isStage
-    ? 'rgba(255, 255, 255, 0.22)'
-    : 'rgba(79, 7, 22, 0.14)';
+    ? 'rgb(var(--live-rgb) / 0.22)'
+    : 'var(--border-paper)';
 
   return (
     <div className={cn('inline-flex max-w-full flex-col items-center gap-3', className)}>
@@ -104,9 +104,9 @@ export function TimerRing({
             ? {
                 scale: [1, 1.06, 1],
                 boxShadow: [
-                  '0 0 0 3px #FFFFFF, 0 0 0 6px #4F0716',
-                  '0 0 0 6px #FFFFFF, 0 0 24px rgba(255, 255, 255, 0.9)',
-                  '0 0 0 3px #FFFFFF, 0 0 0 6px #4F0716',
+                  '0 0 0 3px var(--white), 0 0 0 6px var(--red-900)',
+                  '0 0 0 6px var(--white), 0 0 24px rgb(var(--live-rgb) / 0.9)',
+                  '0 0 0 3px var(--white), 0 0 0 6px var(--red-900)',
                 ],
               }
             : { scale: 1 }
@@ -123,14 +123,14 @@ export function TimerRing({
             ? 'bg-red-900 text-white'
             : 'bg-white text-ink',
           isUrgent
-            ? 'border-white ring-4 ring-white/85'
+            ? 'border-white ring-4 ring-white/90 shadow-[0_0_0_6px_var(--outline)]'
             : 'border-outline shadow-sticker'
         )}
         role="timer"
-        aria-live="polite"
+        aria-live="off"
         aria-label={
           lang === 'ar'
-            ? `متبقي ${clampedRemaining} ثانية`
+            ? `متبقي ${formatNumber(clampedRemaining, { useArabicIndicDigits })} ثانية`
             : `${clampedRemaining} seconds remaining`
         }
       >

@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
+  AlertCircle,
   AlertTriangle,
   ArrowLeft,
   CalendarClock,
@@ -54,7 +55,13 @@ import type {
   Settings,
   User,
 } from '@/lib/schemas';
-import { cn, formatNumber, localizeText } from '@/lib/utils';
+import {
+  cn,
+  formatNumber,
+  localizeText,
+  normalizeNumericInput,
+  parseSignedIntegerInput,
+} from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/dialog';
@@ -99,6 +106,10 @@ function formatDateTime(
   }).format(d);
 }
 
+const NOTE_MAX_LENGTH = 140;
+const DELTA_MIN = -10000;
+const DELTA_MAX = 10000;
+
 export function ScorerConsoleView({ gameId }: { gameId: string }) {
   const { user } = useAuth();
   const { lang } = useI18n();
@@ -114,7 +125,9 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
   const [scoreEvents, setScoreEvents] = useState<ScoreEvent[]>([]);
   const [buzzEvents, setBuzzEvents] = useState<BuzzEvent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<boolean>(false);
+  const [liveAnnouncement, setLiveAnnouncement] = useState<string>('');
 
   // Selected target player for Action Dock
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('');
@@ -125,11 +138,20 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
   // Custom score input & mobile expandable drawer inside sticky dock
   const [customPoints, setCustomPoints] = useState<string>('15');
   const [customNote, setCustomNote] = useState<string>('');
+  const [customError, setCustomError] = useState<string | null>(null);
   const [mobileCustomOpen, setMobileCustomOpen] = useState<boolean>(false);
 
   // Timer live display seconds
   const [displayRemainingSec, setDisplayRemainingSec] = useState<number>(45);
   const timerExpireHandledRef = useRef<boolean>(false);
+  const timerWarnAnnouncedRef = useRef<boolean>(false);
+
+  // Concurrency, unmount, and timeout cleanup guards
+  const mountedRef = useRef<boolean>(true);
+  const loadSeqRef = useRef<number>(0);
+  const busyRef = useRef<boolean>(false);
+  const deltaTimeoutsRef = useRef<Record<string, number>>({});
+  const shortcutsRef = useRef<HTMLDivElement | null>(null);
 
   // Tie-breaker alert state (captures tied player IDs when auto-triggered)
   const [tieBreakerPlayerIds, setTieBreakerPlayerIds] = useState<string[]>([]);
@@ -148,71 +170,122 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
   const canManageHistory = canManageScoreHistory(user?.role ?? null);
   const canReopen = canReopenFinishedGame(user?.role ?? null);
 
+  useEffect(() => {
+    mountedRef.current = true;
+    const timeoutsMap = deltaTimeoutsRef.current;
+    return () => {
+      mountedRef.current = false;
+      Object.values(timeoutsMap).forEach((tid) => window.clearTimeout(tid));
+    };
+  }, []);
+
+  // Escape & outside-click dismissal for Keyboard Shortcuts popover
+  useEffect(() => {
+    if (!shortcutsOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (
+        shortcutsRef.current &&
+        !shortcutsRef.current.contains(e.target as Node)
+      ) {
+        setShortcutsOpen(false);
+      }
+    };
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShortcutsOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onEscape);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onEscape);
+    };
+  }, [shortcutsOpen]);
+
   const loadConsoleState = useCallback(async () => {
-    const [
-      loadedGame,
-      loadedPlayers,
-      loadedSegments,
-      loadedUsers,
-      loadedSettings,
-      gameTotals,
-      gameScores,
-      gameBuzzes,
-    ] = await Promise.all([
-      gameRepo.get(gameId),
-      playerRepo.list({ includeHost: true }),
-      segmentRepo.list(),
-      userRepo.list(),
-      settingsRepo.get(),
-      scoreRepo.getGameTotals(gameId),
-      scoreRepo.listByGame(gameId),
-      scoreRepo.listBuzzByGame(gameId),
-    ]);
+    const seq = ++loadSeqRef.current;
+    try {
+      const [
+        loadedGame,
+        loadedPlayers,
+        loadedSegments,
+        loadedUsers,
+        loadedSettings,
+        gameTotals,
+        gameScores,
+        gameBuzzes,
+      ] = await Promise.all([
+        gameRepo.get(gameId),
+        playerRepo.list({ includeHost: true }),
+        segmentRepo.list(),
+        userRepo.list(),
+        settingsRepo.get(),
+        scoreRepo.getGameTotals(gameId),
+        scoreRepo.listByGame(gameId),
+        scoreRepo.listBuzzByGame(gameId),
+      ]);
 
-    let loadedRound: Round | null = null;
-    if (loadedGame) {
-      loadedRound = await roundRepo.get(loadedGame.roundId);
-
-      // Sync timer remaining seconds
-      if (loadedGame.timer?.status === 'running' && loadedGame.timer.endsAt) {
-        const left = Math.max(
-          0,
-          Math.ceil(
-            (new Date(loadedGame.timer.endsAt).getTime() - Date.now()) / 1000
-          )
-        );
-        setDisplayRemainingSec(left);
-        if (left > 0) timerExpireHandledRef.current = false;
-      } else if (loadedGame.timer) {
-        setDisplayRemainingSec(loadedGame.timer.remainingSec);
-      } else {
-        const segId = loadedGame.segmentIds[loadedGame.currentSegmentIndex];
-        const seg = loadedSegments.find((s) => s.id === segId);
-        setDisplayRemainingSec(seg?.durationSec ?? 45);
+      let loadedRound: Round | null = null;
+      if (loadedGame) {
+        loadedRound = await roundRepo.get(loadedGame.roundId);
       }
 
-      setSelectedPlayerId((prev) => {
-        if (prev && loadedGame.playerIds.includes(prev)) return prev;
-        if (
-          loadedGame.activeBuzzPlayerId &&
-          loadedGame.playerIds.includes(loadedGame.activeBuzzPlayerId)
-        ) {
-          return loadedGame.activeBuzzPlayerId;
-        }
-        return loadedGame.playerIds[0] ?? '';
-      });
-    }
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
 
-    setGame(loadedGame);
-    setRound(loadedRound);
-    setAllPlayers(loadedPlayers);
-    setAllSegments(loadedSegments);
-    setAllUsers(loadedUsers);
-    setSettings(loadedSettings);
-    setTotals(gameTotals);
-    setScoreEvents(gameScores);
-    setBuzzEvents(gameBuzzes);
-    setLoading(false);
+      if (loadedGame) {
+        // Sync timer remaining seconds
+        if (loadedGame.timer?.status === 'running' && loadedGame.timer.endsAt) {
+          const left = Math.max(
+            0,
+            Math.ceil(
+              (new Date(loadedGame.timer.endsAt).getTime() - Date.now()) / 1000
+            )
+          );
+          setDisplayRemainingSec(left);
+          if (left > 0) timerExpireHandledRef.current = false;
+          if (left > 5) timerWarnAnnouncedRef.current = false;
+        } else if (loadedGame.timer) {
+          setDisplayRemainingSec(loadedGame.timer.remainingSec);
+          if (loadedGame.timer.remainingSec > 5) {
+            timerWarnAnnouncedRef.current = false;
+          }
+        } else {
+          const segId = loadedGame.segmentIds[loadedGame.currentSegmentIndex];
+          const seg = loadedSegments.find((s) => s.id === segId);
+          setDisplayRemainingSec(seg?.durationSec ?? 45);
+        }
+
+        setSelectedPlayerId((prev) => {
+          if (prev && loadedGame.playerIds.includes(prev)) return prev;
+          if (
+            loadedGame.activeBuzzPlayerId &&
+            loadedGame.playerIds.includes(loadedGame.activeBuzzPlayerId)
+          ) {
+            return loadedGame.activeBuzzPlayerId;
+          }
+          return loadedGame.playerIds[0] ?? '';
+        });
+      }
+
+      setGame(loadedGame);
+      setRound(loadedRound);
+      setAllPlayers(loadedPlayers);
+      setAllSegments(loadedSegments);
+      setAllUsers(loadedUsers);
+      setSettings(loadedSettings);
+      setTotals(gameTotals);
+      setScoreEvents(gameScores);
+      setBuzzEvents(gameBuzzes);
+      setLoadError(null);
+      setLoading(false);
+    } catch (err) {
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
+      setLoadError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Failed to read session data.'
+      );
+      setLoading(false);
+    }
   }, [gameId]);
 
   useEffect(() => {
@@ -243,25 +316,40 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
     const tick = () => {
       const left = Math.max(0, Math.ceil((endsAtMs - Date.now()) / 1000));
       setDisplayRemainingSec(left);
+      if (left > 0 && left <= 5 && !timerWarnAnnouncedRef.current) {
+        timerWarnAnnouncedRef.current = true;
+        setLiveAnnouncement(
+          lang === 'ar'
+            ? 'تحذير: آخر 5 ثوانٍ في المؤقت'
+            : 'Warning: 5 seconds remaining on segment timer'
+        );
+      }
       if (left === 0 && !timerExpireHandledRef.current) {
         timerExpireHandledRef.current = true;
-        gameRepo.updateTimer(
-          game.id,
-          {
-            status: 'paused',
-            durationSec,
-            remainingSec: 0,
-            endsAt: null,
-          },
-          user?.id
+        setLiveAnnouncement(
+          lang === 'ar' ? 'انتهى وقت الفقرة' : 'Segment timer expired'
         );
+        gameRepo
+          .updateTimer(
+            game.id,
+            {
+              status: 'paused',
+              durationSec,
+              remainingSec: 0,
+              endsAt: null,
+            },
+            user?.id
+          )
+          .catch(() => {
+            // Keep local 0s display if storage write fails
+          });
       }
     };
 
     tick();
     const intervalId = window.setInterval(tick, 250);
     return () => window.clearInterval(intervalId);
-  }, [game?.id, game?.timer, user?.id]);
+  }, [game?.id, game?.timer, user?.id, lang]);
 
   // Derived entities
   const seatedPlayers = useMemo(() => {
@@ -384,35 +472,71 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
     );
   }, [nextUndoableEvent, seatedPlayers]);
 
-  const flashPlayerDelta = (playerId: string, delta: number) => {
-    setRecentDeltaByPlayer((prev) => ({ ...prev, [playerId]: delta }));
-    window.setTimeout(() => {
-      setRecentDeltaByPlayer((prev) => ({ ...prev, [playerId]: null }));
-    }, 1600);
-  };
+  const formatSignedDelta = useCallback(
+    (delta: number) => {
+      const absStr = formatNumber(Math.abs(delta), {
+        useArabicIndicDigits: useArabicIndic,
+      });
+      return delta > 0 ? `+${absStr}` : `−${absStr}`;
+    },
+    [useArabicIndic]
+  );
 
-  // Actions
+  const flashPlayerDelta = useCallback((playerId: string, delta: number) => {
+    setRecentDeltaByPlayer((prev) => ({ ...prev, [playerId]: delta }));
+    if (deltaTimeoutsRef.current[playerId]) {
+      window.clearTimeout(deltaTimeoutsRef.current[playerId]);
+    }
+    deltaTimeoutsRef.current[playerId] = window.setTimeout(() => {
+      if (!mountedRef.current) return;
+      setRecentDeltaByPlayer((prev) => ({ ...prev, [playerId]: null }));
+      delete deltaTimeoutsRef.current[playerId];
+    }, 1600);
+  }, []);
+
+  const notifyActionError = useCallback(
+    (actionEn: string, actionAr: string) => {
+      toast({
+        variant: 'negative',
+        title: lang === 'ar' ? `تعذر ${actionAr}` : `Failed to ${actionEn}`,
+        description:
+          lang === 'ar'
+            ? 'حدث خطأ أثناء حفظ البيانات. حاول مرة أخرى.'
+            : 'Could not save the update. Please try again.',
+      });
+    },
+    [toast, lang]
+  );
+
+  // Actions (guarded with synchronous busyRef to prevent rapid double-tap race conditions)
   const handleStartGame = async () => {
-    if (!game || !user || busyAction) return;
+    if (!game || !user || busyRef.current) return;
+    busyRef.current = true;
     setBusyAction(true);
     try {
       await gameRepo.startGame(game.id, user.id);
       await loadConsoleState();
+      const msg = lang === 'ar' ? 'بدأت الجلسة المباشرة!' : 'Live session started!';
+      setLiveAnnouncement(msg);
       toast({
         variant: 'gold',
-        title: lang === 'ar' ? 'بدأت الجلسة المباشرة!' : 'Live session started!',
+        title: msg,
         description: localizeText(lang, game.tableName, game.tableNameAr),
       });
+    } catch {
+      notifyActionError('start session', 'بدء الجلسة');
     } finally {
-      setBusyAction(false);
+      busyRef.current = false;
+      if (mountedRef.current) setBusyAction(false);
     }
   };
 
   const handleBuzz = useCallback(
     async (player: Player) => {
-      if (!game || !currentSegment || !user || busyAction || game.status !== 'live') {
+      if (!game || !currentSegment || !user || busyRef.current || game.status !== 'live') {
         return;
       }
+      busyRef.current = true;
       setBusyAction(true);
       try {
         setSelectedPlayerId(player.id);
@@ -423,33 +547,45 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
           byUserId: user.id,
         });
         await loadConsoleState();
+        const title =
+          lang === 'ar'
+            ? `${player.fullNameAr} ضغط الجرس أولاً!`
+            : `${player.fullName} buzzed first!`;
+        setLiveAnnouncement(title);
         toast({
           variant: 'gold',
-          title:
-            lang === 'ar'
-              ? `${player.fullNameAr} ضغط الجرس أولاً!`
-              : `${player.fullName} buzzed first!`,
+          title,
           description:
             lang === 'ar'
               ? 'تم تحديده تلقائياً لتطبيق النقاط ومزامنة الشاشة.'
               : 'Auto-selected for scoring & synced to Big Screen.',
           durationMs: 2200,
         });
+      } catch {
+        notifyActionError('record buzz', 'تسجيل الجرس');
       } finally {
-        setBusyAction(false);
+        busyRef.current = false;
+        if (mountedRef.current) setBusyAction(false);
       }
     },
-    [game, currentSegment, user, busyAction, loadConsoleState, toast, lang]
+    [game, currentSegment, user, loadConsoleState, toast, lang, notifyActionError]
   );
 
   const handleClearBuzz = async () => {
-    if (!game || !user || busyAction) return;
+    if (!game || !user || busyRef.current) return;
+    busyRef.current = true;
     setBusyAction(true);
     try {
       await scoreRepo.clearBuzz(game.id, user.id);
       await loadConsoleState();
+      setLiveAnnouncement(
+        lang === 'ar' ? 'تم مسح إشارة الجرس النشطة' : 'Active buzz highlight cleared'
+      );
+    } catch {
+      notifyActionError('clear buzz', 'مسح الجرس');
     } finally {
-      setBusyAction(false);
+      busyRef.current = false;
+      if (mountedRef.current) setBusyAction(false);
     }
   };
 
@@ -460,40 +596,49 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
         !currentSegment ||
         !selectedPlayer ||
         !user ||
-        busyAction ||
+        busyRef.current ||
         game.status !== 'live' ||
         Number.isNaN(delta) ||
         delta === 0
       ) {
-        return;
+        return false;
       }
+      busyRef.current = true;
       setBusyAction(true);
       try {
+        const cleanNote = note?.trim().slice(0, NOTE_MAX_LENGTH) || undefined;
         await scoreRepo.applyScore({
           gameId: game.id,
           segmentId: currentSegment.id,
           playerId: selectedPlayer.id,
           delta,
-          note: note?.trim() || undefined,
+          note: cleanNote,
           kind,
           byUserId: user.id,
         });
         flashPlayerDelta(selectedPlayer.id, delta);
         await loadConsoleState();
-        const signStr = delta > 0 ? `+${delta}` : `−${Math.abs(delta)}`;
+        const signStr = formatSignedDelta(delta);
+        const title =
+          lang === 'ar'
+            ? `${signStr} نقطة ← ${selectedPlayer.fullNameAr}`
+            : `${signStr} pts → ${selectedPlayer.fullName}`;
+        setLiveAnnouncement(title);
         toast({
           variant: delta > 0 ? 'positive' : 'negative',
-          title:
-            lang === 'ar'
-              ? `${signStr} نقطة ← ${selectedPlayer.fullNameAr}`
-              : `${signStr} pts → ${selectedPlayer.fullName}`,
+          title,
           description:
-            note?.trim() ||
+            cleanNote ||
             localizeText(lang, currentSegment.nameEn, currentSegment.nameAr),
           durationMs: 2200,
         });
+        return true;
+      } catch {
+        notifyActionError('apply points', 'احتساب النقاط');
+        return false;
       } finally {
-        setBusyAction(false);
+        busyRef.current = false;
+        if (mountedRef.current) setBusyAction(false);
       }
     },
     [
@@ -501,37 +646,49 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
       currentSegment,
       selectedPlayer,
       user,
-      busyAction,
+      flashPlayerDelta,
       loadConsoleState,
+      formatSignedDelta,
       toast,
       lang,
+      notifyActionError,
     ]
   );
 
   const handleCustomSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const parsed = parseInt(customPoints, 10);
-    if (Number.isNaN(parsed) || parsed === 0) {
-      toast({
-        variant: 'negative',
-        title:
-          lang === 'ar'
-            ? 'أدخل رقماً صحيحاً غير الصفر'
-            : 'Enter a valid non-zero number',
-        description:
-          lang === 'ar'
-            ? 'استخدم زر ± لتبديل الإشارة الموجبة أو السالبة.'
-            : 'Use the ± button to switch between positive and negative points.',
-      });
+    const parsed = parseSignedIntegerInput(customPoints, {
+      min: DELTA_MIN,
+      max: DELTA_MAX,
+    });
+    if (!parsed.ok) {
+      const maxStr = formatNumber(DELTA_MAX, { useArabicIndicDigits: useArabicIndic });
+      const msg =
+        parsed.reason === 'range'
+          ? lang === 'ar'
+            ? `أدخل قيمة بين -${maxStr} و +${maxStr}.`
+            : `Enter a value between -${maxStr} and +${maxStr}.`
+          : parsed.reason === 'zero'
+            ? lang === 'ar'
+              ? 'القيمة لا يمكن أن تكون صفراً.'
+              : 'Points cannot be 0.'
+            : lang === 'ar'
+              ? 'أدخل عدداً صحيحاً غير الصفر (مثال: 15 أو -5 أو ١٥).'
+              : 'Enter a non-zero whole number (e.g. 15 or -5).';
+      setCustomError(msg);
       return;
     }
-    await handleApplyPoints(parsed, 'custom', customNote);
-    setCustomNote('');
-    setMobileCustomOpen(false);
+    setCustomError(null);
+    const ok = await handleApplyPoints(parsed.value, 'custom', customNote);
+    if (ok) {
+      setCustomNote('');
+      setMobileCustomOpen(false);
+    }
   };
 
   const handleUndoLast = useCallback(async () => {
-    if (!game || !user || !nextUndoableEvent || busyAction) return;
+    if (!game || !user || !nextUndoableEvent || busyRef.current) return;
+    busyRef.current = true;
     setBusyAction(true);
     try {
       const undone = await scoreRepo.undoLastScore(game.id, user.id, {
@@ -540,69 +697,100 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
       if (undone) {
         flashPlayerDelta(undone.playerId, undone.delta);
         await loadConsoleState();
+        const title =
+          lang === 'ar' ? 'تم التراجع عن آخر حركة' : 'Last action undone';
+        setLiveAnnouncement(title);
         toast({
           variant: 'info',
-          title:
-            lang === 'ar' ? 'تم التراجع عن آخر حركة' : 'Last action undone',
+          title,
           description: undone.note,
           durationMs: 2400,
         });
       }
+    } catch {
+      notifyActionError('undo last score', 'التراجع عن آخر حركة');
     } finally {
-      setBusyAction(false);
+      busyRef.current = false;
+      if (mountedRef.current) setBusyAction(false);
     }
-  }, [game, user, nextUndoableEvent, busyAction, loadConsoleState, toast, lang]);
+  }, [
+    game,
+    user,
+    nextUndoableEvent,
+    flashPlayerDelta,
+    loadConsoleState,
+    toast,
+    lang,
+    notifyActionError,
+  ]);
 
   const handleTimerStart = useCallback(async () => {
     if (!game || !currentSegment || !user || game.status !== 'live') return;
     const dur = game.timer?.durationSec ?? currentSegment.durationSec ?? 45;
     const rem = displayRemainingSec > 0 ? displayRemainingSec : dur;
     timerExpireHandledRef.current = false;
-    await gameRepo.updateTimer(
-      game.id,
-      {
-        status: 'running',
-        durationSec: dur,
-        remainingSec: rem,
-        endsAt: new Date(Date.now() + rem * 1000).toISOString(),
-      },
-      user.id
-    );
-    await loadConsoleState();
-  }, [game, currentSegment, user, displayRemainingSec, loadConsoleState]);
+    if (rem > 5) timerWarnAnnouncedRef.current = false;
+    try {
+      await gameRepo.updateTimer(
+        game.id,
+        {
+          status: 'running',
+          durationSec: dur,
+          remainingSec: rem,
+          endsAt: new Date(Date.now() + rem * 1000).toISOString(),
+        },
+        user.id
+      );
+      setLiveAnnouncement(lang === 'ar' ? 'بدأ مؤقت الفقرة' : 'Segment timer started');
+      await loadConsoleState();
+    } catch {
+      notifyActionError('start timer', 'بدء المؤقت');
+    }
+  }, [game, currentSegment, user, displayRemainingSec, loadConsoleState, lang, notifyActionError]);
 
   const handleTimerPause = useCallback(async () => {
     if (!game || !currentSegment || !user) return;
     const dur = game.timer?.durationSec ?? currentSegment.durationSec ?? 45;
-    await gameRepo.updateTimer(
-      game.id,
-      {
-        status: 'paused',
-        durationSec: dur,
-        remainingSec: displayRemainingSec,
-        endsAt: null,
-      },
-      user.id
-    );
-    await loadConsoleState();
-  }, [game, currentSegment, user, displayRemainingSec, loadConsoleState]);
+    try {
+      await gameRepo.updateTimer(
+        game.id,
+        {
+          status: 'paused',
+          durationSec: dur,
+          remainingSec: displayRemainingSec,
+          endsAt: null,
+        },
+        user.id
+      );
+      setLiveAnnouncement(lang === 'ar' ? 'تم إيقاف المؤقت مؤقتاً' : 'Segment timer paused');
+      await loadConsoleState();
+    } catch {
+      notifyActionError('pause timer', 'إيقاف المؤقت');
+    }
+  }, [game, currentSegment, user, displayRemainingSec, loadConsoleState, lang, notifyActionError]);
 
   const executeTimerReset = async () => {
     if (!game || !currentSegment || !user) return;
     const dur = currentSegment.durationSec ?? 45;
     timerExpireHandledRef.current = false;
-    await gameRepo.updateTimer(
-      game.id,
-      {
-        status: 'idle',
-        durationSec: dur,
-        remainingSec: dur,
-        endsAt: null,
-      },
-      user.id
-    );
-    setDisplayRemainingSec(dur);
-    await loadConsoleState();
+    timerWarnAnnouncedRef.current = false;
+    try {
+      await gameRepo.updateTimer(
+        game.id,
+        {
+          status: 'idle',
+          durationSec: dur,
+          remainingSec: dur,
+          endsAt: null,
+        },
+        user.id
+      );
+      setDisplayRemainingSec(dur);
+      setLiveAnnouncement(lang === 'ar' ? 'تمت إعادة ضبط المؤقت' : 'Segment timer reset');
+      await loadConsoleState();
+    } catch {
+      notifyActionError('reset timer', 'إعادة ضبط المؤقت');
+    }
   };
 
   const handleTimerResetClick = () => {
@@ -614,14 +802,27 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
   };
 
   const executeSegmentChange = async (nextIndex: number) => {
-    if (!game || !user || busyAction) return;
+    if (!game || !user || busyRef.current) return;
+    busyRef.current = true;
     setBusyAction(true);
     try {
       await gameRepo.changeSegment(game.id, nextIndex, user.id);
       await loadConsoleState();
+      const targetSegId = game.segmentIds[nextIndex];
+      const targetSeg = allSegments.find((s) => s.id === targetSegId);
+      setLiveAnnouncement(
+        lang === 'ar'
+          ? `الفقرة ${nextIndex + 1}: ${targetSeg?.nameAr ?? ''}`
+          : `Segment ${nextIndex + 1}: ${targetSeg?.nameEn ?? ''}`
+      );
+    } catch {
+      notifyActionError('switch segment', 'تغيير الفقرة');
     } finally {
-      setBusyAction(false);
-      setPendingSegmentIndex(null);
+      busyRef.current = false;
+      if (mountedRef.current) {
+        setBusyAction(false);
+        setPendingSegmentIndex(null);
+      }
     }
   };
 
@@ -637,7 +838,8 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
   };
 
   const handleConfirmFinish = async () => {
-    if (!game || !user || busyAction) return;
+    if (!game || !user || busyRef.current) return;
+    busyRef.current = true;
     setBusyAction(true);
     try {
       const result = await gameRepo.finishGame(game.id, user.id, {
@@ -656,15 +858,17 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
             return p ? localizeText(lang, p.fullName, p.fullNameAr) : pid;
           })
           .join(lang === 'ar' ? ' و ' : ' & ');
+        const title =
+          lang === 'ar'
+            ? 'تعادل! تم فتح جولة الحسم تلقائياً'
+            : 'Qualifying Tie! Tie-Breaker #16 Opened';
+        setLiveAnnouncement(title);
         toast({
           variant: 'gold',
-          title:
-            lang === 'ar'
-              ? 'تعادل! تم فتح جولة الحسم تلقائياً'
-              : 'Qualifying Tie! Tie-Breaker #16 Opened',
+          title,
           description:
             lang === 'ar'
-              ? `تعادل بين ${names} — جولة التحدي الفاصلة (٣٠ ثانية) جاهزة الآن.`
+              ? `تعادل بين ${names} — جولة التحدي الفاصلة (${formatNumber(30, { useArabicIndicDigits: useArabicIndic })} ثانية) جاهزة الآن.`
               : `Tie between ${names} — sudden-death Tie-Breaker (30s) inserted automatically.`,
           durationMs: 5000,
         });
@@ -673,12 +877,14 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
         const winner = allPlayers.find(
           (p) => p.id === result.game.winnerPlayerId
         );
+        const title =
+          lang === 'ar'
+            ? `انتهت الجلسة — الفائز: ${winner?.fullNameAr ?? ''}`
+            : `Session Finished — Winner: ${winner?.fullName ?? ''}`;
+        setLiveAnnouncement(title);
         toast({
           variant: 'positive',
-          title:
-            lang === 'ar'
-              ? `انتهت الجلسة — الفائز: ${winner?.fullNameAr ?? ''}`
-              : `Session Finished — Winner: ${winner?.fullName ?? ''}`,
+          title,
           description:
             lang === 'ar'
               ? 'تم تحديث لوحة الصدارة وشجرة البطولة وسجل المراجعة.'
@@ -686,45 +892,55 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
           durationMs: 4500,
         });
       }
+    } catch {
+      notifyActionError('finish game', 'إنهاء الجلسة');
     } finally {
-      setBusyAction(false);
+      busyRef.current = false;
+      if (mountedRef.current) setBusyAction(false);
     }
   };
 
   const handleConfirmReopen = async () => {
-    if (!game || !user || busyAction || !canReopen) return;
+    if (!game || !user || busyRef.current || !canReopen) return;
+    busyRef.current = true;
     setBusyAction(true);
     try {
       await gameRepo.reopenGame(game.id, user.id);
       await loadConsoleState();
+      const title =
+        lang === 'ar'
+          ? 'تمت إعادة فتح الجلسة للتعديل'
+          : 'Session reopened for live scoring';
+      setLiveAnnouncement(title);
       toast({
         variant: 'info',
-        title:
-          lang === 'ar'
-            ? 'تمت إعادة فتح الجلسة للتعديل'
-            : 'Session reopened for live scoring',
+        title,
         description:
           lang === 'ar'
             ? 'تم تسجيل الإجراء في سجل المراجعة.'
             : 'Reopen action logged in Audit Log.',
       });
+    } catch {
+      notifyActionError('reopen session', 'إعادة فتح الجلسة');
     } finally {
-      setBusyAction(false);
+      busyRef.current = false;
+      if (mountedRef.current) setBusyAction(false);
     }
   };
 
   const toggleCustomSign = () => {
-    const trimmed = customPoints.trim();
-    if (!trimmed) {
+    if (customError) setCustomError(null);
+    const normalized = normalizeNumericInput(customPoints);
+    if (!normalized) {
       setCustomPoints('-');
       return;
     }
-    if (trimmed.startsWith('-')) {
-      setCustomPoints(trimmed.slice(1));
-    } else if (trimmed.startsWith('+')) {
-      setCustomPoints(`-${trimmed.slice(1)}`);
+    if (normalized.startsWith('-')) {
+      setCustomPoints(normalized.slice(1));
+    } else if (normalized.startsWith('+')) {
+      setCustomPoints(`-${normalized.slice(1)}`);
     } else {
-      setCustomPoints(`-${trimmed}`);
+      setCustomPoints(`-${normalized}`);
     }
   };
 
@@ -799,6 +1015,57 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
         </div>
         <Skeleton className="h-28 w-full rounded-card bg-red-800" />
       </div>
+    );
+  }
+
+  // 1b. Load Error Recovery State
+  if (loadError) {
+    return (
+      <section
+        role="alert"
+        className="mx-auto max-w-2xl py-6"
+      >
+        <div className="space-y-5 rounded-card border-[3px] border-gold-400 bg-red-800 p-6 sm:p-8 text-center shadow-sticker-lg">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-pill border-[2.5px] border-outline bg-negative text-white shadow-sticker-sm">
+            <AlertTriangle className="h-8 w-8" aria-hidden="true" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="font-display text-fluid-2xl text-white">
+              {lang === 'ar'
+                ? 'تعذر تحميل لوحة التحكيم'
+                : 'Could Not Load Scorer Console'}
+            </h1>
+            <p className="text-sm sm:text-base text-red-100 leading-relaxed break-words">
+              {lang === 'ar'
+                ? 'حدث خطأ أثناء قراءة بيانات هذه الجلسة. اضغط إعادة المحاولة لاستئناف التحكيم.'
+                : `An error occurred loading session "${gameId}" (${loadError}). Tap Retry to recover.`}
+            </p>
+          </div>
+          <div className="flex flex-col xs:flex-row flex-wrap justify-center gap-3 pt-2">
+            <Button
+              type="button"
+              variant="gold"
+              size="scorer"
+              onClick={() => {
+                setLoading(true);
+                setLoadError(null);
+                loadConsoleState();
+              }}
+            >
+              <RotateCcw className="h-5 w-5" aria-hidden="true" />
+              <span>{lang === 'ar' ? 'إعادة المحاولة' : 'Try Again'}</span>
+            </Button>
+            <Button asChild variant="secondary" size="scorer">
+              <Link href="/scorer">
+                <ArrowLeft className="h-5 w-5 rtl:rotate-180" aria-hidden="true" />
+                <span>
+                  {lang === 'ar' ? 'العودة إلى طاولاتي' : 'Back to My Tables'}
+                </span>
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </section>
     );
   }
 
@@ -893,6 +1160,11 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
         game.status === 'live' && 'pb-52 md:pb-3'
       )}
     >
+      {/* Screen-reader polite status announcer for live scoring, buzzes, segments & timer milestones */}
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {liveAnnouncement}
+      </div>
+
       {/* Top Session Command Strip */}
       <header className="flex flex-col gap-2.5 border-b-2 border-red-800 pb-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-1 items-start gap-2.5 sm:items-center">
@@ -910,7 +1182,7 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
 
           <div className="min-w-0 flex-1 space-y-0.5">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-display text-fluid-xl leading-tight text-white md:truncate">
+              <h1 className="font-display text-fluid-xl leading-tight text-white break-words [overflow-wrap:anywhere] md:truncate">
                 {localizeText(lang, game.tableName, game.tableNameAr)}
               </h1>
               {game.status === 'live' ? (
@@ -992,13 +1264,14 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
           </Button>
 
           {game.status === 'live' && (
-            <div className="relative hidden lg:block">
+            <div ref={shortcutsRef} className="relative hidden lg:block">
               <Button
                 type="button"
                 variant="surface"
                 size="icon"
                 className="h-11 w-11"
                 aria-expanded={shortcutsOpen}
+                aria-haspopup="dialog"
                 aria-label={
                   lang === 'ar' ? 'اختصارات لوحة المفاتيح' : 'Keyboard shortcuts'
                 }
@@ -1007,8 +1280,12 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                 <Keyboard className="h-5 w-5" aria-hidden="true" />
               </Button>
               {shortcutsOpen && (
-                <div className="absolute end-0 top-14 z-40 w-64 rounded-card border-[2.5px] border-outline bg-white p-4 text-ink shadow-sticker-lg">
-                  <div className="mb-2 flex items-center justify-between">
+                <div
+                  role="dialog"
+                  aria-label={lang === 'ar' ? 'اختصارات لوحة المفاتيح' : 'Keyboard shortcuts'}
+                  className="absolute end-0 top-14 z-40 w-64 rounded-card border-[2.5px] border-outline bg-white p-4 text-ink shadow-sticker-lg"
+                >
+                  <div className="mb-2 flex items-center justify-between gap-2">
                     <span className="font-display text-base text-red-900">
                       {lang === 'ar' ? 'اختصارات سريعة' : 'Quick Shortcuts'}
                     </span>
@@ -1016,7 +1293,7 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                       type="button"
                       onClick={() => setShortcutsOpen(false)}
                       aria-label={lang === 'ar' ? 'إغلاق' : 'Close'}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-pill bg-paper text-ink"
+                      className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-pill border-2 border-outline bg-paper text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -1478,7 +1755,7 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
               lang === 'ar' ? 'شريط احتساب النقاط والتراجع' : 'Selected Player Scoring Dock'
             }
             className={cn(
-              'fixed inset-x-0 bottom-0 z-30 border-t-[3px] border-gold-400 bg-red-900/95 px-3 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_28px_rgba(42,10,16,0.65)] backdrop-blur-md',
+              'fixed inset-x-0 bottom-0 z-30 border-t-[3px] border-gold-400 bg-red-900/95 px-3 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_28px_rgb(var(--ink-rgb)/0.65)] backdrop-blur-md',
               'md:static md:inset-auto md:z-auto md:rounded-card md:border-[3px] md:border-outline md:bg-red-800 md:p-4 lg:p-5 md:shadow-sticker-lg'
             )}
           >
@@ -1499,14 +1776,14 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                       aria-pressed={active}
                       onClick={() => setSelectedPlayerId(player.id)}
                       className={cn(
-                        'flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-button border-2 px-2 py-1 text-xs font-extrabold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
+                        'flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-1.5 rounded-button border-2 px-1.5 py-1 text-xs font-extrabold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
                         active
                           ? 'border-white bg-blue-600 text-white shadow-sticker-sm'
                           : 'border-red-700 bg-red-800 text-red-100'
                       )}
                     >
                       <span className="truncate">{firstName}</span>
-                      <span className="font-score text-base font-black tabular-nums text-gold-300">
+                      <span className="shrink-0 font-score text-base font-black tabular-nums text-gold-300">
                         {formatNumber(totals[player.id] ?? 0, {
                           useArabicIndicDigits: useArabicIndic,
                         })}
@@ -1604,6 +1881,7 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
               {mobileCustomOpen && (
                 <form
                   onSubmit={handleCustomSubmit}
+                  noValidate
                   className="space-y-2 rounded-input border-2 border-gold-400 bg-red-800 p-2.5 md:hidden"
                 >
                   <div className="flex items-center gap-2">
@@ -1622,14 +1900,21 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                     <Input
                       type="text"
                       inputMode="numeric"
+                      maxLength={7}
                       value={customPoints}
-                      onChange={(e) => setCustomPoints(e.target.value)}
+                      aria-invalid={Boolean(customError)}
+                      aria-describedby={customError ? 'mobile-custom-score-error' : undefined}
+                      onChange={(e) => {
+                        setCustomPoints(e.target.value);
+                        if (customError) setCustomError(null);
+                      }}
                       placeholder="+15 / -10"
                       aria-label={lang === 'ar' ? 'قيمة نقاط مخصصة' : 'Custom points amount'}
                       className="min-h-[56px] w-20 shrink-0 px-2 text-center font-score text-2xl font-black"
                     />
                     <Input
                       type="text"
+                      maxLength={NOTE_MAX_LENGTH}
                       value={customNote}
                       onChange={(e) => setCustomNote(e.target.value)}
                       placeholder={
@@ -1639,13 +1924,26 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                       className="min-h-[56px] min-w-0 flex-1"
                     />
                   </div>
+                  {customError && (
+                    <p
+                      id="mobile-custom-score-error"
+                      role="alert"
+                      className="flex items-center gap-1.5 rounded-input border border-white/25 bg-red-900 px-2.5 py-1.5 text-xs font-bold text-gold-200"
+                    >
+                      <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span>{customError}</span>
+                    </p>
+                  )}
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
                       variant="secondary"
                       size="scorer"
                       className="flex-1"
-                      onClick={() => setMobileCustomOpen(false)}
+                      onClick={() => {
+                        setMobileCustomOpen(false);
+                        setCustomError(null);
+                      }}
                     >
                       {lang === 'ar' ? 'إغلاق' : 'Close'}
                     </Button>
@@ -1666,123 +1964,144 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
               )}
 
               {/* Row 2: Custom +/- with Note (single sleek row on lg+), Undo Last Action, and Finish Game */}
-              <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between lg:border-t lg:border-white/15 lg:pt-3">
-                {/* Inline Custom +/- & Note Form on Tablet/Desktop (md+) */}
-                <form
-                  onSubmit={handleCustomSubmit}
-                  className="hidden md:flex min-w-0 flex-1 flex-nowrap items-center gap-2"
-                >
-                  <button
-                    type="button"
-                    onClick={toggleCustomSign}
-                    aria-label={
-                      lang === 'ar'
-                        ? 'تبديل الإشارة موجب أو سالب'
-                        : 'Toggle positive or negative sign'
-                    }
-                    className="flex min-h-[56px] w-14 shrink-0 items-center justify-center rounded-button border-[2.5px] border-outline bg-white text-xl font-black text-red-900 shadow-sticker-sm sticker-press hover:bg-paper focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+              <div className="space-y-2 lg:border-t lg:border-white/15 lg:pt-3">
+                <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+                  {/* Inline Custom +/- & Note Form on Tablet/Desktop (md+) */}
+                  <form
+                    onSubmit={handleCustomSubmit}
+                    noValidate
+                    className="hidden md:flex min-w-0 flex-1 flex-nowrap items-center gap-2"
                   >
-                    ±
-                  </button>
-                  <Input
-                    type="text"
-                    inputMode="numeric"
-                    value={customPoints}
-                    onChange={(e) => setCustomPoints(e.target.value)}
-                    placeholder="+15 / -10"
-                    aria-label={lang === 'ar' ? 'قيمة نقاط مخصصة' : 'Custom point delta'}
-                    className="min-h-[56px] w-20 shrink-0 px-2 text-center font-score text-2xl font-black"
-                  />
-                  <Input
-                    type="text"
-                    value={customNote}
-                    onChange={(e) => setCustomNote(e.target.value)}
-                    placeholder={
-                      lang === 'ar'
-                        ? 'ملاحظة اختيارية...'
-                        : 'Optional note...'
-                    }
-                    aria-label={lang === 'ar' ? 'ملاحظة اختيارية' : 'Optional score note'}
-                    className="min-h-[56px] min-w-[110px] flex-1"
-                  />
-                  <Button
-                    type="submit"
-                    variant="gold"
-                    size="scorer"
-                    disabled={busyAction || !selectedPlayer}
-                    className="shrink-0 px-4"
-                  >
-                    <Check className="h-5 w-5 shrink-0" aria-hidden="true" />
-                    <span>{lang === 'ar' ? 'تطبيق' : 'Apply'}</span>
-                  </Button>
-                </form>
+                    <button
+                      type="button"
+                      onClick={toggleCustomSign}
+                      aria-label={
+                        lang === 'ar'
+                          ? 'تبديل الإشارة موجب أو سالب'
+                          : 'Toggle positive or negative sign'
+                      }
+                      className="flex min-h-[56px] w-14 shrink-0 items-center justify-center rounded-button border-[2.5px] border-outline bg-white text-xl font-black text-red-900 shadow-sticker-sm sticker-press hover:bg-paper focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                    >
+                      ±
+                    </button>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={7}
+                      value={customPoints}
+                      aria-invalid={Boolean(customError)}
+                      aria-describedby={customError ? 'desktop-custom-score-error' : undefined}
+                      onChange={(e) => {
+                        setCustomPoints(e.target.value);
+                        if (customError) setCustomError(null);
+                      }}
+                      placeholder="+15 / -10"
+                      aria-label={lang === 'ar' ? 'قيمة نقاط مخصصة' : 'Custom point delta'}
+                      className="min-h-[56px] w-20 shrink-0 px-2 text-center font-score text-2xl font-black"
+                    />
+                    <Input
+                      type="text"
+                      maxLength={NOTE_MAX_LENGTH}
+                      value={customNote}
+                      onChange={(e) => setCustomNote(e.target.value)}
+                      placeholder={
+                        lang === 'ar'
+                          ? 'ملاحظة اختيارية...'
+                          : 'Optional note...'
+                      }
+                      aria-label={lang === 'ar' ? 'ملاحظة اختيارية' : 'Optional score note'}
+                      className="min-h-[56px] min-w-[110px] flex-1"
+                    />
+                    <Button
+                      type="submit"
+                      variant="gold"
+                      size="scorer"
+                      disabled={busyAction || !selectedPlayer}
+                      className="shrink-0 px-4"
+                    >
+                      <Check className="h-5 w-5 shrink-0" aria-hidden="true" />
+                      <span>{lang === 'ar' ? 'تطبيق' : 'Apply'}</span>
+                    </Button>
+                  </form>
 
-                {/* Mobile Custom Toggle + Always-Visible Undo + Finish Game (>= 56px) */}
-                <div className="grid shrink-0 grid-cols-3 gap-2 md:flex md:flex-nowrap md:items-center md:justify-end">
-                  {/* Mobile Custom Trigger (< md only) */}
-                  <button
-                    type="button"
-                    onClick={() => setMobileCustomOpen((prev) => !prev)}
-                    aria-expanded={mobileCustomOpen}
-                    className={cn(
-                      'flex min-h-[56px] items-center justify-center gap-1.5 rounded-button border-[2.5px] border-outline px-2.5 text-xs xs:text-sm font-extrabold shadow-sticker-sm sticker-press md:hidden focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
-                      mobileCustomOpen
-                        ? 'bg-gold-400 text-red-900'
-                        : 'bg-white text-red-900'
-                    )}
-                  >
-                    <SlidersHorizontal className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span className="truncate">
-                      {lang === 'ar' ? 'مخصص' : 'Custom'}
-                    </span>
-                  </button>
+                  {/* Mobile Custom Toggle + Always-Visible Undo + Finish Game (>= 56px) */}
+                  <div className="grid shrink-0 grid-cols-3 gap-1.5 xs:gap-2 md:flex md:flex-nowrap md:items-center md:justify-end">
+                    {/* Mobile Custom Trigger (< md only) */}
+                    <button
+                      type="button"
+                      onClick={() => setMobileCustomOpen((prev) => !prev)}
+                      aria-expanded={mobileCustomOpen}
+                      className={cn(
+                        'flex min-h-[56px] min-w-0 items-center justify-center gap-1 rounded-button border-[2.5px] border-outline px-2 text-xs xs:text-sm font-extrabold shadow-sticker-sm sticker-press md:hidden focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
+                        mobileCustomOpen
+                          ? 'bg-gold-400 text-red-900'
+                          : 'bg-white text-red-900'
+                      )}
+                    >
+                      <SlidersHorizontal className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span className="truncate">
+                        {lang === 'ar' ? 'مخصص' : 'Custom'}
+                      </span>
+                    </button>
 
-                  {/* Always-Visible Undo Last Action with Live Event Preview */}
-                  <button
-                    type="button"
-                    disabled={!nextUndoableEvent || busyAction}
-                    onClick={handleUndoLast}
-                    className="flex min-h-[56px] items-center justify-center gap-1.5 rounded-button border-[2.5px] border-outline bg-white px-2 md:px-4 text-xs xs:text-sm font-extrabold text-red-900 shadow-sticker sticker-press hover:bg-paper disabled:opacity-45 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-                  >
-                    <Undo2 className="h-4 w-4 md:h-5 md:w-5 shrink-0" aria-hidden="true" />
-                    <span className="truncate md:hidden">
-                      {nextUndoableEvent
-                        ? lang === 'ar'
-                          ? `تراجع ${nextUndoableEvent.delta > 0 ? `+${nextUndoableEvent.delta}` : `−${Math.abs(nextUndoableEvent.delta)}`}`
-                          : `Undo ${nextUndoableEvent.delta > 0 ? `+${nextUndoableEvent.delta}` : `−${Math.abs(nextUndoableEvent.delta)}`}`
-                        : lang === 'ar'
-                          ? 'تراجع'
-                          : 'Undo'}
-                    </span>
-                    <span className="hidden truncate md:inline">
-                      {nextUndoableEvent
-                        ? lang === 'ar'
-                          ? `تراجع (${nextUndoableEvent.delta > 0 ? `+${nextUndoableEvent.delta}` : `−${Math.abs(nextUndoableEvent.delta)}`})`
-                          : `Undo ${nextUndoableEvent.delta > 0 ? `+${nextUndoableEvent.delta}` : `−${Math.abs(nextUndoableEvent.delta)}`}${nextUndoablePlayer ? ` · ${nextUndoablePlayer.fullName.split(' ')[0]}` : ''}`
-                        : lang === 'ar'
-                          ? 'تراجع'
-                          : 'Undo'}
-                    </span>
-                  </button>
+                    {/* Always-Visible Undo Last Action with Live Event Preview */}
+                    <button
+                      type="button"
+                      disabled={!nextUndoableEvent || busyAction}
+                      onClick={handleUndoLast}
+                      className="flex min-h-[56px] min-w-0 items-center justify-center gap-1 rounded-button border-[2.5px] border-outline bg-white px-2 md:px-4 text-xs xs:text-sm font-extrabold text-red-900 shadow-sticker sticker-press hover:bg-paper disabled:opacity-45 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                    >
+                      <Undo2 className="h-4 w-4 md:h-5 md:w-5 shrink-0" aria-hidden="true" />
+                      <span className="truncate md:hidden">
+                        {nextUndoableEvent
+                          ? lang === 'ar'
+                            ? `تراجع ${formatSignedDelta(nextUndoableEvent.delta)}`
+                            : `Undo ${formatSignedDelta(nextUndoableEvent.delta)}`
+                          : lang === 'ar'
+                            ? 'تراجع'
+                            : 'Undo'}
+                      </span>
+                      <span className="hidden truncate md:inline">
+                        {nextUndoableEvent
+                          ? lang === 'ar'
+                            ? `تراجع (${formatSignedDelta(nextUndoableEvent.delta)})`
+                            : `Undo ${formatSignedDelta(nextUndoableEvent.delta)}${nextUndoablePlayer ? ` · ${nextUndoablePlayer.fullName.split(' ')[0]}` : ''}`
+                          : lang === 'ar'
+                            ? 'تراجع'
+                            : 'Undo'}
+                      </span>
+                    </button>
 
-                  {/* Finish Game (Explicit Confirmation Dialog) */}
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="scorer"
-                    disabled={busyAction}
-                    onClick={() => setConfirmFinishOpen(true)}
-                    className="px-2 md:px-5 text-xs xs:text-sm md:text-base"
-                  >
-                    <Flag className="h-4 w-4 md:h-5 md:w-5 shrink-0" aria-hidden="true" />
-                    <span className="truncate md:hidden">
-                      {lang === 'ar' ? 'إنهاء' : 'Finish'}
-                    </span>
-                    <span className="hidden truncate md:inline">
-                      {lang === 'ar' ? 'إنهاء الجلسة' : 'Finish Game'}
-                    </span>
-                  </Button>
+                    {/* Finish Game (Explicit Confirmation Dialog) */}
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="scorer"
+                      disabled={busyAction}
+                      onClick={() => setConfirmFinishOpen(true)}
+                      className="min-w-0 px-2 md:px-5 text-xs xs:text-sm md:text-base"
+                    >
+                      <Flag className="h-4 w-4 md:h-5 md:w-5 shrink-0" aria-hidden="true" />
+                      <span className="truncate md:hidden">
+                        {lang === 'ar' ? 'إنهاء' : 'Finish'}
+                      </span>
+                      <span className="hidden truncate md:inline">
+                        {lang === 'ar' ? 'إنهاء الجلسة' : 'Finish Game'}
+                      </span>
+                    </Button>
+                  </div>
                 </div>
+
+                {customError && (
+                  <p
+                    id="desktop-custom-score-error"
+                    role="alert"
+                    className="hidden md:flex items-center gap-1.5 rounded-input border border-white/25 bg-red-900 px-3 py-1.5 text-xs font-bold text-gold-200"
+                  >
+                    <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>{customError}</span>
+                  </p>
+                )}
               </div>
             </div>
           </section>
@@ -1843,13 +2162,16 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
             ? lang === 'ar'
               ? `يوجد تعادل عند ${formatNumber(finishPreview.cutoffScore, { useArabicIndicDigits: useArabicIndic })} نقطة بين: ${finishPreview.tiedPlayers
                   .map((p) => p.fullNameAr)
-                  .join(' و ')}. بالتأكيد سيتم إدراج "جولة التحدي / الحسم (#١٦)" تلقائياً بمؤقت ٣٠ ثانية.`
+                  .join(' و ')}. بالتأكيد سيتم إدراج "جولة التحدي / الحسم (#${formatNumber(16, { useArabicIndicDigits: useArabicIndic })})" تلقائياً بمؤقت ${formatNumber(30, { useArabicIndicDigits: useArabicIndic })} ثانية.`
               : `Tie at ${finishPreview.cutoffScore} pts between ${finishPreview.tiedPlayers
                   .map((p) => p.fullName)
                   .join(' & ')}. Confirming will automatically insert Tie-Breaker Segment #16 (30s) so you can break the tie.`
             : lang === 'ar'
               ? `المتأهل الحالي: ${finishPreview.advancingPlayers
-                  .map((p) => `${p.fullNameAr} (${totals[p.id] ?? 0} نقطة)`)
+                  .map(
+                    (p) =>
+                      `${p.fullNameAr} (${formatNumber(totals[p.id] ?? 0, { useArabicIndicDigits: useArabicIndic })} نقطة)`
+                  )
                   .join(' و ')}. سيتم إغلاق الطاولة وتحديث شجرة البطولة ولوحة الصدارة.`
               : `Advancing: ${finishPreview.advancingPlayers
                   .map((p) => `${p.fullName} (${totals[p.id] ?? 0} pts)`)

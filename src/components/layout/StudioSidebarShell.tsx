@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -66,6 +66,15 @@ export function StudioSidebarShell({
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [primaryGameId, setPrimaryGameId] = useState<string>('game-11');
+  const resetTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+    };
+  }, []);
 
   const isScorer = mode === 'scorer';
   const activeScorerGameMatch = pathname.match(/^\/scorer\/([^/]+)$/);
@@ -76,19 +85,23 @@ export function StudioSidebarShell({
     if (!isScorer) return;
     let mounted = true;
     const resolvePrimaryGame = async () => {
-      const allGames = await gameRepo.list();
-      if (!mounted || allGames.length === 0) return;
-      const scoped =
-        user?.role === 'scorer'
-          ? allGames.filter((g) => g.scorerUserId === user.id)
-          : allGames;
-      const pool = scoped.length > 0 ? scoped : allGames;
-      const picked =
-        pool.find((g) => g.status === 'live') ??
-        pool.find((g) => g.status === 'scheduled') ??
-        pool[pool.length - 1];
-      if (picked) {
-        setPrimaryGameId(picked.id);
+      try {
+        const allGames = await gameRepo.list();
+        if (!mounted || allGames.length === 0) return;
+        const scoped =
+          user?.role === 'scorer'
+            ? allGames.filter((g) => g.scorerUserId === user.id)
+            : allGames;
+        const pool = scoped.length > 0 ? scoped : allGames;
+        const picked =
+          pool.find((g) => g.status === 'live') ??
+          pool.find((g) => g.status === 'scheduled') ??
+          pool[pool.length - 1];
+        if (picked) {
+          setPrimaryGameId(picked.id);
+        }
+      } catch {
+        // Keep current fallback primaryGameId if storage lookup fails
       }
     };
     resolvePrimaryGame();
@@ -168,9 +181,23 @@ export function StudioSidebarShell({
   const bottomBarLinks = visibleLinks.slice(0, 3);
 
   const handleResetDemo = async () => {
-    await settingsRepo.resetDemoData(user?.id ?? 'user-admin');
-    setResetMessage(t.common.resetConfirm);
-    setTimeout(() => setResetMessage(null), 4000);
+    try {
+      await settingsRepo.resetDemoData(user?.id ?? 'user-admin');
+      setResetMessage(t.common.resetConfirm);
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+      resetTimerRef.current = window.setTimeout(() => {
+        setResetMessage(null);
+        resetTimerRef.current = null;
+      }, 4000);
+    } catch {
+      setResetMessage(
+        lang === 'ar'
+          ? 'تعذر إعادة ضبط البيانات التجريبية. حاول مرة أخرى.'
+          : 'Could not reset demo data. Please try again.'
+      );
+    }
   };
 
   const isLinkActive = (href: string) =>
