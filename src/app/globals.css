@@ -119,6 +119,18 @@
   --text-fluid-score:    clamp(2.25rem, 1.75rem + 2.2vw, 4.25rem);
   --text-fluid-score-xl: clamp(3rem, 2rem + 4.4vw, 7.5rem);
 
+  /* Broadcast Big Screen Semantic Type Ramp (dual-axis vw + dvh scaling for 320px -> 4K & 21:9) */
+  --screen-hero:         clamp(1.75rem, min(4.1vw, 7.2dvh), 6rem);
+  --screen-subtitle:     clamp(1.15rem, min(2.35vw, 4.1dvh), 3.35rem);
+  --screen-lb-title:     clamp(1.5rem, min(3.1vw, 5.4dvh), 4.25rem);
+  --screen-player:       clamp(1.25rem, min(2.1vw, 3.8dvh), 3.35rem);
+  --screen-row-name:     clamp(1.05rem, min(1.55vw, 2.85dvh), 2.45rem);
+  --screen-nick:         clamp(0.875rem, min(1.15vw, 2.05dvh), 1.65rem);
+  --screen-label:        clamp(0.75rem, min(0.95vw, 1.65dvh), 1.25rem);
+  --screen-score-hero:   clamp(3.25rem, min(7vw, 15dvh), 11.25rem);
+  --screen-score-podium: clamp(2.1rem, min(3.5vw, 6.5dvh), 5.5rem);
+  --screen-score-row:    clamp(1.75rem, min(2.6vw, 5dvh), 4.15rem);
+
   /* Fluid Spacing & Layout Tokens (8px grid) */
   --space-section-y: clamp(3.5rem, 6vw, 7.5rem);
   --space-card-pad:  clamp(1rem, 2.2vw, 2rem);
@@ -326,9 +338,20 @@ html[dir="rtl"] {
   /* Crisp white sticker headline with maroon outline (for secondary Stage callouts) */
   .text-white-sticker {
     color: var(--white);
-    -webkit-text-stroke: 0.07em var(--red-900);
+    -webkit-text-stroke: 0.065em var(--red-900);
     paint-order: stroke fill;
     filter: drop-shadow(var(--shadow-x-sm) 3px 0 var(--red-900));
+  }
+
+  /* Connected Arabic script always keeps a crisp airy stroke whether page dir is LTR or RTL */
+  html[dir="rtl"] .text-white-sticker,
+  .font-ar-display.text-white-sticker,
+  [dir="rtl"] .text-white-sticker {
+    -webkit-text-stroke: 0.038em var(--red-900);
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums lining-nums;
   }
 
   /* High-contrast Paper keyword highlight (gold underline marker behind maroon ink) */

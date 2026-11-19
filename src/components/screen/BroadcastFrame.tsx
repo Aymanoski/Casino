@@ -34,7 +34,8 @@ export function BroadcastFrame({
   return (
     <div
       className={cn(
-        'theme-stage relative flex min-h-dvh w-full flex-col bg-red-900 p-1.5 sm:p-2.5 lg:p-3 3xl:p-4 text-white pt-safe pb-safe ps-safe pe-safe',
+        'theme-stage relative flex min-h-dvh w-full flex-col bg-red-900 p-1 sm:p-2 lg:p-3 3xl:p-4 text-white pt-safe pb-safe ps-safe pe-safe',
+        '[@media(max-height:520px)]:p-1',
         'lg:[@media(min-height:660px)]:h-dvh lg:[@media(min-height:660px)]:overflow-hidden',
         cursorHidden && 'cursor-none [&_*]:cursor-none',
         className
@@ -46,7 +47,7 @@ export function BroadcastFrame({
         bulbCount={isFinal ? 24 : 20}
         tone="gold"
         chase
-        className="flex flex-1 min-h-0 w-full flex-col"
+        className="flex flex-1 min-h-0 w-full flex-col [@media(max-height:520px)]:p-2.5"
       >
         <SunburstStage
           as="div"
@@ -72,12 +73,12 @@ export function BroadcastFrame({
             />
           )}
 
-          {/* Subtle Ramadan Lantern Corner Accents (secondary to game-show stage) */}
+          {/* Subtle Ramadan Lantern Corner Accents (hidden on tiny phones & short landscape < 560px) */}
           {showLanterns && (
             <>
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute top-0 start-2 sm:start-4 xl:start-6 z-10 hidden sm:flex items-start gap-2 opacity-90"
+                className="pointer-events-none absolute top-0 start-2 sm:start-4 xl:start-6 z-10 hidden sm:[@media(min-height:560px)]:flex items-start gap-2 opacity-90"
               >
                 <Lantern
                   size={isFinal ? 'lg' : 'md'}
@@ -97,7 +98,7 @@ export function BroadcastFrame({
 
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute top-0 end-2 sm:end-4 xl:end-6 z-10 hidden sm:flex items-start gap-2 opacity-90"
+                className="pointer-events-none absolute top-0 end-2 sm:end-4 xl:end-6 z-10 hidden sm:[@media(min-height:560px)]:flex items-start gap-2 opacity-90"
               >
                 <div className="hidden 2xl:block">
                   <Lantern
@@ -120,7 +121,7 @@ export function BroadcastFrame({
           <main
             id="main-content"
             tabIndex={-1}
-            className="relative z-20 flex flex-1 min-h-0 w-full flex-col px-3 py-3 sm:px-6 sm:py-4 lg:px-8 lg:py-4 xl:px-10 xl:py-5 3xl:px-14 3xl:py-7 outline-none"
+            className="relative z-20 mx-auto flex flex-1 min-h-0 w-full max-w-[2240px] flex-col px-3 py-2.5 sm:px-5 sm:py-3.5 lg:px-8 lg:py-4 xl:px-10 xl:py-5 3xl:px-14 3xl:py-7 [@media(max-height:520px)]:py-2 outline-none"
           >
             {children}
           </main>

@@ -105,30 +105,35 @@ export function PresenterControlPill({
     <div
       ref={containerRef}
       className={cn(
-        'fixed bottom-[max(0.85rem,env(safe-area-inset-bottom))] end-3 sm:end-5 z-50 max-w-[calc(100vw-1.5rem)] transition-all duration-300',
+        'fixed bottom-[max(0.65rem,env(safe-area-inset-bottom))] inset-x-3 sm:inset-x-auto sm:end-5 z-50 flex flex-col items-center sm:items-end transition-all duration-300',
+        '[@media(max-height:520px)]:bottom-1.5 [@media(max-height:520px)]:inset-x-auto [@media(max-height:520px)]:end-3',
         controlsVisible
           ? 'translate-y-0 opacity-100 pointer-events-auto'
           : 'translate-y-3 opacity-0 pointer-events-none'
       )}
     >
-      {/* Table / View Switcher Popover */}
+      {/* Mobile Bottom Sheet / Desktop Floating Popover for Broadcast Feeds */}
       <AnimatePresence>
         {switcherOpen && (
           <motion.div
-            initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 10, scale: 0.97 }}
+            initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 12, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.97 }}
+            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.98 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="mb-2.5 w-[min(340px,calc(100vw-1.5rem))] overflow-hidden rounded-card border-[2.5px] border-outline bg-white text-ink shadow-sticker-lg"
+            className="mb-2.5 w-full sm:w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-card border-[2.5px] border-outline bg-white text-ink shadow-sticker-lg"
             role="dialog"
             aria-label={lang === 'ar' ? 'تبديل شاشة العرض' : 'Switch broadcast feed'}
           >
+            {/* Mobile Sheet Handle */}
+            <div aria-hidden="true" className="flex justify-center pt-2 sm:hidden bg-paper">
+              <span className="h-1 w-10 rounded-pill bg-ink-faint/50" />
+            </div>
             <div className="flex items-center justify-between border-b-2 border-border-paper bg-paper px-4 py-2.5">
-              <span className="font-display text-sm text-red-900">
+              <span className="font-display text-base text-red-900">
                 {lang === 'ar' ? 'مصادر شاشة العرض' : 'Broadcast Feeds'}
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-pill border border-outline bg-positive-soft px-2 py-0.5 text-[11px] font-bold text-positive-ink">
-                <Wifi className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className="inline-flex items-center gap-1.5 rounded-pill border border-outline bg-positive-soft px-2.5 py-0.5 text-xs font-bold text-positive-ink">
+                <Wifi className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 <span>{lang === 'ar' ? 'تزامن فوري' : 'Live Sync'}</span>
               </span>
             </div>

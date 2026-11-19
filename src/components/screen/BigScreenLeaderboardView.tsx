@@ -283,12 +283,49 @@ export function BigScreenLeaderboardView() {
     [allGames]
   );
 
-  // Visual podium order on md+: [#2 (order-1) | #1 elevated (order-2) | #3 (order-3)]
-  // On mobile (< md): natural [#1, #2, #3] order
+  // Horizontal touch swipe paging on the standings board (strict horizontal-vs-vertical axis lock, RTL mirrored)
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const handleBoardTouchStart = useCallback(
+    (e: React.TouchEvent<HTMLElement>) => {
+      if (e.touches.length !== 1) return;
+      touchStartRef.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+      };
+    },
+    []
+  );
+  const handleBoardTouchEnd = useCallback(
+    (e: React.TouchEvent<HTMLElement>) => {
+      if (!touchStartRef.current || totalPages <= 1 || e.changedTouches.length !== 1) {
+        touchStartRef.current = null;
+        return;
+      }
+      const dx = e.changedTouches[0].clientX - touchStartRef.current.x;
+      const dy = e.changedTouches[0].clientY - touchStartRef.current.y;
+      touchStartRef.current = null;
+
+      // Require clear horizontal dominance so vertical page scrolling is never hijacked
+      if (Math.abs(dx) < 52 || Math.abs(dx) <= Math.abs(dy) * 1.5) return;
+
+      const isRtl = lang === 'ar';
+      const swipeNext = isRtl ? dx > 0 : dx < 0;
+      setPageIndex((prev) =>
+        swipeNext ? (prev + 1) % totalPages : (prev - 1 + totalPages) % totalPages
+      );
+    },
+    [totalPages, lang]
+  );
+
+  // Adapted podium topology:
+  // - Mobile (< md): natural 1-col [#1, #2, #3]
+  // - Tablet Portrait (md): 2-col Podium Pyramid (#1 full-width top, #2 & #3 side-by-side below)
+  // - Tablet Landscape & Desktop (lg+): 3-col TV podium [#2 | #1 elevated | #3]
   const podiumOrderClass = (rankIdx: number) => {
-    if (rankIdx === 0) return 'order-1 md:order-2 md:-translate-y-1.5';
-    if (rankIdx === 1) return 'order-2 md:order-1';
-    return 'order-3 md:order-3';
+    if (rankIdx === 0)
+      return 'order-1 md:col-span-2 lg:col-span-1 lg:order-2 lg:-translate-y-1.5';
+    if (rankIdx === 1) return 'order-2 lg:order-1';
+    return 'order-3 lg:order-3';
   };
 
   const rangeStart = 4 + safePageIndex * ROWS_PER_PAGE;
@@ -300,9 +337,9 @@ export function BigScreenLeaderboardView() {
   return (
     <BroadcastFrame cursorHidden={presenter.cursorHidden} showLanterns>
       {/* TOP BROADCAST HEADER RAIL */}
-      <header className="relative z-20 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 px-0 sm:px-14 xl:px-20">
+      <header className="relative z-20 flex flex-wrap items-center justify-between gap-2 sm:gap-3 px-0 sm:[@media(min-height:560px)]:px-14 xl:px-20">
         {/* Start: Brand & Huge Gold Title (zero eyebrow kickers above heading) */}
-        <div className="flex min-w-0 flex-wrap items-center gap-2.5 sm:gap-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3.5">
           <div className="hidden sm:inline-flex items-center gap-2 rounded-pill border-[2.5px] border-outline bg-red-900 px-3.5 py-1.5 shadow-sticker-sm">
             <PlayingDice
               value={5}
@@ -311,12 +348,12 @@ export function BigScreenLeaderboardView() {
               float={false}
               className="shrink-0 [&>svg]:h-6 [&>svg]:w-6"
             />
-            <span className="font-display text-sm 2xl:text-base text-white">
+            <span className="font-display text-sm 2xl:text-base text-white whitespace-nowrap">
               {lang === 'ar' ? 'كازينو الألعاب' : 'Casino El Al3ab'}
             </span>
           </div>
 
-          <h1 className="font-display text-gold-sticker text-[clamp(1.65rem,3vw,3.5rem)] leading-none">
+          <h1 className="font-display text-gold-sticker text-[length:var(--screen-lb-title)] leading-none rtl:leading-[1.18] text-balance">
             {lang === 'ar' ? 'لوحة الصدارة المباشرة' : 'LIVE LEADERBOARD'}
           </h1>
         </div>
@@ -433,15 +470,17 @@ export function BigScreenLeaderboardView() {
           <div
             className={cn(
               'relative z-20 flex flex-1 min-h-0 flex-col gap-2.5 sm:gap-3.5 2xl:gap-5 pt-2.5 sm:pt-3 transition-[padding] duration-300',
-              presenter.controlsVisible ? 'pb-16 lg:pb-14' : 'pb-1'
+              presenter.controlsVisible
+                ? 'pb-20 sm:pb-16 lg:pb-14 [@media(max-height:520px)]:pb-12'
+                : 'pb-1'
             )}
           >
-            {/* TOP 3 PODIUM SPOTLIGHT */}
+            {/* TOP 3 PODIUM SPOTLIGHT (Mobile: 1-col; Tablet Portrait md: 2-col pyramid; Tablet Landscape lg+: 3-col podium) */}
             <section
               aria-label={
                 lang === 'ar' ? 'المراكز الثلاثة الأولى' : 'Top 3 Podium Leaders'
               }
-              className="grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-3.5 2xl:gap-5 items-stretch"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3.5 2xl:gap-5 items-stretch"
             >
               {topThree.map((entry, idx) => {
                 const isFirst = idx === 0;
@@ -471,7 +510,12 @@ export function BigScreenLeaderboardView() {
                       damping: 30,
                     }}
                     className={cn(
-                      'relative flex items-center justify-between gap-3 rounded-card border-[3px] border-outline p-3 sm:p-3.5 2xl:p-5 text-ink transition-shadow duration-300',
+                      '@container relative flex flex-col justify-between gap-2.5 rounded-card border-[3px] border-outline p-3 sm:p-4 2xl:p-5 text-ink transition-shadow duration-300',
+                      // On wide podium cards (phone full-width, tablet #1 hero, and xl+ desktop), use crisp single-row layout;
+                      // On compact 2-up/3-up tablet cards (md..lg), use 2-tier layout so full names NEVER truncate!
+                      isFirst
+                        ? 'sm:flex-row sm:items-center lg:flex-col lg:items-stretch xl:flex-row xl:items-center'
+                        : 'sm:flex-row sm:items-center md:flex-col md:items-stretch xl:flex-row xl:items-center',
                       podiumOrderClass(idx),
                       isFirst
                         ? 'bg-gradient-to-b from-gold-200 via-paper to-white ring-[4px] ring-gold-300 shadow-glow-gold'
@@ -480,7 +524,7 @@ export function BigScreenLeaderboardView() {
                           : 'bg-white shadow-sticker-lg'
                     )}
                   >
-                    {/* Start: Rank Chip + Avatar + Identity */}
+                    {/* Start / Top Tier: Rank Chip + Avatar + Identity (with inline score only on compact 2-tier tablet view) */}
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <div className="relative shrink-0">
                         <ScoreChip
@@ -503,18 +547,18 @@ export function BigScreenLeaderboardView() {
                         avatarSeed={entry.player.avatarSeed}
                         size="lg"
                         buzzed={isHighlighted}
-                        className="h-11 w-11 xl:h-14 xl:w-14 3xl:h-16 3xl:w-16 shrink-0"
+                        className="h-11 w-11 xl:h-14 xl:w-14 3xl:h-[4.5rem] 3xl:w-[4.5rem] shrink-0"
                       />
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <h2 className="truncate font-display text-[clamp(1.15rem,1.55vw,2rem)] text-red-900 leading-tight">
+                          <h2 className="truncate font-display text-[clamp(1.15rem,min(1.7vw,3.1dvh),2.4rem)] text-red-900 leading-tight">
                             {pName}
                           </h2>
                           {shift !== 0 && (
                             <span
                               className={cn(
-                                'inline-flex shrink-0 items-center gap-0.5 rounded-pill border border-outline px-1.5 py-0.5 text-[11px] font-black',
+                                'inline-flex shrink-0 items-center gap-0.5 rounded-pill border border-outline px-1.5 py-0.5 text-xs font-black tabular-nums',
                                 shift > 0
                                   ? 'bg-positive-soft text-positive-ink'
                                   : 'bg-negative text-white'
@@ -534,7 +578,7 @@ export function BigScreenLeaderboardView() {
                           )}
                         </div>
 
-                        <p className="truncate text-xs sm:text-sm font-semibold text-ink-muted">
+                        <p className="truncate text-[length:var(--screen-nick)] font-semibold text-ink-muted">
                           “{pNick}” ·{' '}
                           <span className="text-red-700 font-bold">
                             {formatNumber(entry.wins, {
@@ -546,53 +590,73 @@ export function BigScreenLeaderboardView() {
                       </div>
                     </div>
 
-                    {/* End: Animated Giant Score + Floating Delta */}
-                    <div className="relative shrink-0 text-end">
-                      <AnimatePresence mode="popLayout">
-                        {delta && (
-                          <motion.span
-                            key={delta.id}
-                            initial={
-                              prefersReducedMotion
-                                ? { opacity: 1 }
-                                : { opacity: 0, y: 12, scale: 0.8 }
-                            }
-                            animate={{ opacity: 1, y: -6, scale: 1 }}
-                            exit={{ opacity: 0, y: -22 }}
-                            transition={{ duration: 0.35, ease: 'easeOut' }}
-                            className={cn(
-                              'pointer-events-none absolute -top-7 end-0 z-20 inline-flex items-center gap-0.5 rounded-pill border-2 border-outline px-2.5 py-0.5 font-score text-base sm:text-lg font-black tabular-nums shadow-sticker-sm',
-                              delta.delta > 0
-                                ? 'bg-positive-soft text-positive-ink'
-                                : 'bg-negative text-white'
-                            )}
-                          >
-                            {delta.delta > 0 ? (
-                              <Plus className="h-3.5 w-3.5 stroke-[3]" aria-hidden="true" />
-                            ) : (
-                              <Minus className="h-3.5 w-3.5 stroke-[3]" aria-hidden="true" />
-                            )}
-                            <span>
-                              {formatNumber(Math.abs(delta.delta), {
-                                useArabicIndicDigits: useArabicIndic,
-                              })}
-                            </span>
-                          </motion.span>
-                        )}
-                      </AnimatePresence>
-
-                      <AnimatedNumber
-                        value={entry.totalPoints}
-                        useArabicIndicDigits={useArabicIndic}
+                    {/* End / Bottom Tier: Animated Giant Score + Floating Delta */}
+                    <div
+                      className={cn(
+                        'relative flex shrink-0 items-baseline justify-between gap-2 border-t border-border-paper pt-2',
+                        isFirst
+                          ? 'sm:block sm:border-t-0 sm:pt-0 sm:text-end lg:flex lg:border-t lg:pt-2 xl:block xl:border-t-0 xl:pt-0 xl:text-end'
+                          : 'sm:block sm:border-t-0 sm:pt-0 sm:text-end md:flex md:border-t md:pt-2 xl:block xl:border-t-0 xl:pt-0 xl:text-end'
+                      )}
+                    >
+                      <span
                         className={cn(
-                          'font-score font-black leading-none',
-                          'text-[clamp(2.25rem,3.6vw,4.75rem)]',
-                          isFirst ? 'text-gold-sticker' : 'text-red-900'
+                          'text-[length:var(--screen-label)] font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink-muted',
+                          isFirst
+                            ? 'sm:hidden lg:inline xl:hidden'
+                            : 'sm:hidden md:inline xl:hidden'
                         )}
-                      />
-                      <span className="block text-[11px] sm:text-xs font-extrabold uppercase text-ink-muted">
-                        {lang === 'ar' ? 'نقطة' : 'PTS'}
+                      >
+                        {lang === 'ar' ? 'الإجمالي' : 'TOTAL SCORE'}
                       </span>
+
+                      <div className="relative flex items-baseline gap-1.5 xl:block">
+                        <AnimatePresence mode="popLayout">
+                          {delta && (
+                            <motion.span
+                              key={delta.id}
+                              initial={
+                                prefersReducedMotion
+                                  ? { opacity: 1 }
+                                  : { opacity: 0, y: 12, scale: 0.8 }
+                              }
+                              animate={{ opacity: 1, y: -6, scale: 1 }}
+                              exit={{ opacity: 0, y: -22 }}
+                              transition={{ duration: 0.35, ease: 'easeOut' }}
+                              className={cn(
+                                'pointer-events-none absolute -top-7 end-0 z-20 inline-flex items-center gap-0.5 rounded-pill border-2 border-outline px-2.5 py-0.5 font-score text-base sm:text-lg font-black tabular-nums shadow-sticker-sm',
+                                delta.delta > 0
+                                  ? 'bg-positive-soft text-positive-ink'
+                                  : 'bg-negative text-white'
+                              )}
+                            >
+                              {delta.delta > 0 ? (
+                                <Plus className="h-3.5 w-3.5 stroke-[3]" aria-hidden="true" />
+                              ) : (
+                                <Minus className="h-3.5 w-3.5 stroke-[3]" aria-hidden="true" />
+                              )}
+                              <span>
+                                {formatNumber(Math.abs(delta.delta), {
+                                  useArabicIndicDigits: useArabicIndic,
+                                })}
+                              </span>
+                            </motion.span>
+                          )}
+                        </AnimatePresence>
+
+                        <AnimatedNumber
+                          value={entry.totalPoints}
+                          useArabicIndicDigits={useArabicIndic}
+                          className={cn(
+                            'font-score font-black leading-none',
+                            'text-[length:var(--screen-score-podium)]',
+                            isFirst ? 'text-gold-sticker' : 'text-red-900'
+                          )}
+                        />
+                        <span className="xl:block text-[length:var(--screen-label)] font-extrabold uppercase text-ink-muted">
+                          {lang === 'ar' ? 'نقطة' : 'PTS'}
+                        </span>
+                      </div>
                     </div>
                   </motion.article>
                 );
@@ -704,12 +768,14 @@ export function BigScreenLeaderboardView() {
               </div>
             )}
 
-            {/* RANKS 4–27 TWO-COLUMN 10M-LEGIBLE LAYOUT-ANIMATED BOARD */}
+            {/* RANKS 4–27 TWO-COLUMN 10M-LEGIBLE LAYOUT-ANIMATED BOARD (Supports horizontal touch swipe on touchscreens) */}
             <section
               aria-label={
                 lang === 'ar' ? 'بقية الترتيب العام' : 'Tournament Standings'
               }
-              className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-2.5 2xl:gap-4 flex-1 min-h-0 auto-rows-fr"
+              onTouchStart={handleBoardTouchStart}
+              onTouchEnd={handleBoardTouchEnd}
+              className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-2.5 2xl:gap-4 flex-1 min-h-0 auto-rows-fr touch-pan-y"
             >
               <AnimatePresence mode="popLayout">
                 {visibleRest.map((entry) => {
@@ -749,7 +815,7 @@ export function BigScreenLeaderboardView() {
                         duration: 0.25,
                       }}
                       className={cn(
-                        'relative flex items-center justify-between gap-3 rounded-card border-[2.5px] border-outline px-3.5 py-2 sm:px-4 sm:py-2 2xl:px-6 2xl:py-3.5 text-ink transition-shadow duration-200',
+                        'relative flex items-center justify-between gap-3 rounded-card border-[2.5px] border-outline px-3.5 py-2 sm:px-4 sm:py-2.5 2xl:px-6 2xl:py-4 text-ink transition-shadow duration-200',
                         isHighlighted
                           ? 'ltr:bg-gradient-to-r rtl:bg-gradient-to-l from-gold-200 via-paper to-white ring-[4px] ring-gold-300 shadow-glow-gold'
                           : 'bg-white shadow-sticker'
@@ -761,7 +827,7 @@ export function BigScreenLeaderboardView() {
                           value={`#${formatNumber(entry.rank, { useArabicIndicDigits: useArabicIndic })}`}
                           tone={isHighlighted ? 'gold' : 'white'}
                           size="sm"
-                          className="shrink-0"
+                          className="shrink-0 2xl:scale-110"
                         />
 
                         <PlayerAvatar
@@ -769,18 +835,18 @@ export function BigScreenLeaderboardView() {
                           avatarSeed={entry.player.avatarSeed}
                           size="sm"
                           buzzed={isHighlighted}
-                          className="hidden xs:inline-flex h-10 w-10 xl:h-12 xl:w-12 shrink-0"
+                          className="hidden xs:inline-flex h-10 w-10 xl:h-12 xl:w-12 3xl:h-16 3xl:w-16 shrink-0"
                         />
 
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="truncate font-display text-[clamp(1.05rem,1.45vw,1.85rem)] text-ink leading-tight">
+                            <span className="truncate font-display text-[length:var(--screen-row-name)] text-ink leading-tight">
                               {pName}
                             </span>
                             {shift !== 0 && (
                               <span
                                 className={cn(
-                                  'inline-flex shrink-0 items-center gap-0.5 rounded-pill border border-outline px-1.5 py-0.5 text-[11px] font-black',
+                                  'inline-flex shrink-0 items-center gap-0.5 rounded-pill border border-outline px-1.5 py-0.5 text-xs font-black tabular-nums',
                                   shift > 0
                                     ? 'bg-positive-soft text-positive-ink'
                                     : 'bg-negative text-white'
@@ -800,7 +866,7 @@ export function BigScreenLeaderboardView() {
                             )}
                           </div>
 
-                          <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-ink-muted truncate">
+                          <div className="flex items-center gap-2 text-[length:var(--screen-nick)] font-medium text-ink-muted truncate">
                             <span className="truncate">“{pNick}”</span>
                             <span aria-hidden="true">·</span>
                             <span className="shrink-0 font-bold text-red-700">
@@ -852,13 +918,13 @@ export function BigScreenLeaderboardView() {
                           )}
                         </AnimatePresence>
 
-                        <div className="flex items-baseline gap-1 text-end">
+                        <div className="flex items-baseline gap-1.5 text-end">
                           <AnimatedNumber
                             value={entry.totalPoints}
                             useArabicIndicDigits={useArabicIndic}
-                            className="font-score text-[clamp(1.85rem,2.6vw,3.35rem)] font-black leading-none text-red-900"
+                            className="font-score text-[length:var(--screen-score-row)] font-black leading-none text-red-900"
                           />
-                          <span className="text-[11px] sm:text-xs font-extrabold uppercase text-ink-muted">
+                          <span className="text-[length:var(--screen-label)] font-extrabold uppercase text-ink-muted">
                             {lang === 'ar' ? 'نقطة' : 'PTS'}
                           </span>
                         </div>

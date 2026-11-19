@@ -543,25 +543,25 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
       showLanterns
     >
       {/* TOP BROADCAST RAIL */}
-      <header className="relative z-20 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 px-0 sm:px-14 xl:px-20">
+      <header className="relative z-20 flex flex-wrap items-center justify-between gap-2 sm:gap-3 px-0 sm:[@media(min-height:560px)]:px-14 xl:px-20">
         {/* Start: Brand & Round/Table Badge */}
-        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
-          <div className="inline-flex items-center gap-2 rounded-pill border-[2.5px] border-outline bg-red-900 px-3.5 py-1.5 shadow-sticker-sm">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2.5">
+          <div className="inline-flex items-center gap-2 rounded-pill border-[2.5px] border-outline bg-red-900 px-3 py-1 sm:px-3.5 sm:py-1.5 shadow-sticker-sm">
             <PlayingDice
               value={6}
               size="sm"
               tilt={-6}
               float={false}
-              className="shrink-0 [&>svg]:h-6 [&>svg]:w-6"
+              className="shrink-0 [&>svg]:h-5 [&>svg]:w-5 sm:[&>svg]:h-6 sm:[&>svg]:w-6"
             />
-            <span className="font-display text-sm sm:text-base 2xl:text-lg text-white">
+            <span className="font-display text-sm sm:text-base 2xl:text-lg text-white whitespace-nowrap">
               {lang === 'ar' ? 'كازينو الألعاب' : 'Casino El Al3ab'}
             </span>
           </div>
 
           <div
             className={cn(
-              'inline-flex min-w-0 max-w-full items-center gap-2 rounded-pill border-[2.5px] border-outline px-3.5 py-1.5 shadow-sticker-sm',
+              'inline-flex min-w-0 max-w-full items-center gap-2 rounded-pill border-[2.5px] border-outline px-3 py-1 sm:px-3.5 sm:py-1.5 shadow-sticker-sm',
               game.isFinal
                 ? 'bg-gold-gradient text-red-900'
                 : 'bg-white text-red-900'
@@ -583,15 +583,15 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
         </div>
 
         {/* End: Live / Final / Tie-Breaker Status & Segment Counter */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
           {game.isDemo && (
-            <span className="inline-flex items-center rounded-pill border-2 border-outline bg-blue-600 px-3 py-1.5 text-xs sm:text-sm font-extrabold uppercase text-white shadow-sticker-sm ring-2 ring-white">
+            <span className="inline-flex items-center rounded-pill border-2 border-outline bg-blue-600 px-3 py-1 text-xs sm:text-sm font-extrabold uppercase text-white shadow-sticker-sm ring-2 ring-white">
               {lang === 'ar' ? 'جلسة عرض تجريبية' : 'PITCH DEMO'}
             </span>
           )}
 
           {isTieBreakerSegment && game.status === 'live' && (
-            <span className="inline-flex items-center gap-1.5 rounded-pill border-[2.5px] border-outline bg-gold-gradient px-3.5 py-1.5 text-xs sm:text-sm 2xl:text-base font-black uppercase text-red-900 shadow-glow-gold animate-pulse">
+            <span className="inline-flex items-center gap-1.5 rounded-pill border-[2.5px] border-outline bg-gold-gradient px-3.5 py-1 text-xs sm:text-sm 2xl:text-base font-black uppercase text-red-900 shadow-glow-gold animate-pulse">
               <Flame className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span>
                 {lang === 'ar' ? 'جولة الحسم الفاصلة!' : 'SUDDEN-DEATH TIE-BREAKER!'}
@@ -602,19 +602,19 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
           {game.status === 'live' ? (
             <LiveBadge size="lg" surface="stage" />
           ) : isScheduled ? (
-            <span className="inline-flex items-center gap-1.5 rounded-pill border-2 border-outline bg-blue-600 px-4 py-1.5 text-xs sm:text-sm font-extrabold uppercase text-white shadow-sticker-sm ring-2 ring-white">
+            <span className="inline-flex items-center gap-1.5 rounded-pill border-2 border-outline bg-blue-600 px-3.5 py-1 text-xs sm:text-sm font-extrabold uppercase text-white shadow-sticker-sm ring-2 ring-white">
               <CalendarClock className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span>{lang === 'ar' ? 'قريباً على المسرح' : 'COMING UP NEXT'}</span>
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-pill border-[2.5px] border-outline bg-gold-gradient px-4 py-1.5 text-xs sm:text-sm font-black uppercase text-red-900 shadow-sticker-sm">
+            <span className="inline-flex items-center gap-1.5 rounded-pill border-[2.5px] border-outline bg-gold-gradient px-3.5 py-1 text-xs sm:text-sm font-black uppercase text-red-900 shadow-sticker-sm">
               <Trophy className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span>{lang === 'ar' ? 'النتيجة النهائية' : 'FINAL RESULT'}</span>
             </span>
           )}
 
           {!isScheduled && (
-            <span className="inline-flex items-center gap-1.5 rounded-pill border-[2.5px] border-outline bg-red-900 px-3.5 py-1.5 font-score text-base sm:text-lg 2xl:text-xl font-black tracking-wide text-gold-300 shadow-sticker-sm tabular-nums">
+            <span className="inline-flex items-center gap-1.5 rounded-pill border-[2.5px] border-outline bg-red-900 px-3 sm:px-3.5 py-1 sm:py-1.5 font-score text-sm sm:text-lg 2xl:text-xl font-black ltr:tracking-wider rtl:tracking-normal text-gold-300 shadow-sticker-sm tabular-nums">
               <span>
                 {lang === 'ar' ? 'فقرة' : 'SEG'}{' '}
                 {formatNumber(game.currentSegmentIndex + 1, {
@@ -647,7 +647,7 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
           >
             {/* Dual-Language Match Title Hero */}
             <div className="mx-auto max-w-5xl text-center space-y-1.5 sm:space-y-2.5">
-              <h1 className="font-display text-gold-sticker-lg text-[clamp(2rem,4.5vw,5.25rem)] leading-[1.08]">
+              <h1 className="font-display text-gold-sticker-lg text-[length:var(--screen-hero)] leading-[1.08] rtl:leading-[1.22] text-balance">
                 {game.isFinal
                   ? lang === 'ar'
                     ? 'النهائي الكبير ضد مروان سري'
@@ -655,16 +655,20 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                   : tableLabel}
               </h1>
               <p
-                dir={lang === 'ar' ? 'ltr' : 'rtl'}
-                className="font-display text-white-sticker text-[clamp(1.25rem,2.4vw,2.75rem)] leading-snug"
+                className={cn(
+                  'text-white-sticker text-[length:var(--screen-subtitle)] leading-snug text-balance',
+                  lang === 'ar' ? 'font-display' : 'font-ar-display'
+                )}
               >
-                {game.isFinal
-                  ? lang === 'ar'
-                    ? 'THE GRAND FINAL vs. MARWAN SERRY'
-                    : 'النهائي الكبير ضد مروان سري'
-                  : lang === 'ar'
-                    ? game.tableName
-                    : game.tableNameAr || game.tableName}
+                <span dir={lang === 'ar' ? 'ltr' : 'rtl'} className="inline-block">
+                  {game.isFinal
+                    ? lang === 'ar'
+                      ? 'THE GRAND FINAL vs. MARWAN SERRY'
+                      : 'النهائي الكبير ضد مروان سري'
+                    : lang === 'ar'
+                      ? game.tableName
+                      : game.tableNameAr || game.tableName}
+                </span>
               </p>
 
               <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
@@ -692,17 +696,19 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
               </div>
             </div>
 
-            {/* 3-Seat VS Showdown Lineup */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 xl:gap-7 flex-1 min-h-0 items-center max-w-[1680px] w-full mx-auto">
+            {/* 3-Seat VS Showdown Lineup (Tablet Portrait: 2-col hybrid with Golden Seat spanning top; Desktop: 3-up) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 xl:gap-7 flex-1 min-h-0 items-center max-w-[1680px] w-full mx-auto">
               {displayPlayers.map((player, idx) => {
                 const isHost = Boolean(player.isHost);
                 const pName = localizeText(lang, player.fullName, player.fullNameAr);
                 const pNick = localizeText(lang, player.nickname, player.nicknameAr);
+                const spanFullOnTablet = game.isFinal ? isHost : idx === 0;
                 return (
                   <div
                     key={player.id}
                     className={cn(
                       'relative flex flex-col items-center justify-center rounded-card border-[3px] border-outline p-5 sm:p-6 xl:p-8 text-center transition-transform',
+                      spanFullOnTablet && 'md:col-span-2 lg:col-span-1 md:order-first lg:order-none',
                       isHost
                         ? 'bg-gradient-to-b from-gold-200 via-paper to-white ring-[4px] ring-gold-300 shadow-glow-gold lg:-translate-y-2'
                         : 'bg-white shadow-sticker-lg'
@@ -716,7 +722,7 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
 
                     <span
                       className={cn(
-                        'inline-flex items-center gap-1.5 rounded-pill border-2 border-outline px-3.5 py-1 text-xs sm:text-sm font-black uppercase shadow-sticker-sm mb-3',
+                        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border-2 border-outline px-3.5 py-1 text-xs sm:text-sm font-black uppercase shadow-sticker-sm mb-3',
                         isHost
                           ? 'bg-gold-gradient text-red-900'
                           : 'bg-blue-600 text-white ring-2 ring-white'
@@ -727,7 +733,7 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                         {isHost
                           ? lang === 'ar'
                             ? 'المقعد الذهبي · المضيف'
-                            : 'THE GOLDEN SEAT · HOST'
+                            : 'GOLDEN SEAT · HOST'
                           : game.isFinal
                             ? lang === 'ar'
                               ? `المتأهل #${formatNumber(idx === 0 ? 1 : 2, { useArabicIndicDigits: useArabicIndic })}`
@@ -743,14 +749,14 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                       avatarSeed={player.avatarSeed}
                       size="xl"
                       isHost={isHost}
-                      className="h-20 w-20 sm:h-24 sm:w-24 xl:h-28 xl:w-28"
+                      className="h-[clamp(4.5rem,min(7vw,12dvh),8rem)] w-[clamp(4.5rem,min(7vw,12dvh),8rem)]"
                     />
 
-                    <h2 className="mt-4 font-display text-[clamp(1.5rem,2.5vw,3rem)] text-red-900 leading-tight">
+                    <h2 className="mt-4 font-display text-[length:var(--screen-player)] text-red-900 leading-tight">
                       {pName}
                     </h2>
                     {pNick && (
-                      <p className="mt-1 text-base sm:text-lg font-semibold text-ink-muted">
+                      <p className="mt-1 text-[length:var(--screen-nick)] font-semibold text-ink-muted">
                         “{pNick}”
                       </p>
                     )}
@@ -813,7 +819,7 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                 }
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.4, ease: 'easeOut' }}
-                className="font-display text-gold-sticker-lg text-[clamp(2.25rem,4.8vw,5.5rem)] leading-[1.06]"
+                className="font-display text-gold-sticker-lg text-[length:var(--screen-hero)] leading-[1.06] rtl:leading-[1.22] text-balance"
               >
                 {game.isFinal
                   ? lang === 'ar'
@@ -828,20 +834,24 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                       : 'TABLE WINNER!'}
               </motion.h1>
               <p
-                dir={lang === 'ar' ? 'ltr' : 'rtl'}
-                className="mt-1 font-display text-white-sticker text-[clamp(1.15rem,2vw,2.25rem)]"
+                className={cn(
+                  'mt-1 text-white-sticker text-[length:var(--screen-subtitle)] text-balance',
+                  lang === 'ar' ? 'font-display' : 'font-ar-display'
+                )}
               >
-                {game.isFinal
-                  ? lang === 'ar'
-                    ? 'TOURNAMENT CHAMPION!'
-                    : 'بطل كازينو الألعاب!'
-                  : round?.advancePerGame === 2
+                <span dir={lang === 'ar' ? 'ltr' : 'rtl'} className="inline-block">
+                  {game.isFinal
                     ? lang === 'ar'
-                      ? 'TOP 2 ADVANCE TO THE GRAND FINAL'
-                      : 'تأهل الأول والثاني لمواجهة مروان سري'
-                    : lang === 'ar'
-                      ? 'OFFICIAL FINAL STANDINGS'
-                      : 'النتيجة الرسمية المعتمدة'}
+                      ? 'TOURNAMENT CHAMPION!'
+                      : 'بطل كازينو الألعاب!'
+                    : round?.advancePerGame === 2
+                      ? lang === 'ar'
+                        ? 'TOP 2 ADVANCE TO THE GRAND FINAL'
+                        : 'تأهل الأول والثاني لمواجهة مروان سري'
+                      : lang === 'ar'
+                        ? 'OFFICIAL FINAL STANDINGS'
+                        : 'النتيجة الرسمية المعتمدة'}
+                </span>
               </p>
             </div>
 
@@ -893,7 +903,6 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                           size="xl"
                           isHost={Boolean(finalStandings[0].player.isHost)}
                           buzzed
-                          rank={1}
                           className="h-20 w-20 sm:h-24 sm:w-24 xl:h-28 xl:w-28"
                         />
                         <motion.span
@@ -932,14 +941,14 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                           </span>
                         </div>
 
-                        <h2 className="mt-2 truncate font-display text-[clamp(1.85rem,3.4vw,4rem)] text-red-900 leading-tight">
+                        <h2 className="mt-2 truncate font-display text-[length:var(--screen-lb-title)] text-red-900 leading-tight">
                           {localizeText(
                             lang,
                             finalStandings[0].player.fullName,
                             finalStandings[0].player.fullNameAr
                           )}
                         </h2>
-                        <p className="text-base sm:text-xl font-bold text-ink-muted">
+                        <p className="text-[length:var(--screen-nick)] font-bold text-ink-muted">
                           “
                           {localizeText(
                             lang,
@@ -955,9 +964,9 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                       <AnimatedNumber
                         value={finalStandings[0].score}
                         useArabicIndicDigits={useArabicIndic}
-                        className="font-score text-gold-sticker-lg text-[clamp(3.75rem,6.5vw,7.5rem)] font-black leading-none"
+                        className="font-score text-gold-sticker-lg text-[length:var(--screen-score-hero)] font-black leading-none"
                       />
-                      <span className="mt-1 text-sm sm:text-base font-extrabold uppercase text-red-900">
+                      <span className="mt-1 text-[length:var(--screen-label)] font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
                         {lang === 'ar' ? 'إجمالي النقاط' : 'FINAL POINTS'}
                       </span>
                     </div>
@@ -1050,10 +1059,10 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
             transition={{ duration: 0.25 }}
             className="flex flex-1 min-h-0 flex-col justify-between gap-4 sm:gap-5 xl:gap-6 pt-3 sm:pt-4"
           >
-            {/* STAGE CENTERPIECE: HUGE DUAL EN/AR SEGMENT TITLE + TIMER RING */}
-            <div className="relative z-20 flex flex-col lg:flex-row items-center justify-between gap-4 sm:gap-6 px-0 sm:px-6 xl:px-14">
+            {/* STAGE CENTERPIECE: HUGE DUAL EN/AR SEGMENT TITLE + TIMER RING (Side-by-side on Tablet Portrait, Phone Landscape & Desktop) */}
+            <div className="relative z-20 flex flex-col sm:[@media(max-height:520px)]:flex-row md:flex-row items-center justify-between gap-3 sm:gap-5 px-0 md:px-4 xl:px-14">
               {/* Dual-Language Segment Headline + Progress Strip */}
-              <div className="min-w-0 flex-1 text-center lg:text-start">
+              <div className="min-w-0 flex-1 text-center sm:[@media(max-height:520px)]:text-start md:text-start">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentSegment?.id ?? game.currentSegmentIndex}
@@ -1074,8 +1083,8 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                     {/* Primary Language Huge Gold Sticker Title */}
                     <h1
                       className={cn(
-                        'font-display text-gold-sticker-lg leading-[1.08] line-clamp-2',
-                        'text-[clamp(1.85rem,3.6vw,4.6rem)]'
+                        'font-display text-gold-sticker-lg leading-[1.08] rtl:leading-[1.22] line-clamp-2 text-balance',
+                        'text-[length:var(--screen-hero)] [@media(max-height:520px)]:text-2xl'
                       )}
                     >
                       {lang === 'ar'
@@ -1087,9 +1096,9 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                     {currentSegment && (
                       <p
                         className={cn(
-                          'text-white-sticker leading-[1.2] line-clamp-1',
+                          'text-white-sticker leading-[1.22] line-clamp-1',
                           lang === 'ar' ? 'font-display' : 'font-ar-display',
-                          'text-[clamp(1.25rem,2.3vw,3rem)]'
+                          'text-[length:var(--screen-subtitle)] [@media(max-height:520px)]:text-lg'
                         )}
                       >
                         <span dir={lang === 'ar' ? 'ltr' : 'rtl'} className="inline-block">
@@ -1104,7 +1113,7 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
 
                 {/* Segment Progress Stepper Pills */}
                 <div
-                  className="mt-3 sm:mt-4 flex flex-wrap items-center justify-center lg:justify-start gap-1.5 sm:gap-2"
+                  className="mt-2.5 sm:mt-3.5 [@media(max-height:520px)]:mt-1.5 flex flex-wrap items-center justify-center sm:[@media(max-height:520px)]:justify-start md:justify-start gap-1.5 sm:gap-2"
                   aria-label={
                     lang === 'ar'
                       ? `تقدم الفقرات: ${game.currentSegmentIndex + 1} من ${game.segmentIds.length}`
@@ -1134,7 +1143,7 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                 </div>
               </div>
 
-              {/* Giant Broadcast Timer Ring */}
+              {/* Giant Broadcast Timer Ring (dual-axis vw/dvh scaled) */}
               <div className="shrink-0">
                 <TimerRing
                   durationSec={timerDuration}
@@ -1143,24 +1152,36 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                   size="xl"
                   surface="stage"
                   useArabicIndicDigits={useArabicIndic}
-                  className="[&>div:first-child]:w-[clamp(124px,13.5vw,224px)]"
+                  className="[&>div:first-child]:w-[clamp(108px,min(13.5vw,21dvh),248px)] [@media(max-height:520px)]:[&>div:first-child]:w-[86px]"
                 />
               </div>
             </div>
 
-            {/* LOWER ARENA: 3 HIGH-CONTRAST BROADCAST PLAYER PANELS */}
+            {/* LOWER ARENA: 3 CONTEXT-ADAPTED BROADCAST PLAYER PANELS
+                - Phone Portrait: 1-col stack
+                - Phone Landscape (<520px height): compact 3-up strip
+                - Tablet Portrait (md): 2-col hybrid (featured/buzzed/Golden Seat spans full top width)
+                - Desktop/TV (lg+): 3 equal columns */}
             <div
               className={cn(
-                'relative z-20 grid grid-cols-1 lg:grid-cols-3 gap-3.5 sm:gap-5 xl:gap-7 flex-1 min-h-0 items-stretch transition-[padding] duration-300',
-                presenter.controlsVisible ? 'pb-16 lg:pb-14' : 'pb-1'
+                'relative z-20 grid grid-cols-1 sm:[@media(max-height:520px)]:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 xl:gap-7 flex-1 min-h-0 items-stretch transition-[padding] duration-300',
+                presenter.controlsVisible
+                  ? 'pb-20 sm:pb-16 lg:pb-14 [@media(max-height:520px)]:pb-12'
+                  : 'pb-1'
               )}
             >
-              {displayPlayers.map((player) => {
+              {displayPlayers.map((player, idx) => {
                 const isBuzzed = game.activeBuzzPlayerId === player.id;
                 const hasOtherBuzz = Boolean(
                   game.activeBuzzPlayerId &&
                     game.activeBuzzPlayerId !== player.id
                 );
+                const featuredOnTablet = game.isFinal
+                  ? Boolean(player.isHost)
+                  : game.activeBuzzPlayerId
+                    ? isBuzzed
+                    : idx === 0;
+
                 return (
                   <BroadcastPlayerCard
                     key={player.id}
@@ -1180,6 +1201,10 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                     isFinal={game.isFinal}
                     deltaEvent={deltaByPlayer[player.id] ?? null}
                     useArabicIndicDigits={useArabicIndic}
+                    className={cn(
+                      featuredOnTablet &&
+                        'md:col-span-2 lg:col-span-1 md:order-first lg:order-none'
+                    )}
                   />
                 );
               })}

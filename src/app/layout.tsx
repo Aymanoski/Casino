@@ -27,7 +27,6 @@ const bebasNeue = Bebas_Neue({
 
 const inter = Inter({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
   variable: '--font-inter',
   display: 'swap',
 });
@@ -41,7 +40,6 @@ const lalezar = Lalezar({
 
 const cairo = Cairo({
   subsets: ['arabic', 'latin'],
-  weight: ['400', '600', '700', '900'],
   variable: '--font-cairo',
   display: 'swap',
 });

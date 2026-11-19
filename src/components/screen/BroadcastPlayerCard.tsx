@@ -124,7 +124,7 @@ export function BroadcastPlayerCard({
       }
       transition={{ duration: 0.28, ease: 'easeOut' }}
       className={cn(
-        '@container relative flex min-w-0 flex-col justify-between overflow-hidden rounded-card border-[3px] border-outline p-4 sm:p-5 xl:p-6 3xl:p-8 text-ink transition-shadow duration-300',
+        '@container relative flex min-w-0 flex-col justify-between overflow-hidden rounded-card border-[3px] border-outline p-3.5 sm:p-5 xl:p-6 3xl:p-8 [@media(max-height:520px)]:p-2.5 text-ink transition-shadow duration-300',
         isBuzzed
           ? 'bg-gradient-to-b from-gold-200 via-paper to-white ring-[5px] ring-gold-300 shadow-glow-gold'
           : isGoldenSeat
@@ -147,29 +147,32 @@ export function BroadcastPlayerCard({
 
       {/* Golden Seat Top Marquee Strip for Marwan Serry */}
       {isGoldenSeat && (
-        <div className="relative z-10 mb-2.5 sm:mb-3">
+        <div className="relative z-10 mb-2 sm:mb-3 [@media(max-height:520px)]:hidden">
           <MarqueeBulbs variant="strip" bulbCount={10} tone="gold" chase />
         </div>
       )}
 
       {/* Top Status Bar: Rank Chip + Buzzed / Host / Winner Pill */}
-      <div className="relative z-10 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           <ScoreChip
             value={`#${formatNumber(rank, { useArabicIndicDigits })}`}
             tone={rankTone}
             size="md"
-            className="shrink-0"
+            className="shrink-0 [@media(max-height:520px)]:scale-90"
           />
           {isGoldenSeat ? (
-            <span className="inline-flex items-center gap-1.5 rounded-pill border-2 border-outline bg-gold-gradient px-3 py-1 text-xs sm:text-sm font-extrabold uppercase text-red-900 shadow-sticker-sm">
-              <Crown className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span>
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border-2 border-outline bg-gold-gradient px-2.5 sm:px-3 py-1 text-xs sm:text-sm font-extrabold uppercase text-red-900 shadow-sticker-sm">
+              <Crown className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" aria-hidden="true" />
+              <span className="hidden @xs:inline">
                 {lang === 'ar' ? 'المقعد الذهبي · المضيف' : 'GOLDEN SEAT · HOST'}
+              </span>
+              <span className="@xs:hidden">
+                {lang === 'ar' ? 'المقعد الذهبي' : 'GOLDEN SEAT'}
               </span>
             </span>
           ) : isFinal ? (
-            <span className="inline-flex items-center gap-1.5 rounded-pill border-2 border-outline bg-blue-600 px-3 py-1 text-xs sm:text-sm font-extrabold uppercase text-white shadow-sticker-sm ring-2 ring-white">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border-2 border-outline bg-blue-600 px-2.5 sm:px-3 py-1 text-xs sm:text-sm font-extrabold uppercase text-white shadow-sticker-sm ring-2 ring-white">
               <span>{lang === 'ar' ? 'متأهل للنهائي' : 'FINALIST'}</span>
             </span>
           ) : null}
@@ -188,9 +191,9 @@ export function BroadcastPlayerCard({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ duration: 0.22, ease: 'easeOut' }}
-              className="inline-flex items-center gap-1.5 rounded-pill border-[2.5px] border-outline bg-gold-gradient px-3.5 py-1.5 text-xs sm:text-sm 2xl:text-base font-black uppercase text-red-900 shadow-glow-gold"
+              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border-[2.5px] border-outline bg-gold-gradient px-3 sm:px-3.5 py-1 sm:py-1.5 text-xs sm:text-sm 2xl:text-base font-black uppercase text-red-900 shadow-glow-gold"
             >
-              <Zap className="h-4 w-4 fill-red-900 shrink-0" aria-hidden="true" />
+              <Zap className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-red-900 shrink-0" aria-hidden="true" />
               <span>
                 {lang === 'ar' ? 'ضغط الجرس أولاً!' : 'BUZZED FIRST!'}
               </span>
@@ -200,7 +203,7 @@ export function BroadcastPlayerCard({
               key="winner-pill"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="inline-flex items-center gap-1.5 rounded-pill border-2 border-outline bg-gold-gradient px-3.5 py-1 text-xs sm:text-sm font-black uppercase text-red-900 shadow-sticker-sm"
+              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border-2 border-outline bg-gold-gradient px-3.5 py-1 text-xs sm:text-sm font-black uppercase text-red-900 shadow-sticker-sm"
             >
               <Trophy className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span>
@@ -214,36 +217,36 @@ export function BroadcastPlayerCard({
               </span>
             </motion.span>
           ) : isAdvancing ? (
-            <span className="inline-flex items-center gap-1.5 rounded-pill border-2 border-outline bg-positive-soft px-3 py-1 text-xs sm:text-sm font-extrabold uppercase text-positive-ink shadow-sticker-sm">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border-2 border-outline bg-positive-soft px-3 py-1 text-xs sm:text-sm font-extrabold uppercase text-positive-ink shadow-sticker-sm">
               <span>{lang === 'ar' ? 'متأهل' : 'ADVANCING'}</span>
             </span>
           ) : null}
         </AnimatePresence>
       </div>
 
-      {/* Center Identity Block: Geometric Avatar + Giant Name + Nickname */}
-      <div className="relative z-10 my-3 sm:my-4 2xl:my-6 flex flex-row lg:flex-col xl:flex-row items-center lg:text-center xl:text-start gap-3.5 sm:gap-4 2xl:gap-5">
+      {/* Center Identity Block: Container-adaptive Avatar + Name + Nickname (balanced vertically on tall displays) */}
+      <div className="relative z-10 my-auto flex flex-col @sm:flex-row items-center text-center @sm:text-start gap-2.5 sm:gap-4 2xl:gap-6 py-3 sm:py-4 2xl:py-6 [@media(max-height:520px)]:py-1.5 [@media(max-height:520px)]:flex-row [@media(max-height:520px)]:text-start">
         <PlayerAvatar
           name={name}
           avatarSeed={avatarSeed}
           size="xl"
           isHost={isHost}
           buzzed={isBuzzed}
-          className="h-14 w-14 sm:h-16 sm:w-16 xl:h-20 xl:w-20 3xl:h-28 3xl:w-28 shrink-0"
+          className="h-[clamp(3rem,min(5.2vw,8.5dvh),7.5rem)] w-[clamp(3rem,min(5.2vw,8.5dvh),7.5rem)] [@media(max-height:520px)]:h-10 [@media(max-height:520px)]:w-10 shrink-0"
         />
 
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 w-full">
           <h2
             className={cn(
               'truncate font-display leading-tight ltr:tracking-tight rtl:tracking-normal',
-              'text-[clamp(1.25rem,1.95vw,2.55rem)]',
+              'text-[length:var(--screen-player)] [@media(max-height:520px)]:text-base',
               isGoldenSeat ? 'text-red-900' : 'text-ink'
             )}
           >
             {name}
           </h2>
           {nickname && (
-            <p className="mt-0.5 truncate font-semibold text-[clamp(0.875rem,1.25vw,1.5rem)] text-ink-muted">
+            <p className="mt-0.5 truncate font-semibold text-[length:var(--screen-nick)] [@media(max-height:520px)]:text-xs text-ink-muted">
               “{nickname}”
             </p>
           )}
@@ -251,8 +254,8 @@ export function BroadcastPlayerCard({
       </div>
 
       {/* Colossal 10-Meter Score Deck with Floating +/- Delta Flash */}
-      <div className="relative z-10 mt-auto flex items-end justify-between gap-3 border-t-[2.5px] border-border-paper pt-3 sm:pt-4 2xl:pt-6">
-        <span className="font-bold uppercase text-[clamp(0.75rem,1vw,1.2rem)] ltr:tracking-wider rtl:tracking-normal text-ink-muted pb-2">
+      <div className="relative z-10 flex items-end justify-between gap-3 border-t-[2.5px] border-border-paper pt-2.5 sm:pt-4 2xl:pt-6 [@media(max-height:520px)]:pt-1.5">
+        <span className="font-bold uppercase text-[length:var(--screen-label)] ltr:tracking-wider rtl:tracking-normal text-ink-muted pb-1 sm:pb-2">
           {lang === 'ar' ? 'النقاط' : 'SCORE'}
         </span>
 
@@ -324,7 +327,7 @@ export function BroadcastPlayerCard({
             duration={0.5}
             className={cn(
               'font-score font-black leading-none tracking-normal',
-              'text-[clamp(3.5rem,6.6vw,9.25rem)]',
+              'text-[length:var(--screen-score-hero)] [@media(max-height:520px)]:text-4xl',
               isGoldenSeat || isWinner || isBuzzed
                 ? 'text-gold-sticker-lg'
                 : 'text-red-900'
