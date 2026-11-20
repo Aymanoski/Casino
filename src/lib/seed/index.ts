@@ -1182,7 +1182,7 @@ export function createSeedSnapshot(): DatabaseSnapshot {
     },
     {
       id: 'sponsor-3',
-      name: 'Kahوة & Crème Roasters (Placeholder)',
+      name: 'Kahwa & Crème Roasters (Placeholder)',
       nameAr: 'محمصة قهوة وكريم (نموذج راعٍ)',
       tier: 'segment',
       tierLabelEn: 'Segment Partner',

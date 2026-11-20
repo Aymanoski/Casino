@@ -304,7 +304,9 @@ export function HeroFinalSection({
                       className="inline-flex min-h-[44px] items-center gap-1.5 rounded-button px-2 text-blue-600 underline underline-offset-4 hover:text-blue-800 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
                     >
                       <span>
-                        {lang === 'ar' ? 'شاهد طريق التأهل (٢٧ لاعباً)' : '27-Player Bracket Path'}
+                        {lang === 'ar'
+                          ? `شاهد طريق التأهل (${settings?.bracketConfig.totalPlayers ?? 27} لاعباً)`
+                          : `${settings?.bracketConfig.totalPlayers ?? 27}-Player Bracket Path`}
                       </span>
                       <ArrowDownRight className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
                     </Link>

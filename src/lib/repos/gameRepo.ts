@@ -1,4 +1,4 @@
-import type { Game, GameTimerState, Round } from '@/lib/schemas';
+import type { DatabaseSnapshot, Game, GameTimerState, Round } from '@/lib/schemas';
 import { feedback } from '@/lib/feedback';
 import { realtime } from '@/lib/realtime';
 import { createDemoSeedState } from '@/lib/seed';
@@ -7,11 +7,123 @@ import { auditRepo } from './auditRepo';
 import { assertRepoPermission } from './permissions';
 import { recomputePlayerStatsInMemory } from './playerRepo';
 
+export interface AdvancementPlacement {
+  playerId: string;
+  targetGameId: string;
+  targetTableName: string;
+  targetTableNameAr: string;
+  seatIndex: number;
+  isFinal: boolean;
+}
+
 export interface FinishGameResult {
   status: 'finished' | 'qualifying_tie' | 'tie_breaker_opened';
   game: Game;
   tiedPlayerIds?: string[];
   winners?: string[];
+  advancedTo?: AdvancementPlacement[];
+}
+
+interface AdvancementSlotTarget {
+  gameId: string;
+  gameIdx: number;
+  seatIdx: number;
+  isFinal: boolean;
+  nextRoundOrder: number;
+}
+
+function sortRoundGames(games: Game[]): Game[] {
+  return [...games].sort((a, b) => {
+    const pa = a.podOrder ?? 999;
+    const pb = b.podOrder ?? 999;
+    if (pa !== pb) return pa - pb;
+    const tDiff =
+      new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime();
+    if (tDiff !== 0) return tDiff;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+function syncRoundStatusesInMemory(db: DatabaseSnapshot): void {
+  db.rounds = db.rounds.map((round) => {
+    const rGames = db.games.filter((g) => !g.isDemo && g.roundId === round.id);
+    if (rGames.length === 0) return round;
+    const allFinished = rGames.every((g) => g.status === 'finished');
+    const anyStarted = rGames.some(
+      (g) => g.status === 'live' || g.status === 'finished'
+    );
+    const nextStatus: Round['status'] = allFinished
+      ? 'done'
+      : anyStarted
+        ? 'live'
+        : 'upcoming';
+    return round.status === nextStatus ? round : { ...round, status: nextStatus };
+  });
+}
+
+function resolveNextRoundSlotTargets(
+  db: DatabaseSnapshot,
+  sourceGame: Game
+): { nextRound: Round; targets: AdvancementSlotTarget[] } | null {
+  if (sourceGame.isDemo) return null;
+  const sortedRounds = [...db.rounds].sort((a, b) => a.order - b.order);
+  const currentRoundIdx = sortedRounds.findIndex(
+    (r) => r.id === sourceGame.roundId
+  );
+  if (currentRoundIdx === -1 || currentRoundIdx >= sortedRounds.length - 1) {
+    return null;
+  }
+
+  const currentRound = sortedRounds[currentRoundIdx];
+  const nextRound = sortedRounds[currentRoundIdx + 1];
+
+  const currentRoundGames = sortRoundGames(
+    db.games.filter((g) => !g.isDemo && g.roundId === currentRound.id)
+  );
+  const sourceGameIdx = currentRoundGames.findIndex(
+    (g) => g.id === sourceGame.id
+  );
+  if (sourceGameIdx === -1) return null;
+
+  const nextRoundGames = sortRoundGames(
+    db.games.filter((g) => !g.isDemo && g.roundId === nextRound.id)
+  );
+  if (nextRoundGames.length === 0) return null;
+
+  const flattenedSlots: AdvancementSlotTarget[] = [];
+  nextRoundGames.forEach((ng, ngIdx) => {
+    ng.playerIds.forEach((pid, seatIdx) => {
+      // Never overwrite Marwan Serry's Golden Seat
+      if (pid === 'player-marwan') return;
+      flattenedSlots.push({
+        gameId: ng.id,
+        gameIdx: ngIdx,
+        seatIdx,
+        isFinal: Boolean(ng.isFinal),
+        nextRoundOrder: nextRound.order,
+      });
+    });
+  });
+
+  const advanceCount = Math.max(1, currentRound.advancePerGame);
+  const startFlatIdx = sourceGameIdx * advanceCount;
+  const targets = flattenedSlots.slice(startFlatIdx, startFlatIdx + advanceCount);
+
+  return { nextRound, targets };
+}
+
+function distributeSeatsAcrossGames(
+  poolSize: number,
+  gamesCount: number,
+  maxPerGame: number
+): number[] {
+  const safeGames = Math.max(1, gamesCount);
+  const effectivePool = Math.max(safeGames * 2, poolSize);
+  const base = Math.min(maxPerGame, Math.floor(effectivePool / safeGames));
+  const rem = Math.max(0, effectivePool - base * safeGames);
+  return Array.from({ length: safeGames }, (_, idx) =>
+    Math.min(maxPerGame, Math.max(2, base + (idx < rem ? 1 : 0)))
+  );
 }
 
 export interface BracketRoundSpec {
@@ -113,6 +225,7 @@ export const gameRepo = {
     }
 
     db.games.push(newGame);
+    syncRoundStatusesInMemory(db);
     recomputePlayerStatsInMemory(db);
     await storage.writeSnapshot(db);
 
@@ -166,6 +279,7 @@ export const gameRepo = {
     }
 
     db.games[idx] = updated;
+    syncRoundStatusesInMemory(db);
     recomputePlayerStatsInMemory(db);
     await storage.writeSnapshot(db);
 
@@ -206,6 +320,7 @@ export const gameRepo = {
     if (!target) return false;
 
     db.games = db.games.filter((g) => g.id !== id);
+    syncRoundStatusesInMemory(db);
     recomputePlayerStatsInMemory(db);
     await storage.writeSnapshot(db);
 
@@ -264,15 +379,20 @@ export const gameRepo = {
     const newGames: Game[] = [];
     let gameSeq = 1;
     let scorerCursor = 0;
+    let incomingPool = Math.max(2, input.totalPlayers);
+    let r1Cursor = 0;
 
     input.rounds.forEach((spec, roundIdx) => {
       const isFinalRound = Boolean(spec.isFinal);
-      const roundId = isFinalRound
-        ? 'round-final'
-        : roundIdx === input.rounds.length - (input.includeFinalWithMarwan ? 2 : 1) &&
-            input.rounds.length >= 2
-          ? 'round-semi'
-          : `round-${roundIdx + 1}`;
+      const isLastRound = roundIdx === input.rounds.length - 1;
+      const isPenultimateBeforeFinal =
+        input.includeFinalWithMarwan && roundIdx === input.rounds.length - 2;
+      const roundId =
+        isFinalRound || isLastRound
+          ? 'round-final'
+          : isPenultimateBeforeFinal
+            ? 'round-semi'
+            : `round-${roundIdx + 1}`;
 
       newRounds.push({
         id: roundId,
@@ -283,6 +403,15 @@ export const gameRepo = {
       });
 
       const gamesCount = isFinalRound ? 1 : Math.max(1, spec.gamesCount);
+      const seatCounts =
+        isFinalRound && input.includeFinalWithMarwan
+          ? [3]
+          : distributeSeatsAcrossGames(
+              incomingPool,
+              gamesCount,
+              Math.max(2, input.playersPerGame)
+            );
+
       for (let gIdx = 0; gIdx < gamesCount; gIdx++) {
         const scorerUserId =
           scorers.length > 0
@@ -293,20 +422,19 @@ export const gameRepo = {
           safeBaseMs + roundIdx * 86_400_000 + gIdx * 45 * 60_000
         ).toISOString();
 
+        const seatCount = seatCounts[gIdx] ?? Math.max(2, input.playersPerGame);
         let playerIds: string[];
         if (isFinalRound && input.includeFinalWithMarwan) {
           playerIds = ['tbd-final-1', 'tbd-final-2', 'player-marwan'];
         } else if (roundIdx === 0) {
-          const seatCount = Math.max(2, input.playersPerGame);
           playerIds = Array.from({ length: seatCount }, (_, sIdx) => {
-            const globalSeat = gIdx * seatCount + sIdx;
+            const globalSeat = r1Cursor++;
             if (globalSeat < input.totalPlayers && seededPlayers[globalSeat]) {
               return seededPlayers[globalSeat].id;
             }
             return `tbd-r1-g${gIdx + 1}-s${sIdx + 1}`;
           });
         } else {
-          const seatCount = Math.max(2, input.playersPerGame);
           playerIds = Array.from(
             { length: seatCount },
             (_, sIdx) => `tbd-r${roundIdx + 1}-g${gIdx + 1}-s${sIdx + 1}`
@@ -345,6 +473,8 @@ export const gameRepo = {
           timer: { status: 'idle', durationSec: 45, remainingSec: 45 },
         });
       }
+
+      incomingPool = gamesCount * Math.max(1, spec.advancePerGame);
     });
 
     const preservedDemoGames = db.games.filter((g) => g.isDemo);
@@ -416,6 +546,16 @@ export const gameRepo = {
     const current = db.games[idx];
     assertRepoPermission(db, actorUserId, 'game.operate', { game: current });
 
+    const playerIdSet = new Set(db.players.map((p) => p.id));
+    const unresolvedSeats = current.playerIds.filter(
+      (pid) => !playerIdSet.has(pid)
+    );
+    if (unresolvedSeats.length > 0) {
+      throw new Error(
+        `Cannot start "${current.tableName}" while ${unresolvedSeats.length} qualifier seat(s) are still TBD. Finish the previous round or assign players in Admin Bracket first.`
+      );
+    }
+
     const firstSegId =
       current.segmentIds[current.currentSegmentIndex] ?? current.segmentIds[0];
     const firstSeg = db.segments.find((s) => s.id === firstSegId);
@@ -433,6 +573,16 @@ export const gameRepo = {
       },
     };
     db.games[idx] = updated;
+
+    db.players = db.players.map((p) => {
+      if (!updated.playerIds.includes(p.id) || p.isHost) return p;
+      return {
+        ...p,
+        status: updated.isFinal ? 'finalist' : 'active',
+      };
+    });
+
+    syncRoundStatusesInMemory(db);
     recomputePlayerStatsInMemory(db);
     await storage.writeSnapshot(db);
 
@@ -448,6 +598,7 @@ export const gameRepo = {
     });
 
     realtime.publish('game.started', { gameId: id });
+    realtime.publish('bracket.updated', { gameId: id });
     return updated;
   },
 
@@ -748,31 +899,100 @@ export const gameRepo = {
 
     db.games[idx] = updated;
 
+    // Advance winning/qualifying players into the next round's scheduled table(s)
+    const advancementPlan = resolveNextRoundSlotTargets(db, updated);
+    const advancedTo: AdvancementPlacement[] = [];
+    let revealedFinalGameId: string | null = null;
+
+    if (advancementPlan && advancementPlan.targets.length > 0) {
+      const playerIdSet = new Set(db.players.map((p) => p.id));
+      advancingPlayerIds.forEach((advPid, k) => {
+        const target = advancementPlan.targets[k];
+        if (!target) return;
+        const targetIdx = db.games.findIndex((g) => g.id === target.gameId);
+        if (targetIdx === -1) return;
+        const targetGame = db.games[targetIdx];
+        // Only auto-slot into scheduled games and never touch Marwan Serry's host seat
+        if (
+          targetGame.status !== 'scheduled' ||
+          targetGame.playerIds[target.seatIdx] === 'player-marwan'
+        ) {
+          return;
+        }
+        const nextPlayerIds = [...targetGame.playerIds];
+        nextPlayerIds[target.seatIdx] = advPid;
+        db.games[targetIdx] = {
+          ...targetGame,
+          playerIds: nextPlayerIds,
+        };
+        advancedTo.push({
+          playerId: advPid,
+          targetGameId: targetGame.id,
+          targetTableName: targetGame.tableName,
+          targetTableNameAr: targetGame.tableNameAr || targetGame.tableName,
+          seatIndex: target.seatIdx,
+          isFinal: target.isFinal,
+        });
+
+        if (
+          targetGame.isFinal &&
+          nextPlayerIds.every((pid) => playerIdSet.has(pid))
+        ) {
+          revealedFinalGameId = targetGame.id;
+        }
+      });
+    }
+
+    const isAdvancingToFinal =
+      Boolean(advancementPlan?.targets.some((t) => t.isFinal)) ||
+      advancementPlan?.nextRound.id === 'round-final' ||
+      game.roundId === 'round-semi' ||
+      Boolean(game.isFinal);
+
     const advSet = new Set(advancingPlayerIds);
     db.players = db.players.map((p) => {
       if (!game.playerIds.includes(p.id) || p.isHost) return p;
       if (advSet.has(p.id)) {
         return {
           ...p,
-          status: game.roundId === 'round-semi' ? 'finalist' : 'active',
+          status: isAdvancingToFinal ? 'finalist' : 'active',
         };
       }
       return { ...p, status: 'eliminated' };
     });
 
+    syncRoundStatusesInMemory(db);
     recomputePlayerStatsInMemory(db);
     await storage.writeSnapshot(db);
 
     const winner = db.players.find((p) => p.id === winnerPlayerId);
+    const advanceSummaryEn =
+      advancedTo.length > 0
+        ? ` · Advanced to ${Array.from(new Set(advancedTo.map((a) => a.targetTableName))).join(', ')}`
+        : '';
+    const advanceSummaryAr =
+      advancedTo.length > 0
+        ? ` · تأهل إلى ${Array.from(new Set(advancedTo.map((a) => a.targetTableNameAr))).join('، ')}`
+        : '';
+
     await auditRepo.record({
       actorUserId,
       action: 'game.finish',
       entityType: 'game',
       entityId: id,
-      summary: `Finished "${updated.tableName}" — Winner: ${winner?.fullName ?? winnerPlayerId}`,
-      summaryAr: `انتهاء "${updated.tableNameAr || updated.tableName}" — الفائز: ${winner?.fullNameAr ?? winnerPlayerId}`,
+      summary: `Finished "${updated.tableName}" — Winner: ${winner?.fullName ?? winnerPlayerId}${advanceSummaryEn}`,
+      summaryAr: `انتهاء "${updated.tableNameAr || updated.tableName}" — الفائز: ${winner?.fullNameAr ?? winnerPlayerId}${advanceSummaryAr}`,
       before: { status: game.status },
-      after: { status: 'finished', winnerPlayerId, advancingPlayerIds },
+      after: {
+        status: 'finished',
+        winnerPlayerId,
+        advancingPlayerIds,
+        advancedTo: advancedTo.map((a) => ({
+          playerId: a.playerId,
+          targetGameId: a.targetGameId,
+          seatIndex: a.seatIndex,
+        })),
+      },
     });
 
     feedback.play('game.winner');
@@ -783,11 +1003,21 @@ export const gameRepo = {
       winnerPlayerId,
       advancingPlayerIds,
     });
+    realtime.publish('bracket.updated', {
+      gameId: advancedTo[0]?.targetGameId ?? id,
+    });
+    if (revealedFinalGameId) {
+      realtime.publish('final.revealed', {
+        gameId: revealedFinalGameId,
+        winnerPlayerId,
+      });
+    }
 
     return {
       status: 'finished',
       game: updated,
       winners: advancingPlayerIds,
+      advancedTo,
     };
   },
 
@@ -799,6 +1029,7 @@ export const gameRepo = {
     const current = db.games[idx];
     assertRepoPermission(db, actorUserId, 'game.reopen', { game: current });
 
+    const prevAdvancingSet = new Set(current.advancingPlayerIds ?? []);
     const segId =
       current.segmentIds[current.currentSegmentIndex] ?? current.segmentIds[0];
     const seg = db.segments.find((s) => s.id === segId);
@@ -820,11 +1051,39 @@ export const gameRepo = {
     };
     db.games[idx] = updated;
 
+    // Roll back auto-advanced seats in downstream scheduled tables (if they still hold the prior qualifiers)
+    if (prevAdvancingSet.size > 0) {
+      const advancementPlan = resolveNextRoundSlotTargets(db, updated);
+      if (advancementPlan) {
+        advancementPlan.targets.forEach((target) => {
+          const tIdx = db.games.findIndex((g) => g.id === target.gameId);
+          if (tIdx === -1) return;
+          const targetGame = db.games[tIdx];
+          if (targetGame.status !== 'scheduled') return;
+          const occupyingPid = targetGame.playerIds[target.seatIdx];
+          if (
+            occupyingPid !== 'player-marwan' &&
+            prevAdvancingSet.has(occupyingPid)
+          ) {
+            const nextPlayerIds = [...targetGame.playerIds];
+            nextPlayerIds[target.seatIdx] = target.isFinal
+              ? `tbd-final-${target.seatIdx + 1}`
+              : `tbd-r${target.nextRoundOrder}-g${target.gameIdx + 1}-s${target.seatIdx + 1}`;
+            db.games[tIdx] = {
+              ...targetGame,
+              playerIds: nextPlayerIds,
+            };
+          }
+        });
+      }
+    }
+
     db.players = db.players.map((p) => {
       if (!current.playerIds.includes(p.id) || p.isHost) return p;
-      return { ...p, status: 'active' };
+      return { ...p, status: current.isFinal ? 'finalist' : 'active' };
     });
 
+    syncRoundStatusesInMemory(db);
     recomputePlayerStatsInMemory(db);
     await storage.writeSnapshot(db);
 

@@ -639,9 +639,6 @@ export function ScorerDashboardView() {
               const round = roundMap.get(game.roundId);
               const scorer = userMap.get(game.scorerUserId);
               const gameTotals = totalsByGame[game.id] ?? {};
-              const seatedPlayers = game.playerIds
-                .map((pid) => playerMap.get(pid))
-                .filter((p): p is Player => Boolean(p));
               const isScheduled = game.status === 'scheduled';
               const isFinished = game.status === 'finished';
 
@@ -730,7 +727,38 @@ export function ScorerDashboardView() {
 
                     {/* 3 Players Compact List */}
                     <ul className="space-y-1.5 border-t border-white/15 pt-3">
-                      {seatedPlayers.map((player) => {
+                      {game.playerIds.map((pid, seatIdx) => {
+                        const player = playerMap.get(pid);
+                        if (!player) {
+                          return (
+                            <li
+                              key={`${game.id}-${pid}-${seatIdx}`}
+                              className="flex items-center justify-between gap-2 rounded-input border border-dashed border-white/25 bg-red-900/35 px-2.5 py-2"
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span
+                                  aria-hidden="true"
+                                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-pill border border-dashed border-gold-300/60 bg-red-900/70 font-score text-xs font-black text-gold-200"
+                                >
+                                  0{seatIdx + 1}
+                                </span>
+                                <span className="truncate text-sm font-semibold text-red-100">
+                                  {game.isFinal
+                                    ? lang === 'ar'
+                                      ? `متأهل النهائي #${formatNumber(seatIdx + 1, { useArabicIndicDigits: useArabicIndic })} (TBD)`
+                                      : `Finalist #${seatIdx + 1} (TBD)`
+                                    : lang === 'ar'
+                                      ? `مقعد متأهل #${formatNumber(seatIdx + 1, { useArabicIndicDigits: useArabicIndic })} (TBD)`
+                                      : `Qualifier Seat #${seatIdx + 1} (TBD)`}
+                                </span>
+                              </div>
+                              <span className="font-score text-xl font-black leading-none text-red-200/70">
+                                —
+                              </span>
+                            </li>
+                          );
+                        }
+
                         const score = gameTotals[player.id] ?? 0;
                         const isWinner = isFinished && game.winnerPlayerId === player.id;
                         const isAdvancing =

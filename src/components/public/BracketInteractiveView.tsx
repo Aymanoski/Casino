@@ -461,8 +461,8 @@ export function BracketInteractiveView() {
                 >
                   <option value="">
                     {lang === 'ar'
-                      ? '— جميع اللاعبين (٢٧ + مروان سري) —'
-                      : '— All contestants (27 + Marwan Serry) —'}
+                      ? `— جميع اللاعبين (${formatNumber(maps.contestants.length, { useArabicIndicDigits: useArabicIndic })} + مروان سري) —`
+                      : `— All contestants (${maps.contestants.length} + Marwan Serry) —`}
                   </option>
                   <option value="player-marwan">
                     {lang === 'ar'

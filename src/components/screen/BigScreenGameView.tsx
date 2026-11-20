@@ -369,11 +369,35 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
   const useArabicIndic = settings?.useArabicIndicDigits ?? false;
 
   // Ordered players: in Final mode, position Marwan Serry dead-center flanked by the 2 finalists
+  // Synthesizes clean TBD placeholder seats when a scheduled future table awaits previous-round qualifiers.
   const displayPlayers = useMemo(() => {
     if (!game) return [];
-    const list = game.playerIds
-      .map((pid) => playersMap[pid])
-      .filter((p): p is Player => Boolean(p));
+    const list: Array<Player & { isPlaceholder?: boolean }> = game.playerIds.map(
+      (pid, idx) => {
+        const existing = playersMap[pid];
+        if (existing) return existing;
+        return {
+          id: pid,
+          fullName: game.isFinal
+            ? `Finalist #${idx + 1} (TBD)`
+            : `Qualifier Seat #${idx + 1} (TBD)`,
+          fullNameAr: game.isFinal
+            ? `المتأهل النهائي #${idx + 1}`
+            : `مقعد متأهل #${idx + 1}`,
+          nickname: game.isFinal ? 'Semi-Final Top 2' : 'Previous Round Winner',
+          nicknameAr: game.isFinal ? 'متأهل من نصف النهائي' : 'الفائز من الجولة السابقة',
+          avatarSeed: `tbd-${pid}-${idx}`,
+          phone: '',
+          email: 'tbd@players.casino',
+          status: 'registered',
+          seed: 999 + idx,
+          isHost: false,
+          stats: { gamesPlayed: 0, wins: 0, totalPoints: 0 },
+          createdAt: '',
+          isPlaceholder: true,
+        };
+      }
+    );
 
     if (game.isFinal && list.length === 3) {
       const host = list.find((p) => p.isHost);

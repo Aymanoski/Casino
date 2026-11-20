@@ -134,10 +134,12 @@ export function HowItWorksSection({ settings }: HowItWorksSectionProps) {
   ): BracketPlayerSlot => {
     const player = players.find((p) => p.id === playerId);
     const isHost = Boolean(player?.isHost);
-    if (forcePlaceholder && !isHost) {
+    if ((forcePlaceholder && !isHost) || !player || playerId.startsWith('tbd-')) {
       return {
         id: `placeholder-${playerId}`,
-        name: placeholderLabel ?? (lang === 'ar' ? 'يتحدد من نصف النهائي' : 'Semi-Final Qualifier'),
+        name:
+          placeholderLabel ??
+          (lang === 'ar' ? 'بانتظار المتأهل (TBD)' : 'Qualifier Seat (TBD)'),
         isPlaceholder: true,
       };
     }
@@ -145,13 +147,9 @@ export function HowItWorksSection({ settings }: HowItWorksSectionProps) {
     const hasStarted = game.status === 'live' || game.status === 'finished';
     return {
       id: playerId,
-      name: player
-        ? localizeText(lang, player.fullName, player.fullNameAr)
-        : playerId,
-      nickname: player
-        ? localizeText(lang, player.nickname, player.nicknameAr)
-        : undefined,
-      avatarSeed: player?.avatarSeed,
+      name: localizeText(lang, player.fullName, player.fullNameAr),
+      nickname: localizeText(lang, player.nickname, player.nicknameAr),
+      avatarSeed: player.avatarSeed,
       score: hasStarted ? (gameTotals[playerId] ?? 0) : undefined,
       isWinner: game.winnerPlayerId === playerId,
       isAdvancing: game.advancingPlayerIds?.includes(playerId),
@@ -185,8 +183,8 @@ export function HowItWorksSection({ settings }: HowItWorksSectionProps) {
             size="lg"
             title={
               lang === 'ar'
-                ? 'من ٢٧ متسابقاً إلى نهائي واحد كبير'
-                : 'From 27 Challengers to One Grand Final'
+                ? `من ${formatNumber(totalPlayers, { useArabicIndicDigits: useArabicIndic })} متسابقاً إلى نهائي واحد كبير`
+                : `From ${totalPlayers} Challengers to One Grand Final`
             }
             goldKeyword={lang === 'ar' ? 'نهائي واحد' : 'Grand Final'}
             subtitle={
@@ -245,7 +243,7 @@ export function HowItWorksSection({ settings }: HowItWorksSectionProps) {
                   <span>
                     {lang === 'ar'
                       ? 'استكشف شجرة البطولة الكاملة'
-                      : 'Explore Full 27-Player Bracket'}
+                      : `Explore Full ${totalPlayers}-Player Bracket`}
                   </span>
                   <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
                 </Link>

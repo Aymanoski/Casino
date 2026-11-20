@@ -365,6 +365,14 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
       .filter((p): p is Player => Boolean(p));
   }, [game, allPlayers]);
 
+  const unresolvedSeatIds = useMemo(() => {
+    if (!game) return [];
+    const knownIds = new Set(allPlayers.map((p) => p.id));
+    return game.playerIds.filter((pid) => !knownIds.has(pid));
+  }, [game, allPlayers]);
+
+  const hasUnfilledSeats = unresolvedSeatIds.length > 0;
+
   const gameSegments = useMemo(() => {
     if (!game) return [];
     return game.segmentIds
@@ -887,15 +895,34 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
           lang === 'ar'
             ? `انتهت الجلسة — الفائز: ${winner?.fullNameAr ?? ''}`
             : `Session Finished — Winner: ${winner?.fullName ?? ''}`;
+        const advancedTables = Array.from(
+          new Set(
+            (result.advancedTo ?? []).map((a) =>
+              localizeText(lang, a.targetTableName, a.targetTableNameAr)
+            )
+          )
+        );
+        const advancedToFinal = Boolean(
+          result.advancedTo?.some((a) => a.isFinal)
+        );
+        const description =
+          advancedToFinal
+            ? lang === 'ar'
+              ? 'تم حجز مقاعد النهائي الكبير تلقائياً في مواجهة مروان سري!'
+              : 'Finalists automatically advanced into the Grand Final vs. Marwan Serry!'
+            : advancedTables.length > 0
+              ? lang === 'ar'
+                ? `تم تأهيل الفائز تلقائياً إلى: ${advancedTables.join('، ')}.`
+                : `Automatically advanced to: ${advancedTables.join(', ')}.`
+              : lang === 'ar'
+                ? 'تم تحديث لوحة الصدارة وشجرة البطولة وسجل المراجعة.'
+                : 'Leaderboard, bracket standings, and Audit Log updated.';
         setLiveAnnouncement(title);
         toast({
           variant: 'positive',
           title,
-          description:
-            lang === 'ar'
-              ? 'تم تحديث لوحة الصدارة وشجرة البطولة وسجل المراجعة.'
-              : 'Leaderboard, bracket standings, and Audit Log updated.',
-          durationMs: 4500,
+          description,
+          durationMs: 5000,
         });
       }
     } catch {
@@ -1367,32 +1394,87 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
               type="button"
               variant="gold"
               size="scorer"
-              disabled={busyAction}
+              disabled={busyAction || hasUnfilledSeats}
               onClick={() => setConfirmStartOpen(true)}
               className="w-full lg:w-auto shrink-0"
             >
               <Play className="h-5 w-5 fill-current" aria-hidden="true" />
               <span>
-                {lang === 'ar' ? 'بدء الجلسة المباشرة' : 'Start Live Session'}
+                {hasUnfilledSeats
+                  ? lang === 'ar'
+                    ? 'بانتظار اكتمال المقاعد'
+                    : 'Awaiting Qualifiers'
+                  : lang === 'ar'
+                    ? 'بدء الجلسة المباشرة'
+                    : 'Start Live Session'}
               </span>
             </Button>
           </div>
 
+          {hasUnfilledSeats && (
+            <div
+              role="status"
+              className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between rounded-card border-2 border-gold-300 bg-red-900/90 px-4 py-3 text-sm text-white"
+            >
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-gold-300" aria-hidden="true" />
+                <p className="leading-relaxed">
+                  {lang === 'ar'
+                    ? `لا يمكن بدء هذه الطاولة قبل اكتمال جميع المقاعد (${formatNumber(unresolvedSeatIds.length, { useArabicIndicDigits: useArabicIndic })} مقعد بانتظار المتأهلين من الجولة السابقة).`
+                    : `This table cannot go live yet — ${unresolvedSeatIds.length} qualifier seat(s) are still TBD. Finish the previous round games or assign players in Admin Bracket first.`}
+                </p>
+              </div>
+              {isSuperAdmin && (
+                <Button asChild variant="surface" size="sm" className="shrink-0">
+                  <Link href="/admin/bracket">
+                    {lang === 'ar' ? 'فتح شجرة البطولة' : 'Open Bracket Builder'}
+                  </Link>
+                </Button>
+              )}
+            </div>
+          )}
+
           <div className="grid gap-3 md:grid-cols-3">
-            {seatedPlayers.map((player) => (
-              <PlayerPanel
-                key={player.id}
-                playerId={player.id}
-                name={localizeText(lang, player.fullName, player.fullNameAr)}
-                nickname={localizeText(lang, player.nickname, player.nicknameAr)}
-                avatarSeed={player.avatarSeed}
-                score={totals[player.id] ?? 0}
-                isHost={player.isHost}
-                variant="scorer"
-                surface="dark"
-                useArabicIndicDigits={useArabicIndic}
-              />
-            ))}
+            {game.playerIds.map((pid, sIdx) => {
+              const player = allPlayers.find((p) => p.id === pid);
+              if (!player) {
+                return (
+                  <div
+                    key={`${pid}-${sIdx}`}
+                    className="flex min-h-[168px] flex-col items-center justify-center gap-2 rounded-card border-2 border-dashed border-gold-300/60 bg-red-900/60 p-5 text-center text-white"
+                  >
+                    <Badge variant="upcoming">
+                      {lang === 'ar'
+                        ? `مقعد #${formatNumber(sIdx + 1, { useArabicIndicDigits: useArabicIndic })} · TBD`
+                        : `SEAT #${sIdx + 1} · TBD`}
+                    </Badge>
+                    <div className="font-display text-lg text-gold-200">
+                      {game.isFinal
+                        ? lang === 'ar'
+                          ? `المتأهل النهائي #${formatNumber(sIdx + 1, { useArabicIndicDigits: useArabicIndic })}`
+                          : `Finalist Qualifier #${sIdx + 1}`
+                        : lang === 'ar'
+                          ? 'بانتظار الفائز من الجولة السابقة'
+                          : 'Awaiting Previous Round Winner'}
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <PlayerPanel
+                  key={player.id}
+                  playerId={player.id}
+                  name={localizeText(lang, player.fullName, player.fullNameAr)}
+                  nickname={localizeText(lang, player.nickname, player.nicknameAr)}
+                  avatarSeed={player.avatarSeed}
+                  score={totals[player.id] ?? 0}
+                  isHost={player.isHost}
+                  variant="scorer"
+                  surface="dark"
+                  useArabicIndicDigits={useArabicIndic}
+                />
+              );
+            })}
           </div>
 
           <div className="space-y-2.5 border-t border-white/15 pt-4">

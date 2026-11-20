@@ -139,6 +139,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } else {
       const matched = allUsers.find((u) => u.id === targetId) ?? allUsers[0] ?? null;
       setUser(matched);
+      if (matched && savedId && matched.id !== savedId) {
+        try {
+          window.localStorage.setItem(AUTH_STORAGE_KEY, matched.id);
+        } catch {
+          // ignore
+        }
+      }
     }
     setIsLoading(false);
   }, []);

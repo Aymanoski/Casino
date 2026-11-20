@@ -191,5 +191,15 @@ To upgrade from same-browser multi-window sync (`BrowserRealtimeTransport` via `
 - [x] **`/player` & `/player/history` Contestant Portal:** Role-enforced portal (`RoleGuard` blocks Scorer/staff; real `player` accounts lock strictly to `user.playerId` with no switcher; `superAdmin` gets persistent `?player=` Contestant Preview bar with quick presets for Semi-Finalist, LIVE Now, Upcoming, and Pre-Debut players), 4 poker-chip stats, featured Live/Next Game spotlight card with table/date/time/venue/opponents/segments, and expandable **Segment-by-Segment Match History** with individual timestamps, `+`/`−` deltas, kinds, notes, and running subtotals (smart-expanding the latest played match by default).
 - [x] **Polish Loop, Bilingual RTL & Full Responsive Verification:** `422/422` automated Playwright assertions passed across all 9 routes in **EN (LTR)** & **AR (RTL)** across `1440px`, `1024px`, `768px`, `390px`, and `320px` (0 horizontal overflow, 0 real-person `<img>` tags, all inputs/selects `>= 16px`, all visible buttons `>= 44px`, 0 console/page errors, `[]` from `impeccable detect`, clean `tsc --noEmit` & `next build`), plus visual screenshot review across desktop, mobile, modals, and RTL.
 
+---
+
+## 10. Pitch Release (`v0.1-pitch`) Final Verification Checklist
+
+- [x] **Full End-to-End Tournament Story (`49/49` Playwright assertions passed, `0` console/page errors):** Verified Create Players (manual + CSV bulk import with validation) → Generate Flexible Bracket (`18P` topology & `9P` full playthrough) → Scorer Role Isolation → Two-Window Start Live Sync → Buzz Sync → Preset `+10`/`+5`/`−5` → Custom `+15` + Note → Compensating Undo → Qualifying 1st-Place Tie auto-opening **Tie-Breaker #16** → Finish & **Automatic Advancement** into Semi-Final → Round status `'done'` sync → Semi-Final 2nd/3rd cutoff tie triggering **Tie-Breaker #16** → Top-2 **Automatic Advancement** into **Grand Final vs. Marwan Serry** → Grand Final live scoring & Victory Stage celebration → `/final`, `/admin/results`, and `/admin/audit` (including entity filtering).
+- [x] **Reset Demo Data Verification:** Verified full restoration to factory 27-player Ramadan 2027 seed (`27` contestants + `player-marwan`, `4` rounds, `14` games + `game-demo`, `game-11` LIVE, `game-14` scheduled Final, restored editable settings) surviving full page reload with zero console errors.
+- [x] **Final Visual Screenshot Review Against `DESIGN.md` (`20/20` screens inspected):** Visually reviewed `/`, `/final`, `/bracket`, `/leaderboard`, `/scorer/game-11` (`1024px` EN/AR & `390px`), `/screen/game-11` (`1920px` EN/AR), `/screen/game-14` (`1920px`), `/screen/leaderboard` (`1920px`), `/admin` (`1440px` EN/AR), `/admin/bracket`, `/admin/results`, `/player`, and `/sponsors` — `0` horizontal overflow, `0` real-person `<img>` tags, `0` console errors, `[]` from `impeccable detect`.
+- [x] **Deployment & Pitch Documentation:** Added `vercel.json`, `netlify.toml`, `.env.example`, `README.md`, and `DEMO_SCRIPT.md` (5-minute pitch script + offline fallback plan); verified clean `tsc --noEmit` and production `next build`.
+
+
 
 

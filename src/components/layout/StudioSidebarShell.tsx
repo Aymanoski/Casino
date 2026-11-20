@@ -170,7 +170,9 @@ export function StudioSidebarShell({
   ];
 
   const consoleTargetGameId = activeRouteGameId ?? primaryGameId;
-  const consoleTargetCode = consoleTargetGameId.replace(/^game-/i, 'G').toUpperCase();
+  const consoleTargetCode = consoleTargetGameId
+    .replace(/^game-(?:gen-)?/i, 'G')
+    .toUpperCase();
 
   const scorerLinks: SidebarLinkItem[] = [
     { href: '/scorer', label: t.scorerNav.myGames, shortLabel: lang === 'ar' ? 'طاولاتي' : 'Tables', icon: Tablet },

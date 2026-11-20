@@ -66,6 +66,20 @@ function computeFlexibleRounds(
   while (pool > safeSize && roundNum <= 5) {
     const gamesCount = Math.ceil(pool / safeSize);
     const nextPool = gamesCount * safeAdv;
+
+    // When this round already outputs exactly 2 finalists for the Marwan Serry Grand Final,
+    // label it as the Semi-Final and proceed straight to the Grand Final (no orphan TBD seat).
+    if (includeFinalWithMarwan && nextPool === 2) {
+      specs.push({
+        nameEn: 'Semi-Final — The Golden Qualifier',
+        nameAr: 'نصف النهائي — تصفية المقعدين',
+        gamesCount,
+        advancePerGame: safeAdv,
+      });
+      pool = nextPool;
+      break;
+    }
+
     specs.push({
       nameEn:
         roundNum === 1
@@ -83,19 +97,21 @@ function computeFlexibleRounds(
     roundNum++;
   }
 
-  // Penultimate Semi-Final table when running a Final vs Marwan
+  // Penultimate Semi-Final table when running a Final vs Marwan (unless pool already reduced to 2)
   if (includeFinalWithMarwan) {
-    const semiGamesCount = Math.max(1, Math.ceil(pool / safeSize));
-    const resolvedSemiAdv =
-      semiGamesCount === 1
-        ? Math.max(1, Math.min(safeSize - 1, semiAdvance))
-        : 1;
-    specs.push({
-      nameEn: 'Semi-Final — The Golden Qualifier',
-      nameAr: 'نصف النهائي — تصفية المقعدين',
-      gamesCount: semiGamesCount,
-      advancePerGame: resolvedSemiAdv,
-    });
+    if (pool > 2) {
+      const semiGamesCount = Math.max(1, Math.ceil(pool / safeSize));
+      const resolvedSemiAdv =
+        semiGamesCount === 1
+          ? Math.max(1, Math.min(Math.max(1, pool - 1), semiAdvance))
+          : 1;
+      specs.push({
+        nameEn: 'Semi-Final — The Golden Qualifier',
+        nameAr: 'نصف النهائي — تصفية المقعدين',
+        gamesCount: semiGamesCount,
+        advancePerGame: resolvedSemiAdv,
+      });
+    }
     specs.push({
       nameEn: 'The Grand Final — vs. Marwan Serry',
       nameAr: 'النهائي الكبير — في مواجهة مروان سري',
@@ -183,7 +199,7 @@ export function AdminBracketView() {
     };
   }, []);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (syncBuilderDefaults = false) => {
     const seq = ++loadSeqRef.current;
     try {
       const [allRounds, allGames, allPlayers, allUsers, allSegments, appSettings] =
@@ -207,6 +223,13 @@ export function AdminBracketView() {
       setUsers(allUsers);
       setSegments(allSegments);
       setSettings(appSettings);
+      if (syncBuilderDefaults) {
+        setTotalPlayers(appSettings.bracketConfig.totalPlayers);
+        setPlayersPerGame(appSettings.bracketConfig.playersPerGame);
+        setAdvancePerGame(1);
+        setSemiAdvanceCount(appSettings.bracketConfig.semiAdvanceCount);
+        setIncludeFinalWithMarwan(allGames.some((g) => g.isFinal));
+      }
       setTotalsByGame(Object.fromEntries(totalsEntries));
       setSeedingRoundId((prev) =>
         prev && allRounds.some((r) => r.id === prev)
@@ -227,17 +250,20 @@ export function AdminBracketView() {
   }, [lang]);
 
   useEffect(() => {
-    loadData();
+    loadData(true);
     const unsub = realtime.subscribe('*', (msg) => {
+      if (msg.event === 'data.reset') {
+        loadData(true);
+        return;
+      }
       if (
         msg.event === 'bracket.updated' ||
         msg.event === 'player.updated' ||
         msg.event === 'score.changed' ||
         msg.event === 'game.started' ||
-        msg.event === 'game.finished' ||
-        msg.event === 'data.reset'
+        msg.event === 'game.finished'
       ) {
-        loadData();
+        loadData(false);
       }
     });
     return unsub;
@@ -460,7 +486,7 @@ export function AdminBracketView() {
         }
       />
 
-      {error && <AdminErrorBanner message={error} onRetry={loadData} />}
+      {error && <AdminErrorBanner message={error} onRetry={() => loadData(false)} />}
 
       {/* 1. Flexible Bracket Generator */}
       <section

@@ -262,5 +262,22 @@
   - Cached `memoryCache` + `cachedRaw` in `src/lib/storage/index.ts` (returning `structuredClone(memoryCache)` when raw `localStorage` is unchanged and invalidating on cross-tab `storage` events), isolated the 1-second Final Night countdown into `FinalCountdown` (`React.memo`), split `ToastProvider` actions from toast list state, and scoped all `realtime.subscribe` listeners to ignore `timer.updated` / `game-demo` where irrelevant.
   - Added missing `DESIGN.md` radii tokens (`highlight`, `chip-sm`, `ribbon`, `marquee`) to `tailwind.config.ts`, fixed phantom `sm:text-fluid-5xl` → `sm:text-fluid-hero` in `PublicPageHero`, removed dead `RouteShellPlaceholder.tsx` and duplicate `.tabular-nums`, added branded bilingual `src/app/not-found.tsx` and `src/app/error.tsx`, replaced stale hardcoded `game-11` shell links with dynamic live-game resolution, added mobile drawer focus management + body scroll lock, added `DataTable` clear search button + `aria-pressed`, and sorted/badged unlocking accounts in `RoleGuard`.
 
+---
+
+## Pitch Release (`v0.1-pitch`) End-to-End Hardening & Deployment Decisions (2026-11-20)
+
+### 40. Automatic Next-Round Bracket Advancement, Round Status Sync & TBD Qualifier Guards
+- **Context:** End-to-end testing of the full tournament story (Create Players → Generate Bracket → Score Round 1 → Tie-Breaker → Finish → Advance → Semi-Final → Grand Final vs. Marwan Serry) exposed that `gameRepo.finishGame` previously computed `advancingPlayerIds` without slotting winners into the next round's scheduled table(s) or syncing `Round.status`, and `computeFlexibleRounds` generated a redundant 3-seat Semi-Final with an unfillable TBD seat on `18P` (6×3 → 2×3 → 2 winners).
+- **Decisions:**
+  - Wired deterministic slot advancement in `src/lib/repos/gameRepo.ts` (`resolveNextRoundSlotTargets` + `syncRoundStatusesInMemory`): finishing any game slots its `advancingPlayerIds` into the exact next-round scheduled game seats (`globalSlot = sourceGameIdx * advancePerGame + k`) while protecting Marwan Serry's `'player-marwan'` seat, automatically emits `bracket.updated` (plus `final.revealed` once both Grand Final challenger seats are filled), and cleanly rolls back downstream `scheduled` slots on `gameRepo.reopenGame()`.
+  - Fixed `computeFlexibleRounds` (`AdminBracketView.tsx`) and `distributeSeatsAcrossGames` (`gameRepo.ts`) so `9P`, `18P`, `27P`, `36P`, and custom counts never produce orphan unfillable TBD seats or `< 2`-player tables.
+  - Hardened `gameRepo.startGame()`, `ScorerConsoleView`, `ScorerDashboardView`, `BigScreenGameView`, and `HowItWorksSection` to display clean localized `TBD` qualifier cards before feeding rounds finish (keeping Marwan Serry centered on Big Screen Final slates) and block starting a session until all seats are filled.
+  - Replaced remaining hardcoded `27` player counts on `/bracket`, `HeroFinalSection`, and `HowItWorksSection` with live roster/settings counts, fixed sidebar code formatting for generated IDs (`game-gen-1` → `G1`), cleaned up mixed Latin/Arabic glyph typo (`Kahwa & Crème Roasters`) in `src/lib/seed/index.ts`, and ensured `AuthProvider` persists fallback `'user-admin'` if `Reset demo data` removes a newly created staff account.
+  - **Bonus Idea:** Upgraded the Scorer Console Finish Game toast to explicitly announce *which next-round table* the winner(s) advanced into (including `"Finalists automatically advanced into the Grand Final vs. Marwan Serry!"`) so bracket progression is unmistakable during the live pitch.
+
+### 41. Zero-Config Deployment Packaging (Vercel & Netlify)
+- **Decisions:** Added [`vercel.json`](./vercel.json), [`netlify.toml`](./netlify.toml), [`.env.example`](./.env.example), [`README.md`](./README.md), and [`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md). Zero environment variables are required for `v0.1-pitch`, and `next/font/google` self-hosts fonts at build time so the production build runs 100% offline as a pitch fallback.
+
+
 
 
