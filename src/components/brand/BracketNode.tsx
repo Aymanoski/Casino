@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Crown, Trophy, ZoomIn, ZoomOut } from 'lucide-react';
+import { Crown, Trophy, Zap, ZoomIn, ZoomOut } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { cn, formatNumber } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +29,9 @@ export interface BracketNodeProps {
   players:
     | [BracketPlayerSlot, BracketPlayerSlot, BracketPlayerSlot]
     | BracketPlayerSlot[];
+  activeBuzzPlayerId?: string | null;
+  highlightedPlayerId?: string | null;
+  metaLabel?: string;
   useArabicIndicDigits?: boolean;
   onSelect?: () => void;
   className?: string;
@@ -38,7 +41,7 @@ export interface BracketNodeProps {
  * BracketNode
  * Per DESIGN.md §6:
  * Mini white sticker card with 3 players, winners highlighted in gold,
- * live node pulsing, and Marwan's final node a distinct "boss" node with
+ * live node glowing & pulsing, and Marwan's final node a distinct "boss" node with
  * marquee bulbs and the golden seat.
  */
 export function BracketNode({
@@ -47,11 +50,17 @@ export function BracketNode({
   status,
   isFinal = false,
   players,
+  activeBuzzPlayerId = null,
+  highlightedPlayerId = null,
+  metaLabel,
   useArabicIndicDigits = false,
   onSelect,
   className,
 }: BracketNodeProps) {
   const { lang } = useI18n();
+  const hasHighlightedPlayer = Boolean(
+    highlightedPlayerId && players.some((p) => p.id === highlightedPlayerId)
+  );
 
   const innerNode = (
     <div
@@ -71,10 +80,12 @@ export function BracketNode({
       className={cn(
         '@container relative flex w-full min-w-0 flex-col gap-2.5 rounded-card border-[2.5px] border-outline bg-white p-3.5 @xs:p-4 text-ink transition-all duration-200',
         isFinal
-          ? 'bg-gradient-to-b from-gold-200 via-paper to-white shadow-sticker-lg'
+          ? 'bg-white bg-gradient-to-b from-gold-200/50 via-paper to-white shadow-sticker-lg'
           : status === 'live'
-            ? 'ring-[3px] ring-red-600 shadow-sticker'
+            ? 'ring-[3px] ring-gold-400 shadow-[0_0_28px_rgba(255,193,43,0.6),4px_4px_0_var(--red-900)]'
             : 'shadow-sticker',
+        hasHighlightedPlayer &&
+          'ring-[3px] ring-blue-500 ring-offset-2 ring-offset-white',
         onSelect &&
           'cursor-pointer hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
         className
@@ -82,8 +93,9 @@ export function BracketNode({
     >
       {/* Final Boss Gold Corner Ribbon */}
       {isFinal && (
-        <span className="pointer-events-none absolute -top-0.5 end-4 rounded-none border-x-2 border-b-2 border-outline bg-gold-gradient px-2.5 py-0.5 text-[11px] font-black uppercase ltr:tracking-wider rtl:tracking-normal text-red-900 shadow-sticker-sm">
-          ★ {lang === 'ar' ? 'المقعد الذهبي' : 'GOLDEN SEAT'}
+        <span className="pointer-events-none absolute -top-0.5 end-4 inline-flex items-center gap-1 rounded-none border-x-2 border-b-2 border-outline bg-gold-gradient px-2.5 py-0.5 text-[11px] font-black uppercase ltr:tracking-wider rtl:tracking-normal text-red-900 shadow-sticker-sm">
+          <Crown className="h-3 w-3 shrink-0" aria-hidden="true" />
+          <span>{lang === 'ar' ? 'المقعد الذهبي' : 'GOLDEN SEAT'}</span>
         </span>
       )}
 
@@ -100,10 +112,15 @@ export function BracketNode({
               {roundLabel}
             </div>
           )}
-          <div className="flex items-start gap-1.5 font-display text-sm @xs:text-base text-red-900 leading-snug">
-            {isFinal && <Crown className="mt-0.5 h-4 w-4 shrink-0 text-gold-600" />}
-            <span>{tableName}</span>
+          <div className="flex items-center gap-1.5 truncate font-display text-sm @xs:text-base text-red-900">
+            {isFinal && <Crown className="h-4 w-4 shrink-0 text-gold-600" aria-hidden="true" />}
+            <span className="truncate">{tableName}</span>
           </div>
+          {metaLabel && (
+            <div className="mt-0.5 truncate text-[11px] font-medium text-ink-muted">
+              {metaLabel}
+            </div>
+          )}
         </div>
 
         <div className="shrink-0">
@@ -125,6 +142,12 @@ export function BracketNode({
       <div className="space-y-1.5">
         {players.map((slot, idx) => {
           const highlighted = slot.isWinner || slot.isAdvancing;
+          const isBuzzed = Boolean(
+            status === 'live' && activeBuzzPlayerId && slot.id === activeBuzzPlayerId
+          );
+          const isPathMatch = Boolean(
+            highlightedPlayerId && slot.id === highlightedPlayerId
+          );
           return (
             <div
               key={slot.id ?? `slot-${idx}`}
@@ -132,11 +155,15 @@ export function BracketNode({
                 'flex min-h-[44px] items-center justify-between gap-2 rounded-input border-2 px-2.5 py-1.5 transition-colors',
                 slot.isHost
                   ? 'border-outline bg-gold-gradient text-red-900 shadow-sticker-sm'
-                  : highlighted
-                    ? 'border-outline bg-gold-200/75 text-red-900'
-                    : slot.isPlaceholder
-                      ? 'border-dashed border-border-paper bg-paper-2/60 opacity-85'
-                      : 'border-border-paper bg-paper text-ink'
+                  : isBuzzed
+                    ? 'border-outline bg-gold-300/75 text-red-900 shadow-sticker-sm'
+                    : isPathMatch
+                      ? 'border-blue-600 bg-blue-100/80 text-blue-800'
+                      : highlighted
+                        ? 'border-outline bg-gold-200/75 text-red-900'
+                        : slot.isPlaceholder
+                          ? 'border-dashed border-border-paper bg-paper-2/60 opacity-85'
+                          : 'border-border-paper bg-paper text-ink'
               )}
             >
               <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -150,10 +177,13 @@ export function BracketNode({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1 truncate text-xs @xs:text-sm font-bold">
                     {slot.isHost && (
-                      <span aria-hidden="true">♛</span>
+                      <Crown className="h-3.5 w-3.5 shrink-0 text-red-900" aria-hidden="true" />
                     )}
                     {highlighted && !slot.isHost && (
-                      <Trophy className="h-3.5 w-3.5 shrink-0 text-red-700" />
+                      <Trophy className="h-3.5 w-3.5 shrink-0 text-red-700" aria-hidden="true" />
+                    )}
+                    {isBuzzed && !slot.isHost && (
+                      <Zap className="h-3.5 w-3.5 shrink-0 text-red-700 fill-gold-400" aria-hidden="true" />
                     )}
                     <span
                       className={cn(

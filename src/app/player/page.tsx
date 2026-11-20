@@ -1,15 +1,19 @@
-import React from 'react';
-import { RouteShellPlaceholder } from '@/components/layout/RouteShellPlaceholder';
+import React, { Suspense } from 'react';
+import { PlayerProfileView } from '@/components/player';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function PlayerProfilePage() {
   return (
-    <RouteShellPlaceholder
-      titleEn="Contestant Portal — My Profile & Next Table"
-      titleAr="بوابة المتسابق — ملفي الشخصي ومباراتي القادمة"
-      subtitleEn="Personal stats, tournament status, seed rank, and upcoming session schedule."
-      subtitleAr="إحصائيات اللاعب، حالة التأهل، التصنيف، وموعد الطاولة القادمة."
-      phaseNoteEn="Protected by RoleGuard (accessible to Player & Super Admin roles)."
-      phaseNoteAr="محمي بنظام الصلاحيات (متاح للاعب ومدير البطولة)."
-    />
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-content-wide px-safe py-10 space-y-6">
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-44 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      }
+    >
+      <PlayerProfileView />
+    </Suspense>
   );
 }

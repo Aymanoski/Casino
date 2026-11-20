@@ -227,3 +227,27 @@
 - **Live Manager-to-Switcher Sync + One-Click "Test Role":** Adding or updating a manager in `/admin/managers` broadcasts `user.updated` so `AuthProvider` refreshes `demoUsers` immediately—making new staff accounts appear instantly in the Quick Role Switcher and providing a 1-click **"Test Role"** button per manager row to demonstrate RBAC live during the pitch.
 - **One-Click Sample CSV Validator & Live Bracket Math Pipeline:** `/admin/players` CSV bulk import includes a 1-click **"Load Sample CSV (3 valid + 1 error)"** button alongside file upload and template download so presenters can showcase live Zod row-by-row validation + UTF-8 BOM Excel-safe CSV exports in seconds; `/admin/bracket` displays a live visual advancement pipeline (`27 Players → Round 1: 9×3 → Round 2: 3×3 → Semi-Final: 1×3 (adv 2) → Final (2 + Marwan Serry)`) before confirming generation.
 
+---
+
+## Phase 7 Public Spectator Pages & Contestant Portal Decisions (2026-11-20)
+
+### 35. Super Admin Contestant Preview Switcher vs. Locked Player Role (`/player` & `/player/history`)
+- **Decision (confirmed via Phase 7 shape interview):** Because `AuthProvider` defaults to `Super Admin` (`user-admin`, which has no `playerId`) during pitches while `AGENTS.md §4` restricts logged-in `player` accounts to their own profile/history only:
+  - When `user.role === 'superAdmin'`, `PlayerPortalChrome` renders a **Contestant Preview switcher bar** (defaulting to Omar Hassan `#1`, with 1-click presets for Karim Nabil `#4` LIVE Now, Salma Reda `#19` Upcoming R2, Laila Kamel `#25` Pre-Debut, plus a full 27-player selector) persisted across `/player` and `/player/history` via `?player=<id>`.
+  - When `user.role === 'player'`, the preview switcher is never rendered and both routes lock strictly to `user.playerId`. Other roles (`scorer`, `checkIn`, `content`, visitors) remain blocked by `RoleGuard`.
+
+### 36. Modal / Bottom-Sheet Inspection Pattern on `/bracket` & `/segments`
+- **Decision (confirmed via Phase 7 shape interview):**
+  - **`/bracket`:** Clicking or keyboard-activating any `BracketNode` opens a responsive **Game Detail Dialog** (bottom sheet on phones, centered modal on `sm+`, deep-linkable via `?game=<id>`) displaying live/final standings, active buzzer state, segment-by-segment score breakdown, scorer/time metadata, and direct links to `/screen/[gameId]` (plus `/scorer/[gameId]` for authorized staff). Live nodes glow with a gold halo (`--glow-gold`) and pulse badge; phones default to round-focus tabs (`< lg`) with an optional toggle to the full zoomable `BracketTrack` tree, while `1440px+` desktops display all 4 rounds side-by-side without clipping Marwan Serry's Grand Final.
+  - **`/segments`:** Clicking any segment opens a **deep-linkable Detail Inspector (`?segment=seg-X`)** showing both EN and AR titles, full description, signed preset `ScoreChip`s (`+10`, `+5`, `−5`), stage play flow, a live list of tournament tables featuring that segment (resolved from `gameRepo`), and Previous/Next segment navigation.
+
+### 37. Full Showcase Depth on `/final` & Partnership Deck Matrix on `/sponsors`
+- **Decision (confirmed via Phase 7 shape interview):**
+  - **`/final`:** Dedicated Stage showcase combining the live countdown (or live/finished takeover), symmetrical 3-seat Marquee Spotlight (`[Finalist #1 | Marwan Serry Golden Seat (center, name only, no photo) | Finalist #2]`), live **Road to the Final** round-by-round progress (`IN PROGRESS` / `LIVE NOW` / `UPCOMING` / `GRAND FINAL`), the 8 Final championship segments, editable venue/prize placeholders, and direct launch to `/screen/[finalGameId]`.
+  - **`/sponsors`:** Dedicated partnership deck featuring `sponsorRepo` tier cards (text-only `logoText`, placeholder notices, `"Contact us"` `mailto:` links, zero fixed currency prices) plus a responsive **Tier Deliverables Comparison Matrix** (scannable stacked deliverable cards on `< md` phones; full side-by-side sticky-column matrix table on `md+`).
+
+### 38. Bonus Ideas Built in Phase 7
+- **Highlight Player Path on `/bracket`:** Added a live **Highlight Player Path** selector (also deep-linked from every row on `/leaderboard` via `/bracket?player=<id>`) that rings every table a contestant played or is seated in across all rounds in white-buffered electric blue, reporting the exact matched table count.
+- **Smart Default-Expanded Played Match on `/player/history` & One-Click Pitch Email Copy on `/sponsors`:** `/player/history` automatically expands the contestant's most recent LIVE or FINISHED match first (falling back to a scheduled table only for pre-debut players) so rich segment-by-segment timestamps and notes are visible immediately on arrival; `/sponsors` adds a 1-click **Copy Contact Email** action with themed toast feedback alongside pre-filled `mailto:` CTAs.
+
+

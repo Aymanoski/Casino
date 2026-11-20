@@ -1,0 +1,692 @@
+'use client';
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import {
+  ArrowRight,
+  Calendar,
+  Clock,
+  Crown,
+  MapPin,
+  Megaphone,
+  MonitorPlay,
+  Search,
+  Trophy,
+  X,
+} from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
+import {
+  contentRepo,
+  gameRepo,
+  playerRepo,
+  roundRepo,
+  settingsRepo,
+} from '@/lib/repos';
+import { realtime } from '@/lib/realtime';
+import type {
+  ContentItem,
+  Game,
+  GameStatus,
+  Player,
+  Round,
+  Settings,
+} from '@/lib/schemas';
+import { cn, formatNumber, localizeText, normalizeSearchText } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { LiveBadge, PlayerAvatar } from '@/components/brand';
+import {
+  formatPublicDateTime,
+  formatPublicDayHeading,
+  formatPublicTimeOnly,
+  getLocalDayKey,
+  resolvePlayerDisplay,
+} from './publicFormatters';
+import { PublicErrorBanner } from './PublicErrorBanner';
+import { PublicPageHero } from './PublicPageHero';
+
+interface ScheduleDataset {
+  games: Game[];
+  rounds: Round[];
+  players: Player[];
+  announcements: ContentItem[];
+  blurbs: ContentItem[];
+  settings: Settings;
+}
+
+type GroupMode = 'day' | 'round';
+type StatusFilter = 'all' | GameStatus;
+
+export function ScheduleView() {
+  const { lang } = useI18n();
+
+  const [data, setData] = useState<ScheduleDataset | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [groupMode, setGroupMode] = useState<GroupMode>('day');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const loadSeqRef = useRef(0);
+
+  const loadAll = useCallback(
+    async (showSpinner = false) => {
+      const seq = ++loadSeqRef.current;
+      if (showSpinner) setLoading(true);
+      setError(null);
+      try {
+        const [games, rounds, players, announcements, blurbs, settings] =
+          await Promise.all([
+            gameRepo.list(),
+            roundRepo.list(),
+            playerRepo.list({ includeHost: true }),
+            contentRepo.list({ category: 'announcement' }),
+            contentRepo.list({ category: 'scheduleBlurb' }),
+            settingsRepo.get(),
+          ]);
+
+        if (seq !== loadSeqRef.current) return;
+        setData({ games, rounds, players, announcements, blurbs, settings });
+      } catch (err) {
+        if (seq !== loadSeqRef.current) return;
+        setError(
+          err instanceof Error
+            ? err.message
+            : lang === 'ar'
+              ? 'تعذّر تحميل جدول البطولة.'
+              : 'Failed to load tournament schedule.'
+        );
+      } finally {
+        if (seq === loadSeqRef.current) setLoading(false);
+      }
+    },
+    [lang]
+  );
+
+  useEffect(() => {
+    void loadAll(true);
+    const unsub = realtime.subscribe('*', () => {
+      void loadAll(false);
+    });
+    return () => unsub();
+  }, [loadAll]);
+
+  const useArabicIndic = data?.settings.useArabicIndicDigits ?? false;
+
+  const maps = useMemo(() => {
+    if (!data) return null;
+    const playerMap = new Map(data.players.map((p) => [p.id, p]));
+    const roundMap = new Map(data.rounds.map((r) => [r.id, r]));
+    const sortedRounds = [...data.rounds].sort((a, b) => a.order - b.order);
+
+    const q = normalizeSearchText(searchQuery);
+    const filteredGames = [...data.games]
+      .filter((g) => {
+        if (statusFilter !== 'all' && g.status !== statusFilter) return false;
+        if (!q) return true;
+        const round = roundMap.get(g.roundId);
+        const playerNames = g.playerIds
+          .map((pid) => {
+            const p = playerMap.get(pid);
+            return p
+              ? `${p.fullName} ${p.fullNameAr} ${p.nickname} ${p.nicknameAr}`
+              : pid;
+          })
+          .join(' ');
+        const haystack = normalizeSearchText(
+          `${g.tableName} ${g.tableNameAr} ${round?.name.en ?? ''} ${round?.name.ar ?? ''} ${playerNames}`
+        );
+        return haystack.includes(q);
+      })
+      .sort(
+        (a, b) =>
+          new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
+      );
+
+    // Group by calendar day
+    const dayGroups: Array<{
+      key: string;
+      heading: string;
+      nightIndex: number;
+      games: Game[];
+    }> = [];
+    const dayLookup = new Map<string, number>();
+
+    for (const g of filteredGames) {
+      const key = getLocalDayKey(g.scheduledAt);
+      const existingIdx = dayLookup.get(key);
+      if (existingIdx !== undefined) {
+        dayGroups[existingIdx].games.push(g);
+      } else {
+        dayLookup.set(key, dayGroups.length);
+        dayGroups.push({
+          key,
+          heading: formatPublicDayHeading(g.scheduledAt, lang, useArabicIndic),
+          nightIndex: dayGroups.length + 1,
+          games: [g],
+        });
+      }
+    }
+
+    // Group by round
+    const roundGroups = sortedRounds
+      .map((round) => ({
+        round,
+        games: filteredGames.filter((g) => g.roundId === round.id),
+      }))
+      .filter((rg) => rg.games.length > 0);
+
+    const statusCounts = {
+      all: data.games.length,
+      live: data.games.filter((g) => g.status === 'live').length,
+      scheduled: data.games.filter((g) => g.status === 'scheduled').length,
+      finished: data.games.filter((g) => g.status === 'finished').length,
+    };
+
+    return {
+      playerMap,
+      roundMap,
+      filteredGames,
+      dayGroups,
+      roundGroups,
+      statusCounts,
+    };
+  }, [data, statusFilter, searchQuery, lang, useArabicIndic]);
+
+  if (loading) {
+    return (
+      <div className="space-y-8 pb-16">
+        <div className="bg-red-600 py-12">
+          <div className="mx-auto max-w-content-wide px-safe space-y-4">
+            <Skeleton className="h-12 w-72 bg-white/25" />
+            <Skeleton className="h-5 w-96 max-w-full bg-white/20" />
+          </div>
+        </div>
+        <div className="mx-auto max-w-content-wide px-safe space-y-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-36 w-full" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !data || !maps) {
+    return (
+      <div className="py-section-y px-safe">
+        <PublicErrorBanner
+          message={error ?? undefined}
+          onRetry={() => void loadAll(true)}
+        />
+      </div>
+    );
+  }
+
+  const { settings, announcements, blurbs } = data;
+  const primaryAnnouncement = announcements[0] ?? null;
+  const primaryBlurb = blurbs[0] ?? null;
+
+  const renderGameCard = (game: Game) => {
+    const round = maps.roundMap.get(game.roundId);
+    const isLive = game.status === 'live';
+    const isFinished = game.status === 'finished';
+
+    return (
+      <article
+        key={game.id}
+        className={cn(
+          'flex flex-col justify-between gap-4 rounded-card bg-white p-5 text-ink transition-transform duration-150',
+          game.isFinal
+            ? 'border-[2.5px] border-outline bg-gradient-to-b from-gold-200/45 via-white to-white shadow-sticker'
+            : isLive
+              ? 'border-[2.5px] border-outline ring-2 ring-gold-400 shadow-sticker-sm'
+              : 'border border-border-paper shadow-soft'
+        )}
+      >
+        {/* Top Row: Time + Status + Round */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-paper pb-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-pill border border-border-paper bg-paper px-3 py-1 text-xs font-extrabold text-red-900 tabular-nums">
+              <Clock className="h-3.5 w-3.5 text-red-600" aria-hidden="true" />
+              <span>
+                {groupMode === 'day'
+                  ? formatPublicTimeOnly(game.scheduledAt, lang, useArabicIndic)
+                  : formatPublicDateTime(game.scheduledAt, lang, useArabicIndic)}
+              </span>
+            </span>
+
+            {round && groupMode === 'day' && (
+              <span className="text-xs font-bold text-ink-muted">
+                {localizeText(lang, round.name.en, round.name.ar)}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {game.isFinal && (
+              <Badge variant="gold">
+                <Crown className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span>{lang === 'ar' ? 'النهائي' : 'FINAL'}</span>
+              </Badge>
+            )}
+            {isLive ? (
+              <LiveBadge surface="paper" size="sm" />
+            ) : isFinished ? (
+              <Badge variant="muted">{lang === 'ar' ? 'منتهية' : 'DONE'}</Badge>
+            ) : (
+              <Badge variant="upcoming">
+                {lang === 'ar' ? 'قادمة' : 'UPCOMING'}
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Table Name & 3 Players */}
+        <div className="space-y-3">
+          <h3 className="font-display text-lg sm:text-xl text-red-900 leading-snug">
+            {localizeText(lang, game.tableName, game.tableNameAr)}
+          </h3>
+
+          <div className="grid gap-2 sm:grid-cols-3">
+            {game.playerIds.map((pid, idx) => {
+              const p = resolvePlayerDisplay(pid, maps.playerMap, lang, idx);
+              const isWinner =
+                isFinished &&
+                (game.winnerPlayerId === pid ||
+                  game.advancingPlayerIds?.includes(pid));
+
+              return (
+                <div
+                  key={`${pid}-${idx}`}
+                  className={cn(
+                    'flex items-center gap-2 rounded-input border px-2.5 py-2 text-xs',
+                    p.isHost
+                      ? 'border-outline bg-gold-gradient font-extrabold text-red-900'
+                      : isWinner
+                        ? 'border-outline bg-gold-200/75 font-bold text-red-900'
+                        : p.isPlaceholder
+                          ? 'border-dashed border-border-paper bg-paper-2/60 text-ink-muted italic'
+                          : 'border-border-paper bg-paper text-ink font-semibold'
+                  )}
+                >
+                  <PlayerAvatar
+                    name={p.name}
+                    avatarSeed={p.avatarSeed}
+                    size="xs"
+                    isHost={p.isHost}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1 truncate">
+                      {p.isHost && (
+                        <Crown className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      )}
+                      {isWinner && !p.isHost && (
+                        <Trophy
+                          className="h-3 w-3 shrink-0 text-red-700"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span className="truncate">{p.name}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Footer Actions */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-paper pt-3">
+          <span className="text-xs font-semibold text-ink-muted">
+            {formatNumber(game.segmentIds.length, {
+              useArabicIndicDigits: useArabicIndic,
+            })}{' '}
+            {lang === 'ar' ? 'فقرات تحدي' : 'segments'}
+          </span>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {(isLive || game.isFinal) && (
+              <Button variant="red" size="sm" asChild>
+                <Link href={`/screen/${game.id}`}>
+                  <MonitorPlay className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>
+                    {lang === 'ar' ? 'شاشة العرض' : 'Big Screen'}
+                  </span>
+                </Link>
+              </Button>
+            )}
+            <Button variant="calm" size="sm" asChild>
+              <Link href={`/bracket?game=${encodeURIComponent(game.id)}`}>
+                <span>
+                  {lang === 'ar' ? 'تفاصيل المباراة' : 'Match Details'}
+                </span>
+                <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </article>
+    );
+  };
+
+  return (
+    <div className="flex flex-col">
+      <PublicPageHero
+        title={
+          lang === 'ar'
+            ? 'جدول ليالي ومواعيد البطولة'
+            : 'Tournament Schedule & Call Times'
+        }
+        goldHighlight={lang === 'ar' ? 'مواعيد البطولة' : 'Schedule'}
+        subtitle={
+          lang === 'ar'
+            ? 'تصفح جميع طاولات البطولة مرتبة حسب الليلة أو حسب الجولة، مع تحديث مباشر لحالة كل طاولة.'
+            : 'Browse every tournament session grouped by night or by round, with real-time table status updates.'
+        }
+        compact
+        meta={
+          <>
+            <Badge variant="white">
+              <Calendar className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
+              <span>
+                {localizeText(lang, settings.eventDates, settings.eventDatesAr)}
+              </span>
+            </Badge>
+            <Badge variant="white">
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
+              <span>{localizeText(lang, settings.venue, settings.venueAr)}</span>
+            </Badge>
+          </>
+        }
+        actions={
+          <Button variant="gold" size="md" asChild>
+            <Link href="/bracket">
+              <span>{lang === 'ar' ? 'عرض شجرة البطولة' : 'View Bracket'}</span>
+              <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+            </Link>
+          </Button>
+        }
+      >
+        {/* Live Announcement Strip from contentRepo */}
+        {primaryAnnouncement && (
+          <div className="rounded-card border-[2.5px] border-outline bg-white p-4 text-ink shadow-sticker">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3 min-w-0">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill border-2 border-outline bg-gold-400 text-red-900 shadow-sticker-sm">
+                  <Megaphone className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <div className="min-w-0 space-y-0.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="red" className="px-2.5 py-0.5 text-[11px]">
+                      {localizeText(
+                        lang,
+                        primaryAnnouncement.badgeEn ?? 'ANNOUNCEMENT',
+                        primaryAnnouncement.badgeAr ?? 'إعلان مباشر'
+                      )}
+                    </Badge>
+                    <h2 className="font-display text-base sm:text-lg text-red-900">
+                      {localizeText(
+                        lang,
+                        primaryAnnouncement.titleEn,
+                        primaryAnnouncement.titleAr
+                      )}
+                    </h2>
+                  </div>
+                  <p className="text-sm text-ink-muted">
+                    {localizeText(
+                      lang,
+                      primaryAnnouncement.bodyEn,
+                      primaryAnnouncement.bodyAr
+                    )}
+                  </p>
+                </div>
+              </div>
+              <Button variant="red" size="sm" className="shrink-0" asChild>
+                <Link href="/leaderboard">
+                  <span>{lang === 'ar' ? 'متابعة الصدارة' : 'Live Standings'}</span>
+                </Link>
+              </Button>
+            </div>
+          </div>
+        )}
+      </PublicPageHero>
+
+      <section className="theme-paper bg-paper py-8 sm:py-12">
+        <div className="mx-auto max-w-content-wide px-safe space-y-6">
+          {/* Editable Schedule Blurb from contentRepo */}
+          {primaryBlurb && (
+            <div className="rounded-card border border-border-paper bg-paper-2/80 p-4 sm:p-5 text-ink">
+              <div className="flex flex-wrap items-center gap-2">
+                {primaryBlurb.badgeEn && (
+                  <Badge variant="gold">
+                    {localizeText(
+                      lang,
+                      primaryBlurb.badgeEn,
+                      primaryBlurb.badgeAr
+                    )}
+                  </Badge>
+                )}
+                <h2 className="font-display text-lg text-red-900">
+                  {localizeText(lang, primaryBlurb.titleEn, primaryBlurb.titleAr)}
+                </h2>
+              </div>
+              <p className="mt-1.5 text-sm leading-relaxed text-ink-muted max-w-[70ch]">
+                {localizeText(lang, primaryBlurb.bodyEn, primaryBlurb.bodyAr)}
+              </p>
+            </div>
+          )}
+
+          {/* View Mode (By Day / By Round) + Status Filters + Search */}
+          <div className="space-y-4 rounded-card border border-border-paper bg-white p-4 shadow-soft">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <Tabs
+                value={groupMode}
+                onValueChange={(v) => setGroupMode(v as GroupMode)}
+              >
+                <TabsList
+                  aria-label={
+                    lang === 'ar' ? 'طريقة عرض الجدول' : 'Schedule grouping mode'
+                  }
+                >
+                  <TabsTrigger value="day">
+                    <Calendar className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>{lang === 'ar' ? 'حسب اليوم / الليلة' : 'By Day'}</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="round">
+                    <Trophy className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>{lang === 'ar' ? 'حسب الجولة' : 'By Round'}</span>
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              {/* Status Filter Pills */}
+              <div
+                className="flex flex-wrap items-center gap-1.5"
+                role="group"
+                aria-label={lang === 'ar' ? 'تصفية حسب الحالة' : 'Filter by status'}
+              >
+                {(
+                  [
+                    { value: 'all', en: 'All', ar: 'الكل' },
+                    { value: 'live', en: 'Live Now', ar: 'مباشر' },
+                    { value: 'scheduled', en: 'Upcoming', ar: 'قادمة' },
+                    { value: 'finished', en: 'Finished', ar: 'منتهية' },
+                  ] as Array<{ value: StatusFilter; en: string; ar: string }>
+                ).map((item) => {
+                  const active = statusFilter === item.value;
+                  const count = maps.statusCounts[item.value];
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => setStatusFilter(item.value)}
+                      aria-pressed={active}
+                      className={cn(
+                        'inline-flex min-h-[44px] items-center gap-1.5 rounded-pill border-2 px-3.5 py-1.5 text-xs font-extrabold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
+                        active
+                          ? 'border-outline bg-red-600 text-white shadow-sticker-sm'
+                          : 'border-border-paper bg-paper text-ink hover:border-outline'
+                      )}
+                    >
+                      <span>{lang === 'ar' ? item.ar : item.en}</span>
+                      <span
+                        className={cn(
+                          'rounded-pill px-1.5 py-0.5 text-[11px] tabular-nums',
+                          active
+                            ? 'bg-white/20 text-white'
+                            : 'bg-paper-2 text-ink-muted'
+                        )}
+                      >
+                        {formatNumber(count, {
+                          useArabicIndicDigits: useArabicIndic,
+                        })}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label
+                htmlFor="schedule-search"
+                className="block text-xs font-bold uppercase text-ink-muted"
+              >
+                {lang === 'ar'
+                  ? 'ابحث بالطاولة أو اسم اللاعب'
+                  : 'Search by table or contestant'}
+              </label>
+              <div className="relative max-w-md">
+                <Search
+                  className="pointer-events-none absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
+                  aria-hidden="true"
+                />
+                <Input
+                  id="schedule-search"
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={
+                    lang === 'ar'
+                      ? 'ابحث عن طاولة أو متسابق...'
+                      : 'Search table name or player...'
+                  }
+                  className="ps-10 pe-10"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    aria-label={lang === 'ar' ? 'مسح البحث' : 'Clear search'}
+                    className="absolute end-1 top-1/2 -translate-y-1/2 inline-flex h-10 w-10 items-center justify-center rounded-pill text-ink-muted hover:text-ink"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Schedule Groups */}
+          {maps.filteredGames.length === 0 ? (
+            <EmptyState
+              title={
+                lang === 'ar'
+                  ? 'لا توجد مباريات تطابق الفلاتر الحالية'
+                  : 'No scheduled tables match these filters'
+              }
+              description={
+                lang === 'ar'
+                  ? 'أعد ضبط البحث أو عرض جميع الحالات لمشاهدة كامل جدول البطولة.'
+                  : 'Reset search or switch back to All statuses to inspect the full tournament schedule.'
+              }
+              action={
+                <Button
+                  variant="red"
+                  onClick={() => {
+                    setStatusFilter('all');
+                    setSearchQuery('');
+                  }}
+                >
+                  {lang === 'ar' ? 'عرض كل الجدول' : 'Show Full Schedule'}
+                </Button>
+              }
+            />
+          ) : groupMode === 'day' ? (
+            <div className="space-y-8">
+              {maps.dayGroups.map((group) => (
+                <section key={group.key} className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-outline/20 pb-2.5">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <Badge variant="gold">
+                        {lang === 'ar'
+                          ? `الليلة ${formatNumber(group.nightIndex, { useArabicIndicDigits: useArabicIndic })}`
+                          : `Night ${group.nightIndex}`}
+                      </Badge>
+                      <h2 className="font-display text-xl sm:text-2xl text-red-900">
+                        {group.heading}
+                      </h2>
+                    </div>
+                    <span className="text-xs font-bold text-ink-muted tabular-nums">
+                      {lang === 'ar'
+                        ? group.games.length === 1
+                          ? 'طاولة واحدة'
+                          : group.games.length === 2
+                            ? 'طاولتان'
+                            : `${formatNumber(group.games.length, { useArabicIndicDigits: useArabicIndic })} ${group.games.length <= 10 ? 'طاولات' : 'طاولة'}`
+                        : `${group.games.length} ${group.games.length === 1 ? 'session' : 'sessions'}`}
+                    </span>
+                  </div>
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {group.games.map(renderGameCard)}
+                  </div>
+                </section>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {maps.roundGroups.map(({ round, games }) => (
+                <section key={round.id} className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-outline/20 pb-2.5">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <Badge
+                        variant={
+                          round.id === 'round-final' ? 'gold' : 'red'
+                        }
+                      >
+                        {lang === 'ar'
+                          ? `الجولة ${formatNumber(round.order, { useArabicIndicDigits: useArabicIndic })}`
+                          : `Round ${round.order}`}
+                      </Badge>
+                      <h2 className="font-display text-xl sm:text-2xl text-red-900">
+                        {localizeText(lang, round.name.en, round.name.ar)}
+                      </h2>
+                    </div>
+
+                    <span className="text-xs font-bold text-ink-muted">
+                      {round.id === 'round-final'
+                        ? lang === 'ar'
+                          ? '٢ متأهلين + مروان سري'
+                          : '2 Finalists + Marwan Serry'
+                        : lang === 'ar'
+                          ? `يتأهل أفضل ${formatNumber(round.advancePerGame, { useArabicIndicDigits: useArabicIndic })} لكل طاولة`
+                          : `Top ${round.advancePerGame} advances per table`}
+                    </span>
+                  </div>
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {games.map(renderGameCard)}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
