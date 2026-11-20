@@ -17,7 +17,7 @@ import type {
   Settings,
   User,
 } from '@/lib/schemas';
-import { localizeText } from '@/lib/utils';
+import { localizeText, normalizeSearchText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -89,6 +89,7 @@ export function AdminAuditView() {
   const [selectedEntry, setSelectedEntry] = useState<AuditEntry | null>(null);
 
   const mountedRef = useRef(true);
+  const loadSeqRef = useRef(0);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -98,6 +99,7 @@ export function AdminAuditView() {
 
   const loadData = useCallback(async () => {
     if (!user) return;
+    const seq = ++loadSeqRef.current;
     try {
       const [allEntries, allUsers, appSettings] = await Promise.all([
         auditRepo.list({
@@ -107,13 +109,13 @@ export function AdminAuditView() {
         userRepo.list(),
         settingsRepo.get(),
       ]);
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setEntries(allEntries);
       setUsers(allUsers);
       setSettings(appSettings);
       setError(null);
     } catch (err) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setError(
         err instanceof Error
           ? err.message
@@ -122,7 +124,7 @@ export function AdminAuditView() {
             : 'Unable to load audit log.'
       );
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && seq === loadSeqRef.current) setLoading(false);
     }
   }, [user, order, lang]);
 
@@ -355,11 +357,11 @@ export function AdminAuditView() {
             : 'Search action, summary, or entity ID...'
         }
         searchFilter={(e, q) =>
-          e.action.toLowerCase().includes(q) ||
-          e.summary.toLowerCase().includes(q) ||
-          (e.summaryAr ?? '').toLowerCase().includes(q) ||
-          e.entityId.toLowerCase().includes(q) ||
-          e.entityType.toLowerCase().includes(q)
+          normalizeSearchText(e.action).includes(q) ||
+          normalizeSearchText(e.summary).includes(q) ||
+          normalizeSearchText(e.summaryAr).includes(q) ||
+          normalizeSearchText(e.entityId).includes(q) ||
+          normalizeSearchText(e.entityType).includes(q)
         }
         filterLabel={lang === 'ar' ? 'تصفية السجل' : 'Filter Audit'}
         filterSlot={

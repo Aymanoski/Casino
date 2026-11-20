@@ -89,6 +89,7 @@ export function AdminDashboardView() {
   const [error, setError] = useState<string | null>(null);
 
   const mountedRef = useRef(true);
+  const loadSeqRef = useRef(0);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -97,6 +98,7 @@ export function AdminDashboardView() {
   }, []);
 
   const loadData = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     try {
       const [
         allPlayersWithHost,
@@ -127,7 +129,7 @@ export function AdminDashboardView() {
         activeGames.map(async (g) => [g.id, await scoreRepo.getGameTotals(g.id)] as const)
       );
 
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setPlayers(allPlayersWithHost.filter((p) => !p.isHost));
       setHostPlayer(allPlayersWithHost.find((p) => p.isHost) ?? null);
       setGames(allGames);
@@ -141,14 +143,14 @@ export function AdminDashboardView() {
       setSettings(appSettings);
       setError(null);
     } catch {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setError(
         lang === 'ar'
           ? 'تعذر تحميل بيانات لوحة التحكم. حاول إعادة التحديث.'
           : 'Unable to load dashboard overview. Please retry.'
       );
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && seq === loadSeqRef.current) setLoading(false);
     }
   }, [lang]);
 
@@ -559,7 +561,7 @@ export function AdminDashboardView() {
                   return (
                     <div
                       key={game.id}
-                      className="rounded-card border border-border-paper bg-paper p-4 space-y-3.5"
+                      className="@container rounded-card border border-border-paper bg-paper p-4 space-y-3.5"
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0 flex-1">
@@ -577,10 +579,10 @@ export function AdminDashboardView() {
                               </Badge>
                             )}
                           </div>
-                          <h3 className="mt-2 font-display text-lg text-red-900">
+                          <h3 className="mt-2 break-words font-display text-lg text-red-900">
                             {localizeText(lang, game.tableName, game.tableNameAr)}
                           </h3>
-                          <p className="text-xs text-ink-muted">
+                          <p className="break-words text-xs text-ink-muted">
                             {currentSeg
                               ? `${lang === 'ar' ? 'الفقرة' : 'Segment'} ${formatNumber(game.currentSegmentIndex + 1, { useArabicIndicDigits: useArabicIndic })}/${formatNumber(game.segmentIds.length, { useArabicIndicDigits: useArabicIndic })}: ${localizeText(lang, currentSeg.nameEn, currentSeg.nameAr)}`
                               : null}
@@ -608,7 +610,7 @@ export function AdminDashboardView() {
                         </div>
                       </div>
 
-                      <div className="grid gap-2 sm:grid-cols-3">
+                      <div className="grid grid-cols-1 gap-2 @md:grid-cols-3">
                         {game.playerIds.map((pid) => {
                           const p = playerMap.get(pid);
                           const pts = totals[pid] ?? 0;

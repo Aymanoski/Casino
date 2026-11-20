@@ -5,13 +5,15 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
   LayoutGrid,
   Search,
   SlidersHorizontal,
   Table2,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
-import { cn } from '@/lib/utils';
+import { cn, normalizeSearchText } from '@/lib/utils';
 import { Input } from './input';
 import { Button } from './button';
 import { EmptyState } from './empty-state';
@@ -42,7 +44,7 @@ export const Table = React.forwardRef<
   (
     {
       className,
-      maxHeightClassName = 'max-h-[480px]',
+      maxHeightClassName = 'max-h-[min(68dvh,720px)]',
       stickyFirstColumn = true,
       ...props
     },
@@ -157,7 +159,17 @@ export function SortableTableHead({
   ...props
 }: SortableTableHeadProps) {
   return (
-    <TableHead className={cn('p-0', className)} {...props}>
+    <TableHead
+      className={cn('p-0', className)}
+      aria-sort={
+        active
+          ? direction === 'asc'
+            ? 'ascending'
+            : 'descending'
+          : 'none'
+      }
+      {...props}
+    >
       <button
         type="button"
         onClick={onSort}
@@ -207,12 +219,16 @@ export interface DataTableProps<T> {
   getRowKey: (row: T) => string;
   searchable?: boolean;
   searchPlaceholder?: string;
-  searchFilter?: (row: T, query: string) => boolean;
+  searchFilter?: (row: T, normalizedQuery: string) => boolean;
   filterSlot?: React.ReactNode;
   filterLabel?: string;
+  /** 'inline' places 1-2 filters beside Search; 'bar' places 3+ filters in a structured full-width grid on md+ */
+  filterLayout?: 'inline' | 'bar';
   mobileMode?: 'cards' | 'scroll';
   allowMobileViewToggle?: boolean;
   stickyFirstColumn?: boolean;
+  /** Default rows per page (set 0 to disable pagination). Defaults to 30 so 1,000+ rows remain instantaneous. */
+  defaultPageSize?: number;
   emptyTitle?: string;
   emptyDescription?: string;
   className?: string;
@@ -227,9 +243,11 @@ export function DataTable<T>({
   searchFilter,
   filterSlot,
   filterLabel,
+  filterLayout = 'inline',
   mobileMode = 'cards',
   allowMobileViewToggle = true,
   stickyFirstColumn = true,
+  defaultPageSize = 30,
   emptyTitle = 'No matching records',
   emptyDescription = 'Adjust your search query or filters to see tournament records.',
   className,
@@ -239,6 +257,9 @@ export function DataTable<T>({
   const [sortKey, setSortKey] = React.useState<string | null>(null);
   const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('asc');
   const [viewMode, setViewMode] = React.useState<'cards' | 'scroll'>(mobileMode);
+  const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(defaultPageSize);
+  const pageSizeId = React.useId();
 
   const handleSort = (key: string) => {
     if (sortKey === key) {
@@ -247,10 +268,11 @@ export function DataTable<T>({
       setSortKey(key);
       setSortDir('asc');
     }
+    setPage(1);
   };
 
   const filteredAndSorted = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normalizeSearchText(query);
     let list = data;
     if (q && searchFilter) {
       list = list.filter((item) => searchFilter(item, q));
@@ -273,6 +295,25 @@ export function DataTable<T>({
     return list;
   }, [data, query, searchFilter, sortKey, sortDir, columns]);
 
+  const totalCount = filteredAndSorted.length;
+  const totalPages =
+    pageSize > 0 ? Math.max(1, Math.ceil(totalCount / pageSize)) : 1;
+  const safePage = Math.min(page, totalPages);
+
+  React.useEffect(() => {
+    setPage(1);
+  }, [query, data.length, pageSize]);
+
+  const visibleRows = React.useMemo(() => {
+    if (pageSize <= 0) return filteredAndSorted;
+    const start = (safePage - 1) * pageSize;
+    return filteredAndSorted.slice(start, start + pageSize);
+  }, [filteredAndSorted, pageSize, safePage]);
+
+  const rangeStart = totalCount === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const rangeEnd =
+    pageSize <= 0 ? totalCount : Math.min(safePage * pageSize, totalCount);
+
   const titleCol =
     columns.find((c) => c.mobileRole === 'title') ?? columns[1] ?? columns[0];
   const badgeCol =
@@ -290,101 +331,117 @@ export function DataTable<T>({
   return (
     <div className={cn('space-y-3', className)}>
       {(searchable || filterSlot || allowMobileViewToggle) && (
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-          {searchable ? (
-            <div className="w-full sm:max-w-sm">
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={searchPlaceholder}
-                startIcon={<Search className="h-4 w-4" />}
-                aria-label={searchPlaceholder}
-              />
-            </div>
-          ) : (
-            <div />
-          )}
-
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Desktop inline filters */}
-            {filterSlot && (
-              <div className="hidden md:flex md:items-center md:gap-2">
-                {filterSlot}
+        <div className="space-y-2.5">
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+            {searchable ? (
+              <div className="w-full sm:max-w-md">
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  startIcon={<Search className="h-4 w-4" />}
+                  aria-label={searchPlaceholder}
+                />
               </div>
+            ) : (
+              <div />
             )}
 
-            {/* Mobile Filter Bottom Sheet Trigger */}
-            {filterSlot && (
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Desktop inline filters (when filterLayout === 'inline') */}
+              {filterSlot && filterLayout === 'inline' && (
+                <div className="hidden md:flex md:flex-wrap md:items-center md:gap-2">
+                  {filterSlot}
+                </div>
+              )}
+
+              {/* Mobile Filter Bottom Sheet Trigger */}
+              {filterSlot && (
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="calm"
+                      size="sm"
+                      className="md:hidden"
+                    >
+                      <SlidersHorizontal className="h-4 w-4 text-red-600" />
+                      <span>{resolvedFilterLabel}</span>
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>{resolvedFilterLabel}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 py-2">{filterSlot}</div>
+                    <DialogFooter>
+                      <DialogClose asChild>
+                        <Button variant="red" size="md">
+                          {lang === 'ar' ? 'تطبيق' : 'Apply'}
+                        </Button>
+                      </DialogClose>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
+
+              {/* Mobile Card-List vs Sticky-Column Table Switcher (< md) */}
+              {allowMobileViewToggle && (
+                <div
+                  role="group"
+                  aria-label={
+                    lang === 'ar' ? 'طريقة عرض الجدول' : 'Mobile table view mode'
+                  }
+                  className="inline-flex rounded-button border-2 border-outline bg-paper-2 p-1 md:hidden"
+                >
+                  <button
                     type="button"
-                    variant="surface"
-                    size="sm"
-                    className="md:hidden"
+                    onClick={() => setViewMode('cards')}
+                    className={cn(
+                      'inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-xs font-bold transition-colors',
+                      viewMode === 'cards'
+                        ? 'bg-red-600 text-white shadow-sticker-sm'
+                        : 'text-ink-muted hover:text-ink'
+                    )}
                   >
-                    <SlidersHorizontal className="h-4 w-4 text-red-600" />
-                    <span>{resolvedFilterLabel}</span>
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>{resolvedFilterLabel}</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 py-2">{filterSlot}</div>
-                  <DialogFooter>
-                    <DialogClose asChild>
-                      <Button variant="red" size="md">
-                        {lang === 'ar' ? 'تطبيق' : 'Apply'}
-                      </Button>
-                    </DialogClose>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            )}
-
-            {/* Mobile Card-List vs Sticky-Column Table Switcher (< md) */}
-            {allowMobileViewToggle && (
-              <div
-                role="group"
-                aria-label={
-                  lang === 'ar' ? 'طريقة عرض الجدول' : 'Mobile table view mode'
-                }
-                className="inline-flex rounded-button border-2 border-outline bg-paper-2 p-1 md:hidden"
-              >
-                <button
-                  type="button"
-                  onClick={() => setViewMode('cards')}
-                  className={cn(
-                    'inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-xs font-bold transition-colors',
-                    viewMode === 'cards'
-                      ? 'bg-red-600 text-white shadow-sticker-sm'
-                      : 'text-ink-muted hover:text-ink'
-                  )}
-                >
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                  <span>{cardsLabel}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('scroll')}
-                  className={cn(
-                    'inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-xs font-bold transition-colors',
-                    viewMode === 'scroll'
-                      ? 'bg-red-600 text-white shadow-sticker-sm'
-                      : 'text-ink-muted hover:text-ink'
-                  )}
-                >
-                  <Table2 className="h-3.5 w-3.5" />
-                  <span>{tableLabel}</span>
-                </button>
-              </div>
-            )}
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    <span>{cardsLabel}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('scroll')}
+                    className={cn(
+                      'inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-xs font-bold transition-colors',
+                      viewMode === 'scroll'
+                        ? 'bg-red-600 text-white shadow-sticker-sm'
+                        : 'text-ink-muted hover:text-ink'
+                    )}
+                  >
+                    <Table2 className="h-3.5 w-3.5" />
+                    <span>{tableLabel}</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Dedicated Desktop Multi-Filter Bar (when filterLayout === 'bar') */}
+          {filterSlot && filterLayout === 'bar' && (
+            <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-2.5 rounded-card border border-border-paper bg-white p-3 shadow-sm">
+              {filterSlot}
+            </div>
+          )}
         </div>
       )}
 
-      {filteredAndSorted.length === 0 ? (
+      {/* Polite SR-only live status update */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {lang === 'ar'
+          ? `عرض ${visibleRows.length} من أصل ${totalCount} سجل`
+          : `Showing ${visibleRows.length} of ${totalCount} records`}
+      </div>
+
+      {totalCount === 0 ? (
         <EmptyState
           compact
           title={emptyTitle}
@@ -395,13 +452,13 @@ export function DataTable<T>({
           {/* Mobile Card List View */}
           {viewMode === 'cards' && (
             <div className="grid gap-3 md:hidden">
-              {filteredAndSorted.map((row) => (
+              {visibleRows.map((row) => (
                 <div
                   key={getRowKey(row)}
-                  className="@container rounded-card border border-border-paper bg-white p-4 text-ink shadow-soft space-y-3"
+                  className="@container min-w-0 rounded-card border border-border-paper bg-white p-4 text-ink shadow-soft space-y-3"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 break-words">
                       {titleCol.render(row)}
                     </div>
                     {badgeCol && (
@@ -416,7 +473,7 @@ export function DataTable<T>({
                           <div className="text-[11px] font-bold uppercase ltr:tracking-wider rtl:tracking-normal text-ink-muted">
                             {col.header}
                           </div>
-                          <div className="text-sm text-ink">
+                          <div className="min-w-0 break-words text-sm text-ink">
                             {col.render(row)}
                           </div>
                         </div>
@@ -453,7 +510,7 @@ export function DataTable<T>({
                 </tr>
               </TableHeader>
               <TableBody>
-                {filteredAndSorted.map((row) => (
+                {visibleRows.map((row) => (
                   <TableRow key={getRowKey(row)}>
                     {columns.map((col) => (
                       <TableCell key={col.key} className={col.className}>
@@ -465,6 +522,64 @@ export function DataTable<T>({
               </TableBody>
             </Table>
           </div>
+
+          {/* Pagination Footer (renders automatically when total > 25 or multi-page) */}
+          {pageSize > 0 && totalCount > 25 && (
+            <div className="flex flex-col gap-2.5 rounded-card border border-border-paper bg-white px-4 py-2.5 text-xs sm:flex-row sm:items-center sm:justify-between">
+              <div className="font-semibold text-ink-muted tabular-nums">
+                {lang === 'ar'
+                  ? `عرض ${rangeStart}–${rangeEnd} من أصل ${totalCount}`
+                  : `Showing ${rangeStart}–${rangeEnd} of ${totalCount}`}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <label
+                  htmlFor={pageSizeId}
+                  className="inline-flex items-center gap-1.5 font-bold text-ink-muted"
+                >
+                  <span>{lang === 'ar' ? 'لكل صفحة:' : 'Per page:'}</span>
+                  <select
+                    id={pageSizeId}
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    className="min-h-[44px] h-11 rounded-input border border-border-paper bg-paper px-2.5 text-base sm:text-xs font-bold text-ink"
+                  >
+                    {[25, 30, 50, 100].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="inline-flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="calm"
+                    size="icon"
+                    disabled={safePage <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    aria-label={lang === 'ar' ? 'الصفحة السابقة' : 'Previous page'}
+                  >
+                    <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+                  </Button>
+                  <span className="min-w-[64px] text-center font-bold tabular-nums text-red-900">
+                    {safePage} / {totalPages}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="calm"
+                    size="icon"
+                    disabled={safePage >= totalPages}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    aria-label={lang === 'ar' ? 'الصفحة التالية' : 'Next page'}
+                  >
+                    <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

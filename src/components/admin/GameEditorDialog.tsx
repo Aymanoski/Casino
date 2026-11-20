@@ -72,6 +72,10 @@ export function GameEditorDialog({
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const roundSelectId = React.useId();
+  const scorerSelectId = React.useId();
+  const statusSelectId = React.useId();
+
   const nonHostPlayers = useMemo(
     () => players.filter((p) => !p.isHost),
     [players]
@@ -286,13 +290,17 @@ export function GameEditorDialog({
             />
 
             <div className="space-y-1.5">
-              <label className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink">
+              <label
+                htmlFor={roundSelectId}
+                className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
+              >
                 {lang === 'ar' ? 'الجولة' : 'Round'}
               </label>
               <select
+                id={roundSelectId}
                 value={roundId}
                 onChange={(e) => setRoundId(e.target.value)}
-                className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none"
+                className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
               >
                 {rounds.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -303,13 +311,17 @@ export function GameEditorDialog({
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink">
+              <label
+                htmlFor={scorerSelectId}
+                className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
+              >
                 {lang === 'ar' ? 'حكم الطاولة' : 'Assigned Scorer'}
               </label>
               <select
+                id={scorerSelectId}
                 value={scorerUserId}
                 onChange={(e) => setScorerUserId(e.target.value)}
-                className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none"
+                className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
               >
                 {scorers.map((u) => (
                   <option key={u.id} value={u.id}>
@@ -327,13 +339,17 @@ export function GameEditorDialog({
             />
 
             <div className="space-y-1.5">
-              <label className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink">
+              <label
+                htmlFor={statusSelectId}
+                className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
+              >
                 {lang === 'ar' ? 'حالة المباراة' : 'Game Status'}
               </label>
               <select
+                id={statusSelectId}
                 value={status}
                 onChange={(e) => setStatus(e.target.value as GameStatus)}
-                className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none"
+                className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
               >
                 {GAME_STATUSES.map((st) => (
                   <option key={st} value={st}>
@@ -379,14 +395,15 @@ export function GameEditorDialog({
                           : `${lang === 'ar' ? 'المقعد' : 'Seat'} ${idx + 1}`}
                       </span>
                       {!isFinal && playerIds.length > 2 && (
-                        <button
+                        <Button
                           type="button"
+                          variant="ghost"
+                          size="icon"
                           onClick={() => handleRemoveSeat(idx)}
-                          className="text-negative hover:underline"
-                          aria-label={lang === 'ar' ? 'إزالة المقعد' : 'Remove seat'}
+                          aria-label={lang === 'ar' ? `إزالة المقعد ${idx + 1}` : `Remove seat ${idx + 1}`}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                          <Trash2 className="h-4 w-4 text-negative" />
+                        </Button>
                       )}
                     </div>
                     {isMarwanSlot ? (
@@ -398,9 +415,10 @@ export function GameEditorDialog({
                       </div>
                     ) : (
                       <select
+                        aria-label={lang === 'ar' ? `لاعب المقعد ${idx + 1}` : `Contestant for Seat ${idx + 1}`}
                         value={pid}
                         onChange={(e) => handleSeatChange(idx, e.target.value)}
-                        className="flex min-h-[44px] h-11 w-full rounded-input border border-border-paper bg-white px-2.5 text-base sm:text-xs font-semibold text-ink focus:border-blue-500 focus:outline-none"
+                        className="flex min-h-[44px] h-11 w-full rounded-input border border-border-paper bg-white px-2.5 text-base sm:text-xs font-semibold text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
                       >
                         <option value={`tbd-seat-${idx + 1}`}>
                           {lang === 'ar' ? '— مقعد متأهل قادم (TBD) —' : '— Open Qualifier Slot (TBD) —'}
@@ -442,8 +460,9 @@ export function GameEditorDialog({
                   <button
                     key={seg.id}
                     type="button"
+                    aria-pressed={selected}
                     onClick={() => toggleSegment(seg.id)}
-                    className={`min-h-[38px] rounded-pill border px-3 py-1 text-xs font-bold transition-colors ${
+                    className={`min-h-[44px] rounded-pill border px-3.5 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 ${
                       selected
                         ? 'border-outline bg-red-600 text-white shadow-sticker-sm'
                         : 'border-border-paper bg-white text-ink hover:bg-paper-2'

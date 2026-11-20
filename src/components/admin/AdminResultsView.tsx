@@ -29,7 +29,7 @@ import type {
   Settings,
   User,
 } from '@/lib/schemas';
-import { formatNumber, localizeText } from '@/lib/utils';
+import { formatNumber, localizeText, normalizeSearchText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton, TableRowSkeleton } from '@/components/ui/skeleton';
@@ -88,6 +88,7 @@ export function AdminResultsView() {
   const [scorerFilter, setScorerFilter] = useState('all');
 
   const mountedRef = useRef(true);
+  const loadSeqRef = useRef(0);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -96,6 +97,7 @@ export function AdminResultsView() {
   }, []);
 
   const loadData = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     try {
       const [
         allScores,
@@ -120,7 +122,7 @@ export function AdminResultsView() {
         finished.map(async (g) => [g.id, await scoreRepo.getGameTotals(g.id)] as const)
       );
 
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setScoreEvents(allScores);
       setGames(allGames);
       setRounds(allRounds);
@@ -131,14 +133,14 @@ export function AdminResultsView() {
       setTotalsByGame(Object.fromEntries(totalsEntries));
       setError(null);
     } catch {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setError(
         lang === 'ar'
           ? 'تعذر تحميل سجل النتائج.'
           : 'Failed to load results feed.'
       );
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && seq === loadSeqRef.current) setLoading(false);
     }
   }, [lang]);
 
@@ -582,17 +584,18 @@ export function AdminResultsView() {
         data={unifiedRecords}
         columns={columns}
         getRowKey={(r) => r.id}
+        filterLayout="bar"
         searchPlaceholder={
           lang === 'ar'
             ? 'ابحث باللاعب أو الطاولة أو الفقرة أو الملاحظة...'
             : 'Search player, table, segment, or note...'
         }
         searchFilter={(r, q) =>
-          r.playerName.toLowerCase().includes(q) ||
-          r.tableName.toLowerCase().includes(q) ||
-          r.segmentLabel.toLowerCase().includes(q) ||
-          (r.note ?? '').toLowerCase().includes(q) ||
-          r.scorerName.toLowerCase().includes(q)
+          normalizeSearchText(r.playerName).includes(q) ||
+          normalizeSearchText(r.tableName).includes(q) ||
+          normalizeSearchText(r.segmentLabel).includes(q) ||
+          normalizeSearchText(r.note).includes(q) ||
+          normalizeSearchText(r.scorerName).includes(q)
         }
         filterLabel={lang === 'ar' ? 'تصفية النتائج' : 'Filter Feed'}
         filterSlot={
@@ -601,7 +604,7 @@ export function AdminResultsView() {
               aria-label={lang === 'ar' ? 'تصفية بالجولة' : 'Filter by round'}
               value={roundFilter}
               onChange={(e) => setRoundFilter(e.target.value)}
-              className="min-h-[44px] h-11 w-full md:w-auto rounded-input border-2 border-border-paper bg-white px-2.5 text-base sm:text-xs font-semibold text-ink"
+              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-2.5 text-base sm:text-xs font-semibold text-ink focus:border-blue-500 focus:outline-none"
             >
               <option value="all">{lang === 'ar' ? 'كل الجولات' : 'All Rounds'}</option>
               {rounds.map((r) => (
@@ -615,7 +618,7 @@ export function AdminResultsView() {
               aria-label={lang === 'ar' ? 'تصفية بالمباراة' : 'Filter by game'}
               value={gameFilter}
               onChange={(e) => setGameFilter(e.target.value)}
-              className="min-h-[44px] h-11 w-full md:w-auto max-w-full md:max-w-[180px] rounded-input border-2 border-border-paper bg-white px-2.5 text-base sm:text-xs font-semibold text-ink"
+              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-2.5 text-base sm:text-xs font-semibold text-ink focus:border-blue-500 focus:outline-none"
             >
               <option value="all">{lang === 'ar' ? 'كل الطاولات' : 'All Games'}</option>
               {games.map((g) => (
@@ -629,7 +632,7 @@ export function AdminResultsView() {
               aria-label={lang === 'ar' ? 'تصفية باللاعب' : 'Filter by player'}
               value={playerFilter}
               onChange={(e) => setPlayerFilter(e.target.value)}
-              className="min-h-[44px] h-11 w-full md:w-auto max-w-full md:max-w-[170px] rounded-input border-2 border-border-paper bg-white px-2.5 text-base sm:text-xs font-semibold text-ink"
+              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-2.5 text-base sm:text-xs font-semibold text-ink focus:border-blue-500 focus:outline-none"
             >
               <option value="all">{lang === 'ar' ? 'كل اللاعبين' : 'All Players'}</option>
               {players.map((p) => (
@@ -643,7 +646,7 @@ export function AdminResultsView() {
               aria-label={lang === 'ar' ? 'تصفية بالحكم' : 'Filter by scorer'}
               value={scorerFilter}
               onChange={(e) => setScorerFilter(e.target.value)}
-              className="min-h-[44px] h-11 w-full md:w-auto rounded-input border-2 border-border-paper bg-white px-2.5 text-base sm:text-xs font-semibold text-ink"
+              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-2.5 text-base sm:text-xs font-semibold text-ink focus:border-blue-500 focus:outline-none"
             >
               <option value="all">{lang === 'ar' ? 'كل الحكام' : 'All Scorers'}</option>
               {scorers.map((u) => (

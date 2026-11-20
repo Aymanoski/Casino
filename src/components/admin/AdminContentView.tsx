@@ -84,8 +84,12 @@ export function AdminContentView() {
     badgeAr: '',
   });
   const [saving, setSaving] = useState(false);
+  const [reordering, setReordering] = useState(false);
 
   const mountedRef = useRef(true);
+  const loadSeqRef = useRef(0);
+  const categorySelectId = React.useId();
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -94,22 +98,23 @@ export function AdminContentView() {
   }, []);
 
   const loadData = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     try {
       const [allContent, appSettings] = await Promise.all([
         contentRepo.list(),
         settingsRepo.get(),
       ]);
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setItems(allContent);
       setSettings(appSettings);
       setError(null);
     } catch {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setError(
         lang === 'ar' ? 'تعذر تحميل عناصر المحتوى.' : 'Failed to load content items.'
       );
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && seq === loadSeqRef.current) setLoading(false);
     }
   }, [lang]);
 
@@ -219,17 +224,22 @@ export function AdminContentView() {
   };
 
   const handleMove = async (index: number, delta: -1 | 1) => {
-    if (!user || activeCategory !== 'all') return;
+    if (!user || activeCategory !== 'all' || reordering) return;
     const nextIdx = index + delta;
     if (nextIdx < 0 || nextIdx >= items.length) return;
     const next = [...items];
     const [moved] = next.splice(index, 1);
     next.splice(nextIdx, 0, moved);
-    await contentRepo.reorder(
-      next.map((i) => i.id),
-      user.id
-    );
-    await loadData();
+    setReordering(true);
+    try {
+      await contentRepo.reorder(
+        next.map((i) => i.id),
+        user.id
+      );
+      await loadData();
+    } finally {
+      if (mountedRef.current) setReordering(false);
+    }
   };
 
   const handleDelete = async (item: ContentItem) => {
@@ -461,10 +471,14 @@ export function AdminContentView() {
           <form onSubmit={handleSave} className="space-y-4">
             <FormGrid columns={2}>
               <div className="space-y-1.5">
-                <label className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink">
+                <label
+                  htmlFor={categorySelectId}
+                  className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
+                >
                   {lang === 'ar' ? 'التصنيف' : 'Category'}
                 </label>
                 <select
+                  id={categorySelectId}
                   value={form.category}
                   onChange={(e) =>
                     setForm((s) => ({
@@ -472,7 +486,7 @@ export function AdminContentView() {
                       category: e.target.value as ContentCategory,
                     }))
                   }
-                  className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink"
+                  className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
                 >
                   {CONTENT_CATEGORIES.map((c) => (
                     <option key={c.id} value={c.id}>

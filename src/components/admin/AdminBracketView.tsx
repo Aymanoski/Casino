@@ -140,12 +140,18 @@ export function AdminBracketView() {
   const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null);
   const [selectedPoolPlayerId, setSelectedPoolPlayerId] = useState<string | null>(null);
   const [seedingRoundId, setSeedingRoundId] = useState<string>('');
+  const [busySeatKey, setBusySeatKey] = useState<string | null>(null);
 
   // Quick game edit dialog
   const [editingGame, setEditingGame] = useState<Game | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
 
   const mountedRef = useRef(true);
+  const loadSeqRef = useRef(0);
+  const playersPerGameId = React.useId();
+  const advancePerGameId = React.useId();
+  const semiAdvanceId = React.useId();
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -153,7 +159,27 @@ export function AdminBracketView() {
     };
   }, []);
 
+  // Clear interrupted drag/selection state on window blur, pointercancel, or Escape
+  useEffect(() => {
+    const clearGesture = () => setDraggingPlayerId(null);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDraggingPlayerId(null);
+        setSelectedPoolPlayerId(null);
+      }
+    };
+    window.addEventListener('blur', clearGesture);
+    window.addEventListener('pointercancel', clearGesture);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('blur', clearGesture);
+      window.removeEventListener('pointercancel', clearGesture);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
+
   const loadData = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     try {
       const [allRounds, allGames, allPlayers, allUsers, allSegments, appSettings] =
         await Promise.all([
@@ -169,7 +195,7 @@ export function AdminBracketView() {
         allGames.map(async (g) => [g.id, await scoreRepo.getGameTotals(g.id)] as const)
       );
 
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setRounds(allRounds);
       setGames(allGames);
       setPlayers(allPlayers);
@@ -184,14 +210,14 @@ export function AdminBracketView() {
       );
       setError(null);
     } catch {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setError(
         lang === 'ar'
           ? 'تعذر تحميل شجرة البطولة.'
           : 'Failed to load tournament bracket.'
       );
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && seq === loadSeqRef.current) setLoading(false);
     }
   }, [lang]);
 
@@ -284,11 +310,13 @@ export function AdminBracketView() {
     seatIdx: number,
     playerId: string
   ) => {
-    if (!user) return;
+    const key = `${targetGame.id}-${seatIdx}`;
+    if (!user || busySeatKey === key) return;
     if (targetGame.isFinal && targetGame.playerIds[seatIdx] === 'player-marwan') {
       return;
     }
 
+    setBusySeatKey(key);
     const nextPlayerIds = [...targetGame.playerIds];
     nextPlayerIds[seatIdx] = playerId;
     try {
@@ -308,6 +336,8 @@ export function AdminBracketView() {
         title: lang === 'ar' ? 'تعذر تحديث المقعد' : 'Could not assign player',
         description: err instanceof Error ? err.message : undefined,
       });
+    } finally {
+      if (mountedRef.current) setBusySeatKey(null);
     }
   };
 
@@ -465,7 +495,7 @@ export function AdminBracketView() {
                   setAdvancePerGame(preset.adv);
                   setSemiAdvanceCount(preset.semi);
                 }}
-                className="min-h-[36px] rounded-pill border border-border-paper bg-paper px-3 text-xs font-bold text-ink hover:border-red-600 hover:bg-paper-2 transition-colors"
+                className="min-h-[44px] rounded-pill border border-border-paper bg-paper px-3.5 text-xs font-bold text-ink hover:border-red-600 hover:bg-paper-2 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
               >
                 {preset.label}
               </button>
@@ -473,29 +503,35 @@ export function AdminBracketView() {
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <Input
-            label={lang === 'ar' ? 'عدد اللاعبين' : 'Total Players'}
-            type="number"
-            min={4}
-            max={81}
-            value={totalPlayers}
-            onChange={(e) =>
-              setTotalPlayers(Math.max(4, Math.min(81, Number(e.target.value) || 9)))
-            }
-          />
-          <div className="space-y-1.5">
-            <label className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-12">
+          <div className="lg:col-span-2">
+            <Input
+              label={lang === 'ar' ? 'عدد اللاعبين' : 'Total Players'}
+              type="number"
+              min={4}
+              max={81}
+              value={totalPlayers}
+              onChange={(e) =>
+                setTotalPlayers(Math.max(4, Math.min(81, Number(e.target.value) || 9)))
+              }
+            />
+          </div>
+          <div className="space-y-1.5 lg:col-span-3">
+            <label
+              htmlFor={playersPerGameId}
+              className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
+            >
               {lang === 'ar' ? 'حجم الطاولة' : 'Players / Game'}
             </label>
             <select
+              id={playersPerGameId}
               value={playersPerGame}
               onChange={(e) => {
                 const sz = Number(e.target.value);
                 setPlayersPerGame(sz);
                 if (advancePerGame >= sz) setAdvancePerGame(1);
               }}
-              className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none"
+              className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
             >
               {[2, 3, 4].map((n) => (
                 <option key={n} value={n}>
@@ -506,14 +542,18 @@ export function AdminBracketView() {
             </select>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink">
+          <div className="space-y-1.5 lg:col-span-2">
+            <label
+              htmlFor={advancePerGameId}
+              className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
+            >
               {lang === 'ar' ? 'المتأهلون / طاولة' : 'Advance / Game'}
             </label>
             <select
+              id={advancePerGameId}
               value={advancePerGame}
               onChange={(e) => setAdvancePerGame(Number(e.target.value))}
-              className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none"
+              className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
             >
               {Array.from({ length: Math.max(1, playersPerGame - 1) }, (_, i) => i + 1).map(
                 (n) => (
@@ -525,15 +565,19 @@ export function AdminBracketView() {
             </select>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink">
+          <div className="space-y-1.5 lg:col-span-3">
+            <label
+              htmlFor={semiAdvanceId}
+              className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
+            >
               {lang === 'ar' ? 'متأهلو نصف النهائي' : 'Semi-Final Advance'}
             </label>
             <select
+              id={semiAdvanceId}
               value={semiAdvanceCount}
               onChange={(e) => setSemiAdvanceCount(Number(e.target.value))}
               disabled={!includeFinalWithMarwan}
-              className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none disabled:opacity-50"
+              className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25 disabled:opacity-50"
             >
               <option value={2}>
                 {lang === 'ar' ? 'أفضل ٢ (مع مروان سري)' : 'Top 2 (+ Marwan)'}
@@ -544,7 +588,7 @@ export function AdminBracketView() {
             </select>
           </div>
 
-          <label className="flex min-h-[44px] cursor-pointer items-center justify-between gap-2 rounded-input border-2 border-border-paper bg-paper px-3 py-2 self-end">
+          <label className="flex min-h-[44px] cursor-pointer items-center justify-between gap-2 rounded-input border-2 border-border-paper bg-paper px-3 py-2 self-end lg:col-span-2">
             <span className="flex items-center gap-1.5 text-xs font-bold text-red-900">
               <Crown className="h-4 w-4 text-gold-600 shrink-0" />
               <span>
@@ -751,7 +795,7 @@ export function AdminBracketView() {
                             onChange={(e) =>
                               handleUpdateRoundAdvance(round, Number(e.target.value))
                             }
-                            className="h-8 rounded-[8px] border border-border-paper bg-paper px-1.5 text-xs font-bold text-red-900"
+                            className="min-h-[44px] h-11 rounded-input border border-border-paper bg-paper px-2.5 text-base sm:text-xs font-bold text-red-900 focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
                           >
                             {[1, 2, 3].map((v) => (
                               <option key={v} value={v}>
@@ -947,6 +991,22 @@ export function AdminBracketView() {
                     return (
                       <div
                         key={`${game.id}-drop-${sIdx}`}
+                        role={!isMarwan ? 'button' : undefined}
+                        tabIndex={!isMarwan ? 0 : undefined}
+                        aria-disabled={isMarwan ? true : undefined}
+                        aria-label={
+                          isMarwan
+                            ? lang === 'ar'
+                              ? 'المقعد الذهبي: مروان سري'
+                              : 'Golden Seat: Marwan Serry'
+                            : canReceiveTap
+                              ? lang === 'ar'
+                                ? `تعيين اللاعب المختار في المقعد ${sIdx + 1}`
+                                : `Assign selected player to seat ${sIdx + 1} in ${game.tableName}`
+                              : lang === 'ar'
+                                ? `المقعد ${sIdx + 1}: ${p ? p.fullNameAr : 'فارغ'}`
+                                : `Seat ${sIdx + 1}: ${p ? p.fullName : 'Open TBD'}`
+                        }
                         onDragOver={(e) => {
                           if (!isMarwan) e.preventDefault();
                         }}
@@ -964,8 +1024,18 @@ export function AdminBracketView() {
                             handleAssignPlayerToSeat(game, sIdx, selectedPoolPlayerId);
                           }
                         }}
+                        onKeyDown={(e) => {
+                          if (
+                            (e.key === 'Enter' || e.key === ' ') &&
+                            canReceiveTap &&
+                            selectedPoolPlayerId
+                          ) {
+                            e.preventDefault();
+                            handleAssignPlayerToSeat(game, sIdx, selectedPoolPlayerId);
+                          }
+                        }}
                         className={cn(
-                          'flex min-h-[44px] items-center justify-between gap-2 rounded-input border-2 px-3 py-1.5 text-xs transition-all',
+                          'flex min-h-[44px] items-center justify-between gap-2 rounded-input border-2 px-3 py-1.5 text-xs transition-all focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
                           isMarwan
                             ? 'border-outline bg-gold-gradient font-extrabold text-red-900'
                             : canReceiveTap || draggingPlayerId

@@ -36,7 +36,7 @@ import {
   type Segment,
   type Settings,
 } from '@/lib/schemas';
-import { cn, formatNumber, localizeText } from '@/lib/utils';
+import { cn, formatNumber, localizeText, normalizeSearchText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -142,8 +142,14 @@ export function AdminPlayersView() {
   const [profilePlayer, setProfilePlayer] = useState<Player | null>(null);
   const [profileHistory, setProfileHistory] = useState<ScoreEvent[]>([]);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [busyPlayerId, setBusyPlayerId] = useState<string | null>(null);
 
   const mountedRef = useRef(true);
+  const loadSeqRef = useRef(0);
+  const drawerCloseBtnRef = useRef<HTMLButtonElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const statusSelectId = React.useId();
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -151,7 +157,41 @@ export function AdminPlayersView() {
     };
   }, []);
 
+  const closeProfileDrawer = useCallback(() => {
+    setProfilePlayer(null);
+    const prev = previousFocusRef.current;
+    previousFocusRef.current = null;
+    if (prev && typeof prev.focus === 'function') {
+      window.requestAnimationFrame(() => prev.focus());
+    }
+  }, []);
+
+  // Trap Escape key, lock body scroll, and move initial focus into Profile Drawer (WCAG 2.1.1 / 2.4.3)
+  useEffect(() => {
+    if (!profilePlayer) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const focusTimer = window.requestAnimationFrame(() => {
+      drawerCloseBtnRef.current?.focus();
+    });
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeProfileDrawer();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      window.cancelAnimationFrame(focusTimer);
+      window.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [profilePlayer, closeProfileDrawer]);
+
   const loadData = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     try {
       const [allPlayers, allGames, allSegments, appSettings] = await Promise.all([
         playerRepo.list(),
@@ -159,21 +199,21 @@ export function AdminPlayersView() {
         segmentRepo.list(),
         settingsRepo.get(),
       ]);
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setPlayers(allPlayers);
       setGames(allGames);
       setSegments(allSegments);
       setSettings(appSettings);
       setError(null);
     } catch {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setError(
         lang === 'ar'
           ? 'تعذر تحميل قائمة اللاعبين.'
           : 'Failed to load tournament players.'
       );
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && seq === loadSeqRef.current) setLoading(false);
     }
   }, [lang]);
 
@@ -264,6 +304,7 @@ export function AdminPlayersView() {
   };
 
   const openProfileDrawer = async (player: Player) => {
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
     setProfilePlayer(player);
     setProfileLoading(true);
     try {
@@ -373,7 +414,8 @@ export function AdminPlayersView() {
     player: Player,
     nextStatus: PlayerStatus
   ) => {
-    if (!user) return;
+    if (!user || busyPlayerId === player.id) return;
+    setBusyPlayerId(player.id);
     try {
       await playerRepo.update(player.id, { status: nextStatus }, user.id);
       toast({
@@ -388,6 +430,8 @@ export function AdminPlayersView() {
         title: lang === 'ar' ? 'تعذر تحديث الحالة' : 'Unable to update status',
         description: err instanceof Error ? err.message : undefined,
       });
+    } finally {
+      if (mountedRef.current) setBusyPlayerId(null);
     }
   };
 
@@ -740,12 +784,12 @@ export function AdminPlayersView() {
             : 'Search by name, nickname, email, or phone...'
         }
         searchFilter={(p, q) =>
-          p.fullName.toLowerCase().includes(q) ||
-          p.fullNameAr.toLowerCase().includes(q) ||
-          p.nickname.toLowerCase().includes(q) ||
-          p.nicknameAr.toLowerCase().includes(q) ||
-          p.email.toLowerCase().includes(q) ||
-          p.phone.toLowerCase().includes(q)
+          normalizeSearchText(p.fullName).includes(q) ||
+          normalizeSearchText(p.fullNameAr).includes(q) ||
+          normalizeSearchText(p.nickname).includes(q) ||
+          normalizeSearchText(p.nicknameAr).includes(q) ||
+          normalizeSearchText(p.email).includes(q) ||
+          normalizeSearchText(p.phone).includes(q)
         }
         filterLabel={lang === 'ar' ? 'تصفية بالحالة' : 'Status Filter'}
         filterSlot={
@@ -869,10 +913,14 @@ export function AdminPlayersView() {
                 required
               />
               <div className="space-y-1.5">
-                <label className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink">
+                <label
+                  htmlFor={statusSelectId}
+                  className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
+                >
                   {lang === 'ar' ? 'الحالة' : 'Status'}
                 </label>
                 <select
+                  id={statusSelectId}
                   value={formState.status}
                   onChange={(e) =>
                     setFormState((s) => ({
@@ -1100,7 +1148,7 @@ export function AdminPlayersView() {
       {profilePlayer && (
         <div
           className="fixed inset-0 z-50 flex justify-end bg-red-900/60 backdrop-blur-sm"
-          onClick={() => setProfilePlayer(null)}
+          onClick={closeProfileDrawer}
         >
           <aside
             role="dialog"
@@ -1136,24 +1184,25 @@ export function AdminPlayersView() {
                       {getPlayerStatusMeta(profilePlayer.status, lang).label}
                     </Badge>
                   </div>
-                  <h2 className="mt-1 truncate font-display text-2xl text-red-900">
+                  <h2 className="mt-1 break-words font-display text-2xl text-red-900">
                     {localizeText(
                       lang,
                       profilePlayer.fullName,
                       profilePlayer.fullNameAr
                     )}
                   </h2>
-                  <p className="truncate text-sm text-ink-muted">
+                  <p className="break-words text-sm text-ink-muted">
                     “{localizeText(lang, profilePlayer.nickname, profilePlayer.nicknameAr)}”
                   </p>
                 </div>
               </div>
 
               <Button
+                ref={drawerCloseBtnRef}
                 type="button"
-                variant="surface"
+                variant="calm"
                 size="icon"
-                onClick={() => setProfilePlayer(null)}
+                onClick={closeProfileDrawer}
                 aria-label={lang === 'ar' ? 'إغلاق الملف' : 'Close drawer'}
               >
                 <X className="h-4 w-4" />
@@ -1351,7 +1400,7 @@ export function AdminPlayersView() {
                 type="button"
                 variant="red"
                 size="sm"
-                onClick={() => setProfilePlayer(null)}
+                onClick={closeProfileDrawer}
               >
                 {lang === 'ar' ? 'تم' : 'Done'}
               </Button>

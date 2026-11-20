@@ -58,6 +58,9 @@ export function AdminSettingsView() {
   const [semiAdvanceCount, setSemiAdvanceCount] = useState(2);
 
   const mountedRef = useRef(true);
+  const loadSeqRef = useRef(0);
+  const defaultLangSelectId = React.useId();
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -87,21 +90,22 @@ export function AdminSettingsView() {
   };
 
   const loadSettings = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     try {
       const s = await settingsRepo.get();
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setSettings(s);
       hydrateForm(s);
       setError(null);
     } catch {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setError(
         lang === 'ar'
           ? 'تعذر تحميل إعدادات البطولة.'
           : 'Failed to load tournament settings.'
       );
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && seq === loadSeqRef.current) setLoading(false);
     }
   }, [lang]);
 
@@ -410,14 +414,18 @@ export function AdminSettingsView() {
 
           <FormGrid columns={2}>
             <div className="space-y-1.5">
-              <label className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink">
+              <label
+                htmlFor={defaultLangSelectId}
+                className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
+              >
                 {lang === 'ar' ? 'اللغة الافتراضية' : 'Default Language'}
               </label>
               <div className="flex gap-2">
                 <select
+                  id={defaultLangSelectId}
                   value={defaultLanguage}
                   onChange={(e) => setDefaultLanguage(e.target.value as Language)}
-                  className="flex min-h-[44px] h-11 flex-1 rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink"
+                  className="flex min-h-[44px] h-11 flex-1 rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
                 >
                   <option value="en">English (LTR)</option>
                   <option value="ar">العربية (RTL)</option>

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Minus, Plus } from 'lucide-react';
-import { cn, formatNumber } from '@/lib/utils';
+import { cn, formatCompactChipNumber, formatNumber } from '@/lib/utils';
 
 export type ScoreChipTone =
   | 'gold'
@@ -160,13 +160,21 @@ export function ScoreChip({
   const isPositive = resolvedTone === 'positive' || (!Number.isNaN(numericVal) && numericVal > 0 && showSign);
 
   // Format numeric values using true typographical minus (\u2212) when negative
+  // Compact >= 10,000 so extreme numbers (millions/billions) stay legible inside circular chips
   const rawDisplayText =
     typeof value === 'number'
-      ? formatNumber(Math.abs(value), {
-          sign: false,
-          useArabicIndicDigits,
-        })
+      ? Math.abs(value) >= 10_000
+        ? formatCompactChipNumber(value, useArabicIndicDigits)
+        : formatNumber(Math.abs(value), {
+            sign: false,
+            useArabicIndicDigits,
+          })
       : String(value).replace(/^[+-]/, '');
+
+  const fullExactText =
+    typeof value === 'number'
+      ? `${isNegative ? '−' : isPositive ? '+' : ''}${formatNumber(Math.abs(value), { useArabicIndicDigits })}`
+      : String(value);
 
   const signChar = isNegative ? '−' : isPositive ? '+' : '';
   const displayText =
@@ -181,14 +189,18 @@ export function ScoreChip({
   const chipContent = (
     <span
       className={cn(
-        'flex h-full w-full flex-col items-center justify-center rounded-pill border-2 leading-none',
+        'flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-pill border-2 px-0.5 leading-none',
         styles.inner
       )}
     >
       <span
         className={cn(
-          'inline-flex items-center justify-center gap-0.5 font-score font-black tracking-normal tabular-nums',
-          isCompactDigits && size === 'md' ? 'text-sm' : dims.text,
+          'inline-flex max-w-full items-center justify-center gap-0.5 truncate font-score font-black tracking-normal tabular-nums',
+          isCompactDigits && size === 'sm'
+            ? 'text-[10px]'
+            : isCompactDigits && size === 'md'
+              ? 'text-sm'
+              : dims.text,
           styles.text
         )}
       >
@@ -215,6 +227,7 @@ export function ScoreChip({
       <button
         type="button"
         onClick={onClick}
+        title={fullExactText}
         className={cn(
           'group relative inline-flex shrink-0 items-center justify-center rounded-pill border-[2.5px] sticker-press focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
           dims.interactiveOuter,
@@ -236,7 +249,8 @@ export function ScoreChip({
         styles.outer,
         className
       )}
-      aria-label={`${displayText}${subtitle ? ` ${subtitle}` : ''}`}
+      title={fullExactText}
+      aria-label={`${fullExactText}${subtitle ? ` ${subtitle}` : ''}`}
     >
       {chipContent}
     </div>

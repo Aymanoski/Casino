@@ -80,8 +80,12 @@ export function AdminSponsorsView() {
     benefitsArText: '',
   });
   const [saving, setSaving] = useState(false);
+  const [reordering, setReordering] = useState(false);
 
   const mountedRef = useRef(true);
+  const loadSeqRef = useRef(0);
+  const tierSelectId = React.useId();
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -90,18 +94,19 @@ export function AdminSponsorsView() {
   }, []);
 
   const loadData = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     try {
       const list = await sponsorRepo.list();
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setSponsors(list);
       setError(null);
     } catch {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setError(
         lang === 'ar' ? 'تعذر تحميل فئات الرعاة.' : 'Failed to load sponsor tiers.'
       );
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && seq === loadSeqRef.current) setLoading(false);
     }
   }, [lang]);
 
@@ -221,17 +226,22 @@ export function AdminSponsorsView() {
   };
 
   const handleMove = async (idx: number, delta: -1 | 1) => {
-    if (!user) return;
+    if (!user || reordering) return;
     const target = idx + delta;
     if (target < 0 || target >= sponsors.length) return;
     const next = [...sponsors];
     const [moved] = next.splice(idx, 1);
     next.splice(target, 0, moved);
-    await sponsorRepo.reorder(
-      next.map((s) => s.id),
-      user.id
-    );
-    await loadData();
+    setReordering(true);
+    try {
+      await sponsorRepo.reorder(
+        next.map((s) => s.id),
+        user.id
+      );
+      await loadData();
+    } finally {
+      if (mountedRef.current) setReordering(false);
+    }
   };
 
   const handleDelete = async (sp: Sponsor) => {
@@ -452,10 +462,14 @@ export function AdminSponsorsView() {
                 dir="rtl"
               />
               <div className="space-y-1.5">
-                <label className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink">
+                <label
+                  htmlFor={tierSelectId}
+                  className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
+                >
                   {lang === 'ar' ? 'الفئة' : 'Tier'}
                 </label>
                 <select
+                  id={tierSelectId}
                   value={form.tier}
                   onChange={(e) => {
                     const tier = e.target.value as SponsorTier;
@@ -466,7 +480,7 @@ export function AdminSponsorsView() {
                       tierLabelAr: getSponsorTierMeta(tier, 'ar').label,
                     }));
                   }}
-                  className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink"
+                  className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
                 >
                   {SPONSOR_TIERS.map((tKey) => (
                     <option key={tKey} value={tKey}>

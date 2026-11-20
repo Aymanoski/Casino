@@ -31,7 +31,7 @@ import type {
   Settings,
   User,
 } from '@/lib/schemas';
-import { localizeText } from '@/lib/utils';
+import { localizeText, normalizeSearchText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/dialog';
@@ -67,8 +67,10 @@ export function AdminGamesView() {
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingGame, setEditingGame] = useState<Game | null>(null);
+  const [busyGameId, setBusyGameId] = useState<string | null>(null);
 
   const mountedRef = useRef(true);
+  const loadSeqRef = useRef(0);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -77,6 +79,7 @@ export function AdminGamesView() {
   }, []);
 
   const loadData = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     try {
       const [allGames, allRounds, allPlayers, allUsers, allSegments, appSettings] =
         await Promise.all([
@@ -88,7 +91,7 @@ export function AdminGamesView() {
           settingsRepo.get(),
         ]);
 
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setGames(allGames);
       setRounds(allRounds);
       setPlayers(allPlayers);
@@ -97,12 +100,12 @@ export function AdminGamesView() {
       setSettings(appSettings);
       setError(null);
     } catch {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setError(
         lang === 'ar' ? 'تعذر تحميل قائمة المباريات.' : 'Failed to load games.'
       );
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && seq === loadSeqRef.current) setLoading(false);
     }
   }, [lang]);
 
@@ -140,7 +143,8 @@ export function AdminGamesView() {
   }, [games, roundFilter, statusFilter, scorerFilter]);
 
   const handleQuickAssignScorer = async (game: Game, scorerUserId: string) => {
-    if (!user) return;
+    if (!user || busyGameId === game.id) return;
+    setBusyGameId(game.id);
     try {
       await gameRepo.update(game.id, { scorerUserId }, user.id);
       toast({
@@ -155,11 +159,14 @@ export function AdminGamesView() {
         title: lang === 'ar' ? 'تعذر تعيين الحكم' : 'Could not assign scorer',
         description: err instanceof Error ? err.message : undefined,
       });
+    } finally {
+      if (mountedRef.current) setBusyGameId(null);
     }
   };
 
   const handleMarkAsFinal = async (game: Game) => {
-    if (!user) return;
+    if (!user || busyGameId === game.id) return;
+    setBusyGameId(game.id);
     try {
       await gameRepo.update(game.id, { isFinal: !game.isFinal }, user.id);
       toast({
@@ -179,6 +186,8 @@ export function AdminGamesView() {
         title: lang === 'ar' ? 'فشل التحديث' : 'Update failed',
         description: err instanceof Error ? err.message : undefined,
       });
+    } finally {
+      if (mountedRef.current) setBusyGameId(null);
     }
   };
 
@@ -512,19 +521,22 @@ export function AdminGamesView() {
         data={filteredGames}
         columns={columns}
         getRowKey={(g) => g.id}
+        filterLayout="bar"
         searchPlaceholder={
           lang === 'ar'
             ? 'ابحث باسم الطاولة أو اللاعبين...'
             : 'Search tables or seated players...'
         }
         searchFilter={(g, q) =>
-          g.tableName.toLowerCase().includes(q) ||
-          g.tableNameAr.toLowerCase().includes(q) ||
+          normalizeSearchText(g.tableName).includes(q) ||
+          normalizeSearchText(g.tableNameAr).includes(q) ||
           g.playerIds.some((pid) => {
             const p = playerMap.get(pid);
             return (
-              p?.fullName.toLowerCase().includes(q) ||
-              p?.fullNameAr.toLowerCase().includes(q)
+              normalizeSearchText(p?.fullName).includes(q) ||
+              normalizeSearchText(p?.fullNameAr).includes(q) ||
+              normalizeSearchText(p?.nickname).includes(q) ||
+              normalizeSearchText(p?.nicknameAr).includes(q)
             );
           })
         }
@@ -535,7 +547,7 @@ export function AdminGamesView() {
               aria-label={lang === 'ar' ? 'الجولة' : 'Round'}
               value={roundFilter}
               onChange={(e) => setRoundFilter(e.target.value)}
-              className="min-h-[44px] h-11 w-full md:w-auto rounded-input border-2 border-border-paper bg-white px-3 text-base sm:text-sm font-semibold text-ink"
+              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base sm:text-sm font-semibold text-ink focus:border-blue-500 focus:outline-none"
             >
               <option value="all">{lang === 'ar' ? 'كل الجولات' : 'All Rounds'}</option>
               {rounds.map((r) => (
@@ -550,7 +562,7 @@ export function AdminGamesView() {
               onChange={(e) =>
                 setStatusFilter(e.target.value as 'all' | GameStatus)
               }
-              className="min-h-[44px] h-11 w-full md:w-auto rounded-input border-2 border-border-paper bg-white px-3 text-base sm:text-sm font-semibold text-ink"
+              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base sm:text-sm font-semibold text-ink focus:border-blue-500 focus:outline-none"
             >
               <option value="all">{lang === 'ar' ? 'كل الحالات' : 'All Statuses'}</option>
               <option value="live">{lang === 'ar' ? 'مباشر' : 'Live'}</option>
@@ -561,7 +573,7 @@ export function AdminGamesView() {
               aria-label={lang === 'ar' ? 'الحكم' : 'Scorer'}
               value={scorerFilter}
               onChange={(e) => setScorerFilter(e.target.value)}
-              className="min-h-[44px] h-11 w-full md:w-auto rounded-input border-2 border-border-paper bg-white px-3 text-base sm:text-sm font-semibold text-ink"
+              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base sm:text-sm font-semibold text-ink focus:border-blue-500 focus:outline-none"
             >
               <option value="all">{lang === 'ar' ? 'كل الحكام' : 'All Scorers'}</option>
               {scorers.map((u) => (

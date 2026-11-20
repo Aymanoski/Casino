@@ -21,7 +21,7 @@ import {
   userRepo,
 } from '@/lib/repos';
 import type { Game, Language, User, UserRole } from '@/lib/schemas';
-import { localizeText } from '@/lib/utils';
+import { localizeText, normalizeSearchText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -100,6 +100,9 @@ export function AdminManagersView() {
   const [saving, setSaving] = useState(false);
 
   const mountedRef = useRef(true);
+  const loadSeqRef = useRef(0);
+  const roleSelectId = React.useId();
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -108,24 +111,25 @@ export function AdminManagersView() {
   }, []);
 
   const loadData = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     try {
       const [allUsers, allGames] = await Promise.all([
         userRepo.list(),
         gameRepo.list(),
       ]);
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setUsers(allUsers);
       setGames(allGames);
       setError(null);
     } catch {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setError(
         lang === 'ar'
           ? 'تعذر تحميل قائمة المديرين.'
           : 'Failed to load staff managers.'
       );
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && seq === loadSeqRef.current) setLoading(false);
     }
   }, [lang]);
 
@@ -514,10 +518,11 @@ export function AdminManagersView() {
             : 'Search managers by name, email, or title...'
         }
         searchFilter={(u, q) =>
-          u.name.toLowerCase().includes(q) ||
-          u.nameAr.toLowerCase().includes(q) ||
-          u.email.toLowerCase().includes(q) ||
-          (u.titleEn ?? '').toLowerCase().includes(q)
+          normalizeSearchText(u.name).includes(q) ||
+          normalizeSearchText(u.nameAr).includes(q) ||
+          normalizeSearchText(u.email).includes(q) ||
+          normalizeSearchText(u.titleEn).includes(q) ||
+          normalizeSearchText(u.titleAr).includes(q)
         }
         filterLabel={lang === 'ar' ? 'تصفية بالدور' : 'Role Filter'}
         filterSlot={
@@ -681,10 +686,14 @@ export function AdminManagersView() {
                 required
               />
               <div className="space-y-1.5">
-                <label className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink">
+                <label
+                  htmlFor={roleSelectId}
+                  className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
+                >
                   {lang === 'ar' ? 'الدور الوظيفي' : 'Assigned Role'}
                 </label>
                 <select
+                  id={roleSelectId}
                   value={formState.role}
                   disabled={editingUser?.id === 'user-admin'}
                   onChange={(e) =>

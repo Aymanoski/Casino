@@ -17,7 +17,13 @@ import { useI18n } from '@/lib/i18n';
 import { realtime } from '@/lib/realtime';
 import { segmentRepo, settingsRepo } from '@/lib/repos';
 import type { Segment, SegmentCategory, Settings } from '@/lib/schemas';
-import { cn, formatNumber, localizeText } from '@/lib/utils';
+import {
+  cn,
+  formatNumber,
+  localizeText,
+  normalizeSearchText,
+  parseSignedIntegerInput,
+} from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -85,9 +91,16 @@ export function AdminSegmentsView() {
     presetPoints: [10, 5, -5],
   });
   const [newPresetVal, setNewPresetVal] = useState('');
+  const [presetError, setPresetError] = useState<string | null>(null);
+  const [formErrors, setFormErrors] = useState<{ nameEn?: string; nameAr?: string }>({});
   const [saving, setSaving] = useState(false);
+  const [reordering, setReordering] = useState(false);
 
   const mountedRef = useRef(true);
+  const loadSeqRef = useRef(0);
+  const categorySelectId = React.useId();
+  const timerInputId = React.useId();
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -95,26 +108,43 @@ export function AdminSegmentsView() {
     };
   }, []);
 
+  // Clear interrupted drag state on window blur, pointercancel, or Escape
+  useEffect(() => {
+    const clearDrag = () => setDraggedId(null);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDraggedId(null);
+    };
+    window.addEventListener('blur', clearDrag);
+    window.addEventListener('pointercancel', clearDrag);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('blur', clearDrag);
+      window.removeEventListener('pointercancel', clearDrag);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
+
   const isSuperAdmin = user?.role === 'superAdmin';
   const isContentOnly = user?.role === 'content';
 
   const loadData = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     try {
       const [allSegments, appSettings] = await Promise.all([
         segmentRepo.list(),
         settingsRepo.get(),
       ]);
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setSegments(allSegments);
       setSettings(appSettings);
       setError(null);
     } catch {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setError(
         lang === 'ar' ? 'تعذر تحميل مكتبة الفقرات.' : 'Failed to load segments library.'
       );
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && seq === loadSeqRef.current) setLoading(false);
     }
   }, [lang]);
 
@@ -132,15 +162,15 @@ export function AdminSegmentsView() {
   const canReorder = isSuperAdmin && categoryFilter === 'all' && !search.trim();
 
   const visibleSegments = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = normalizeSearchText(search);
     return segments.filter((s) => {
       if (categoryFilter !== 'all' && s.category !== categoryFilter) return false;
       if (!q) return true;
       return (
-        s.nameEn.toLowerCase().includes(q) ||
-        s.nameAr.toLowerCase().includes(q) ||
-        s.descriptionEn.toLowerCase().includes(q) ||
-        s.descriptionAr.toLowerCase().includes(q)
+        normalizeSearchText(s.nameEn).includes(q) ||
+        normalizeSearchText(s.nameAr).includes(q) ||
+        normalizeSearchText(s.descriptionEn).includes(q) ||
+        normalizeSearchText(s.descriptionAr).includes(q)
       );
     });
   }, [segments, categoryFilter, search]);
@@ -158,6 +188,8 @@ export function AdminSegmentsView() {
       presetPoints: [10, 5, -5],
     });
     setNewPresetVal('');
+    setPresetError(null);
+    setFormErrors({});
     setDialogOpen(true);
   };
 
@@ -174,28 +206,43 @@ export function AdminSegmentsView() {
       presetPoints: [...seg.presetPoints],
     });
     setNewPresetVal('');
+    setPresetError(null);
+    setFormErrors({});
     setDialogOpen(true);
   };
 
   const handleAddPreset = () => {
-    const parsed = Number.parseInt(newPresetVal.trim(), 10);
-    if (Number.isNaN(parsed) || parsed === 0) return;
-    if (!form.presetPoints.includes(parsed)) {
+    const parsed = parseSignedIntegerInput(newPresetVal, {
+      min: -500,
+      max: 500,
+      allowZero: false,
+    });
+    if (!parsed.ok) {
+      setPresetError(
+        lang === 'ar'
+          ? 'أدخل رقماً صحيحاً غير صفري بين −٥٠٠ و +٥٠٠ (يدعم الأرقام العربية)'
+          : 'Enter a non-zero integer between −500 and +500.'
+      );
+      return;
+    }
+    setPresetError(null);
+    if (!form.presetPoints.includes(parsed.value)) {
       setForm((prev) => ({
         ...prev,
-        presetPoints: [...prev.presetPoints, parsed],
+        presetPoints: [...prev.presetPoints, parsed.value],
       }));
     }
     setNewPresetVal('');
   };
 
   const handleMove = async (index: number, delta: -1 | 1) => {
-    if (!user || !canReorder) return;
+    if (!user || !canReorder || reordering) return;
     const targetIdx = index + delta;
     if (targetIdx < 0 || targetIdx >= segments.length) return;
     const reordered = [...segments];
     const [moved] = reordered.splice(index, 1);
     reordered.splice(targetIdx, 0, moved);
+    setReordering(true);
     try {
       await segmentRepo.reorder(
         reordered.map((s) => s.id),
@@ -208,11 +255,13 @@ export function AdminSegmentsView() {
         title: lang === 'ar' ? 'تعذر إعادة الترتيب' : 'Reorder failed',
         description: err instanceof Error ? err.message : undefined,
       });
+    } finally {
+      if (mountedRef.current) setReordering(false);
     }
   };
 
   const handleDropReorder = async (targetId: string) => {
-    if (!user || !canReorder || !draggedId || draggedId === targetId) return;
+    if (!user || !canReorder || reordering || !draggedId || draggedId === targetId) return;
     const fromIdx = segments.findIndex((s) => s.id === draggedId);
     const toIdx = segments.findIndex((s) => s.id === targetId);
     if (fromIdx === -1 || toIdx === -1) return;
@@ -220,6 +269,7 @@ export function AdminSegmentsView() {
     const [moved] = next.splice(fromIdx, 1);
     next.splice(toIdx, 0, moved);
     setDraggedId(null);
+    setReordering(true);
     try {
       await segmentRepo.reorder(
         next.map((s) => s.id),
@@ -236,13 +286,28 @@ export function AdminSegmentsView() {
         title: lang === 'ar' ? 'تعذر الترتيب' : 'Reorder failed',
         description: err instanceof Error ? err.message : undefined,
       });
+    } finally {
+      if (mountedRef.current) setReordering(false);
     }
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (!form.nameEn.trim() || !form.nameAr.trim()) return;
+    const nextErrors: { nameEn?: string; nameAr?: string } = {};
+    if (!form.nameEn.trim()) {
+      nextErrors.nameEn =
+        lang === 'ar' ? 'الاسم الإنجليزي مطلوب.' : 'English segment name is required.';
+    }
+    if (!form.nameAr.trim()) {
+      nextErrors.nameAr =
+        lang === 'ar' ? 'الاسم العربي مطلوب.' : 'Arabic segment name is required.';
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setFormErrors(nextErrors);
+      return;
+    }
+    setFormErrors({});
 
     setSaving(true);
     try {
@@ -379,6 +444,11 @@ export function AdminSegmentsView() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            aria-label={
+              lang === 'ar'
+                ? 'ابحث في الفقرات بالعربية أو الإنجليزية'
+                : 'Search segments in EN or AR'
+            }
             placeholder={
               lang === 'ar'
                 ? 'ابحث في الفقرات بالعربية أو الإنجليزية...'
@@ -606,12 +676,16 @@ export function AdminSegmentsView() {
                 label={lang === 'ar' ? 'اسم الفقرة (إنجليزي)' : 'Segment Name (EN)'}
                 value={form.nameEn}
                 onChange={(e) => setForm((s) => ({ ...s, nameEn: e.target.value }))}
+                error={formErrors.nameEn}
+                maxLength={100}
                 required
               />
               <Input
                 label={lang === 'ar' ? 'اسم الفقرة (عربي)' : 'Segment Name (AR)'}
                 value={form.nameAr}
                 onChange={(e) => setForm((s) => ({ ...s, nameAr: e.target.value }))}
+                error={formErrors.nameAr}
+                maxLength={100}
                 dir="rtl"
                 required
               />
@@ -624,6 +698,7 @@ export function AdminSegmentsView() {
                 onChange={(e) =>
                   setForm((s) => ({ ...s, descriptionEn: e.target.value }))
                 }
+                maxLength={400}
                 rows={3}
               />
               <Textarea
@@ -632,6 +707,7 @@ export function AdminSegmentsView() {
                 onChange={(e) =>
                   setForm((s) => ({ ...s, descriptionAr: e.target.value }))
                 }
+                maxLength={400}
                 rows={3}
                 dir="rtl"
               />
@@ -641,10 +717,14 @@ export function AdminSegmentsView() {
               <>
                 <FormGrid columns={2}>
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink">
+                    <label
+                      htmlFor={categorySelectId}
+                      className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
+                    >
                       {lang === 'ar' ? 'التصنيف' : 'Category'}
                     </label>
                     <select
+                      id={categorySelectId}
                       value={form.category}
                       onChange={(e) =>
                         setForm((s) => ({
@@ -652,7 +732,7 @@ export function AdminSegmentsView() {
                           category: e.target.value as SegmentCategory,
                         }))
                       }
-                      className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none"
+                      className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
                     >
                       {CATEGORIES.map((cat) => (
                         <option key={cat} value={cat}>
@@ -664,10 +744,13 @@ export function AdminSegmentsView() {
 
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink">
+                      <label
+                        htmlFor={timerInputId}
+                        className="text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
+                      >
                         {lang === 'ar' ? 'المؤقت (اختياري)' : 'Optional Timer (sec)'}
                       </label>
-                      <label className="inline-flex items-center gap-1.5 text-xs font-bold text-ink">
+                      <label className="inline-flex min-h-[32px] cursor-pointer items-center gap-1.5 text-xs font-bold text-ink">
                         <input
                           type="checkbox"
                           checked={form.hasTimer}
@@ -680,6 +763,7 @@ export function AdminSegmentsView() {
                       </label>
                     </div>
                     <Input
+                      id={timerInputId}
                       type="number"
                       min={10}
                       max={300}
@@ -692,41 +776,49 @@ export function AdminSegmentsView() {
                   </div>
                 </FormGrid>
 
-                {/* Preset Points Editor */}
+                {/* Preset Points Editor (44px+ accessible removable pills + Arabic-Indic numeric support) */}
                 <div className="space-y-2.5 rounded-input border border-border-paper bg-paper p-3.5">
                   <div className="text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
                     {lang === 'ar' ? 'أزرار النقاط المسبقة' : 'Preset Point Buttons'}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {form.presetPoints.map((pt, idx) => (
-                      <div key={`${pt}-${idx}`} className="relative">
+                      <button
+                        key={`${pt}-${idx}`}
+                        type="button"
+                        onClick={() =>
+                          setForm((s) => ({
+                            ...s,
+                            presetPoints: s.presetPoints.filter((_, i) => i !== idx),
+                          }))
+                        }
+                        aria-label={
+                          lang === 'ar'
+                            ? `إزالة النقطة ${pt}`
+                            : `Remove preset ${pt > 0 ? `+${pt}` : pt}`
+                        }
+                        className="inline-flex min-h-[44px] items-center gap-2 rounded-pill border border-border-paper bg-white ps-1.5 pe-3 py-1 transition-colors hover:border-negative hover:bg-negative-soft focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
+                      >
                         <ScoreChip value={pt} showSign size="sm" />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setForm((s) => ({
-                              ...s,
-                              presetPoints: s.presetPoints.filter((_, i) => i !== idx),
-                            }))
-                          }
-                          aria-label={lang === 'ar' ? 'إزالة النقطة' : 'Remove preset'}
-                          className="absolute -top-1 -end-1 flex h-5 w-5 items-center justify-center rounded-pill border border-outline bg-white text-negative shadow-sm"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
+                        <X className="h-4 w-4 text-negative" aria-hidden="true" />
+                      </button>
                     ))}
                     <div className="flex items-center gap-1.5">
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="numeric"
+                        aria-label={lang === 'ar' ? 'قيمة نقطة مسبقة جديدة' : 'New preset points value'}
                         value={newPresetVal}
-                        onChange={(e) => setNewPresetVal(e.target.value)}
+                        onChange={(e) => {
+                          setNewPresetVal(e.target.value);
+                          if (presetError) setPresetError(null);
+                        }}
                         placeholder="+15 / -10"
-                        className="h-11 w-28 rounded-input border-2 border-border-paper bg-white px-2.5 text-base font-bold text-ink"
+                        className="min-h-[44px] h-11 w-28 rounded-input border-2 border-border-paper bg-white px-2.5 text-base font-bold text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
                       />
                       <Button
                         type="button"
-                        variant="surface"
+                        variant="calm"
                         size="sm"
                         onClick={handleAddPreset}
                       >
@@ -735,6 +827,11 @@ export function AdminSegmentsView() {
                       </Button>
                     </div>
                   </div>
+                  {presetError && (
+                    <p role="alert" className="text-xs font-bold text-negative">
+                      {presetError}
+                    </p>
+                  )}
                 </div>
               </>
             )}

@@ -25,7 +25,7 @@ import type {
   Round,
   Settings,
 } from '@/lib/schemas';
-import { cn, formatNumber, localizeText } from '@/lib/utils';
+import { cn, formatNumber, localizeText, normalizeSearchText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -61,6 +61,7 @@ export function AdminCheckInView() {
   const [busyPlayerId, setBusyPlayerId] = useState<string | null>(null);
 
   const mountedRef = useRef(true);
+  const loadSeqRef = useRef(0);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -69,6 +70,7 @@ export function AdminCheckInView() {
   }, []);
 
   const loadData = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     try {
       const [allPlayersWithHost, allGames, allRounds, appSettings] =
         await Promise.all([
@@ -78,7 +80,7 @@ export function AdminCheckInView() {
           settingsRepo.get(),
         ]);
 
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setPlayers(allPlayersWithHost.filter((p) => !p.isHost));
       setHostPlayer(allPlayersWithHost.find((p) => p.isHost) ?? null);
       setGames(allGames);
@@ -86,14 +88,14 @@ export function AdminCheckInView() {
       setSettings(appSettings);
       setError(null);
     } catch {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setError(
         lang === 'ar'
           ? 'تعذر تحميل بيانات بوابة الحضور.'
           : 'Failed to load check-in gate roster.'
       );
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && seq === loadSeqRef.current) setLoading(false);
     }
   }, [lang]);
 
@@ -134,15 +136,15 @@ export function AdminCheckInView() {
   }, [games]);
 
   const filteredRoster = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = normalizeSearchText(search);
     if (!q) return players;
     return players.filter(
       (p) =>
-        p.fullName.toLowerCase().includes(q) ||
-        p.fullNameAr.toLowerCase().includes(q) ||
-        p.nickname.toLowerCase().includes(q) ||
-        p.nicknameAr.toLowerCase().includes(q) ||
-        p.phone.toLowerCase().includes(q)
+        normalizeSearchText(p.fullName).includes(q) ||
+        normalizeSearchText(p.fullNameAr).includes(q) ||
+        normalizeSearchText(p.nickname).includes(q) ||
+        normalizeSearchText(p.nicknameAr).includes(q) ||
+        normalizeSearchText(p.phone).includes(q)
     );
   }, [players, search]);
 
@@ -446,6 +448,11 @@ export function AdminCheckInView() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               startIcon={<Search className="h-4 w-4" />}
+              aria-label={
+                lang === 'ar'
+                  ? 'ابحث باسم المتسابق أو اللقب أو الهاتف'
+                  : 'Search walk-up contestant by name, nickname, or phone'
+              }
               placeholder={
                 lang === 'ar'
                   ? 'ابحث باسم المتسابق أو اللقب أو الهاتف...'

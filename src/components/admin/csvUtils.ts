@@ -200,7 +200,19 @@ Seif El-Din Amr,سيف الدين عمرو,Saifo,سيفو,+20 100 555 2003,seif.
 Bad Row Example,صف للتجربة,Test,تست,+20 100 000 0000,not-a-valid-email,registered`;
 
 function escapeCsvCell(val: unknown): string {
-  const str = val === null || val === undefined ? '' : String(val);
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'number') return String(val);
+
+  let str = String(val);
+  // Neutralize spreadsheet formula injection (=, @, tab, CR, or non-numeric +/- formulas)
+  const isNumericString = /^[+-]?\d+(\.\d+)?$/.test(str.trim());
+  if (
+    !isNumericString &&
+    /^[=@\t\r]|^[+-][^0-9]/.test(str)
+  ) {
+    str = `'${str}`;
+  }
+
   if (/[",\r\n]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`;
   }
