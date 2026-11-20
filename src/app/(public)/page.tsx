@@ -1,18 +1,42 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { playerRepo, settingsRepo } from '@/lib/repos';
 import { realtime } from '@/lib/realtime';
 import type { Player, Settings } from '@/lib/schemas';
-import {
-  ClosingCtaSection,
-  FeaturesSection,
-  HeroFinalSection,
-  HowItWorksSection,
-  LiveDemoSection,
-  SegmentsSection,
-  SponsorsSection,
-} from '@/components/landing';
+import { HeroFinalSection } from '@/components/landing/HeroFinalSection';
+import { HowItWorksSection } from '@/components/landing/HowItWorksSection';
+import { SegmentsSection } from '@/components/landing/SegmentsSection';
+import { FeaturesSection } from '@/components/landing/FeaturesSection';
+import { SponsorsSection } from '@/components/landing/SponsorsSection';
+import { ClosingCtaSection } from '@/components/landing/ClosingCtaSection';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const LiveDemoSection = dynamic(
+  () =>
+    import('@/components/landing/LiveDemoSection').then((m) => ({
+      default: m.LiveDemoSection,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <section
+        id="live-demo"
+        className="theme-paper bg-paper paper-pattern py-section-y scroll-mt-20"
+        aria-busy="true"
+      >
+        <div className="mx-auto max-w-content-wide px-safe space-y-6">
+          <Skeleton className="mx-auto h-12 w-80 max-w-full" />
+          <div className="grid gap-6 lg:grid-cols-12">
+            <Skeleton className="h-[520px] w-full lg:col-span-6" />
+            <Skeleton className="h-[520px] w-full lg:col-span-6" />
+          </div>
+        </div>
+      </section>
+    ),
+  }
+);
 
 export default function HomePage() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -46,7 +70,7 @@ export default function HomePage() {
       {/* 1. Final Night Hero (Stage) */}
       <HeroFinalSection settings={settings} marwanPlayer={marwanPlayer} />
 
-      {/* 2. Embedded Interactive LIVE DEMO (Paper Split: Mini Scorer + Mini Big Screen) */}
+      {/* 2. Embedded Interactive LIVE DEMO (Code-split Paper Split: Mini Scorer + Mini Big Screen) */}
       <LiveDemoSection settings={settings} />
 
       {/* 3. How the Tournament Works + Live Bracket Preview (Stage) */}

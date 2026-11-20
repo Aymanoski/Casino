@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScorerConsoleView } from '@/components/scorer';
+import { ScorerConsoleView } from '@/components/scorer/ScorerConsoleView';
 
 export default async function ScorerGameConsolePage({
   params,

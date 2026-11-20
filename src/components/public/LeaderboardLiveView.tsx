@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { LayoutGroup, motion, useReducedMotion } from 'framer-motion';
 import {
   ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   ArrowUp,
   MonitorPlay,
   Radio,
@@ -29,13 +31,11 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  AnimatedNumber,
-  LiveBadge,
-  PlayerAvatar,
-  ScoreboardRow,
-  ScoreChip,
-} from '@/components/brand';
+import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
+import { LiveBadge } from '@/components/brand/LiveBadge';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
+import { ScoreboardRow } from '@/components/brand/ScoreboardRow';
+import { ScoreChip } from '@/components/brand/ScoreChip';
 import { getPlayerStatusMeta } from '@/components/admin/adminFormatters';
 import { PublicErrorBanner } from './PublicErrorBanner';
 import { PublicPageHero } from './PublicPageHero';
@@ -47,6 +47,8 @@ interface LeaderboardState {
   settings: Settings;
 }
 
+const LEADERBOARD_PAGE_SIZE = 30;
+
 export function LeaderboardLiveView() {
   const { lang } = useI18n();
   const prefersReducedMotion = useReducedMotion();
@@ -57,6 +59,9 @@ export function LeaderboardLiveView() {
   const [roundFilter, setRoundFilter] = useState<string>('overall');
   const [statusFilter, setStatusFilter] = useState<'all' | PlayerStatus>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const deferredSearch = useDeferredValue(searchQuery);
+  const [pageIndex, setPageIndex] = useState<number>(0);
+  const [liveAnnouncement, setLiveAnnouncement] = useState<string>('');
   const [rtStatus, setRtStatus] = useState<RealtimeConnectionStatus>('connected');
   const [rankShifts, setRankShifts] = useState<Record<string, number>>({});
   const [recentDeltas, setRecentDeltas] = useState<Record<string, number>>({});
@@ -103,6 +108,20 @@ export function LeaderboardLiveView() {
           ) {
             setRankShifts(nextShifts);
             setRecentDeltas(nextDeltas);
+            const changedId = Object.keys(nextDeltas)[0] ?? Object.keys(nextShifts)[0];
+            const changedEntry = entries.find((e) => e.player.id === changedId);
+            if (changedEntry) {
+              const pName = localizeText(
+                lang,
+                changedEntry.player.fullName,
+                changedEntry.player.fullNameAr
+              );
+              setLiveAnnouncement(
+                lang === 'ar'
+                  ? `تحديث مباشر: ${pName} الآن في المركز #${changedEntry.rank} برصيد ${changedEntry.totalPoints} نقطة.`
+                  : `Live update: ${pName} is now ranked #${changedEntry.rank} with ${changedEntry.totalPoints} points.`
+              );
+            }
             if (clearShiftTimerRef.current) {
               window.clearTimeout(clearShiftTimerRef.current);
             }
@@ -142,8 +161,20 @@ export function LeaderboardLiveView() {
   }, [roundFilter, loadLeaderboard]);
 
   useEffect(() => {
-    const unsubEvents = realtime.subscribe('*', () => {
-      void loadLeaderboard(roundFilter, false);
+    const unsubEvents = realtime.subscribe('*', (msg) => {
+      const payloadGameId = (msg.payload as { gameId?: string } | undefined)?.gameId;
+      if (payloadGameId === 'game-demo') return;
+      if (
+        msg.event === 'score.changed' ||
+        msg.event === 'game.started' ||
+        msg.event === 'game.finished' ||
+        msg.event === 'bracket.updated' ||
+        msg.event === 'player.updated' ||
+        msg.event === 'settings.updated' ||
+        msg.event === 'data.reset'
+      ) {
+        void loadLeaderboard(roundFilter, false);
+      }
     });
     const unsubStatus = realtime.onStatusChange((st) => {
       setRtStatus(st);
@@ -161,7 +192,7 @@ export function LeaderboardLiveView() {
 
   const filteredEntries = useMemo(() => {
     if (!data) return [];
-    const q = normalizeSearchText(searchQuery);
+    const q = normalizeSearchText(deferredSearch);
     return data.entries.filter((entry) => {
       if (statusFilter !== 'all' && entry.player.status !== statusFilter) {
         return false;
@@ -172,14 +203,27 @@ export function LeaderboardLiveView() {
       );
       return haystack.includes(q);
     });
-  }, [data, statusFilter, searchQuery]);
+  }, [data, statusFilter, deferredSearch]);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [roundFilter, statusFilter, deferredSearch]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredEntries.length / LEADERBOARD_PAGE_SIZE)
+  );
+  const safePageIndex = Math.min(pageIndex, totalPages - 1);
+  const pagedEntries = useMemo(() => {
+    const start = safePageIndex * LEADERBOARD_PAGE_SIZE;
+    return filteredEntries.slice(start, start + LEADERBOARD_PAGE_SIZE);
+  }, [filteredEntries, safePageIndex]);
 
   const podiumTop3 = useMemo(() => {
     if (!data || data.entries.length === 0) return [];
-    const top = data.entries.slice(0, 3);
-    if (top.length < 3) return top;
-    // Display order on md+: [#2, #1 elevated center, #3]
-    return [top[1], top[0], top[2]];
+    // Priority DOM order (#1, #2, #3) so mobile reading & focus order match top-to-bottom;
+    // desktop CSS Grid places #1 dead-center (md:col-start-2), #2 start, #3 end.
+    return data.entries.slice(0, 3);
   }, [data]);
 
   if (loading && !data) {
@@ -279,12 +323,12 @@ export function LeaderboardLiveView() {
               {podiumTop3.map((entry) => {
                 const isFirst = entry.rank === 1;
                 const shift = rankShifts[entry.player.id] ?? 0;
-                const mobileOrder =
+                const desktopGridPos =
                   entry.rank === 1
-                    ? 'order-1 md:order-2'
+                    ? 'md:col-start-2 md:row-start-1'
                     : entry.rank === 2
-                      ? 'order-2 md:order-1'
-                      : 'order-3 md:order-3';
+                      ? 'md:col-start-1 md:row-start-1'
+                      : 'md:col-start-3 md:row-start-1';
 
                 return (
                   <motion.div
@@ -292,8 +336,8 @@ export function LeaderboardLiveView() {
                     layout={!prefersReducedMotion}
                     transition={{ duration: 0.35, ease: 'easeOut' }}
                     className={cn(
-                      'relative flex flex-col items-center gap-3 rounded-card border-[2.5px] border-outline p-5 text-center text-ink shadow-sticker-lg',
-                      mobileOrder,
+                      'relative min-w-0 flex flex-col items-center gap-3 rounded-card border-[2.5px] border-outline p-5 text-center text-ink shadow-sticker-lg',
+                      desktopGridPos,
                       isFirst
                         ? 'bg-gold-gradient text-red-900 md:py-7'
                         : 'bg-white'
@@ -471,16 +515,16 @@ export function LeaderboardLiveView() {
                         ? 'مثال: عمر حسن أو الثعلب...'
                         : 'e.g. Omar Hassan or The Fox...'
                     }
-                    className="ps-10 pe-10"
+                    className="ps-10 pe-12"
                   />
                   {searchQuery && (
                     <button
                       type="button"
                       onClick={() => setSearchQuery('')}
                       aria-label={lang === 'ar' ? 'مسح البحث' : 'Clear search'}
-                      className="absolute end-1 top-1/2 -translate-y-1/2 inline-flex h-10 w-10 items-center justify-center rounded-pill text-ink-muted hover:text-ink"
+                      className="absolute end-0.5 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-pill text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
                     >
-                      <X className="h-4 w-4" />
+                      <X className="h-4 w-4" aria-hidden="true" />
                     </button>
                   )}
                 </div>
@@ -524,12 +568,17 @@ export function LeaderboardLiveView() {
             </div>
           </div>
 
+          {/* Polite screen-reader live announcement for realtime score changes */}
+          <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {liveAnnouncement}
+          </div>
+
           {/* Count + Live List */}
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm font-bold text-ink-muted">
-            <span>
+            <span role="status" aria-live="polite" aria-atomic="true">
               {lang === 'ar'
-                ? `عرض ${formatNumber(filteredEntries.length, { useArabicIndicDigits: useArabicIndic })} من ${formatNumber(data.entries.length, { useArabicIndicDigits: useArabicIndic })} متسابق`
-                : `Showing ${filteredEntries.length} of ${data.entries.length} contestants`}
+                ? `عرض ${formatNumber(pagedEntries.length, { useArabicIndicDigits: useArabicIndic })} من ${formatNumber(filteredEntries.length, { useArabicIndicDigits: useArabicIndic })} متسابق`
+                : `Showing ${formatNumber(pagedEntries.length, { useArabicIndicDigits: useArabicIndic })} of ${formatNumber(filteredEntries.length, { useArabicIndicDigits: useArabicIndic })} contestants`}
             </span>
             <span>
               {lang === 'ar'
@@ -564,9 +613,10 @@ export function LeaderboardLiveView() {
               }
             />
           ) : (
-            <LayoutGroup id="public-leaderboard-rows">
-              <div className="space-y-2.5">
-                {filteredEntries.map((entry) => {
+            <>
+              <LayoutGroup id="public-leaderboard-rows">
+                <div className="space-y-2.5">
+                  {pagedEntries.map((entry) => {
                   const statusMeta = getPlayerStatusMeta(entry.player.status, lang);
                   const shift = rankShifts[entry.player.id] ?? 0;
                   const delta = recentDeltas[entry.player.id] ?? null;
@@ -626,8 +676,42 @@ export function LeaderboardLiveView() {
                     </Link>
                   );
                 })}
-              </div>
-            </LayoutGroup>
+                </div>
+              </LayoutGroup>
+
+              {totalPages > 1 && (
+                <nav
+                  aria-label={lang === 'ar' ? 'ترقيم صفحات لوحة الصدارة' : 'Leaderboard pagination'}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border-paper bg-white p-3 shadow-soft"
+                >
+                  <Button
+                    variant="calm"
+                    size="sm"
+                    disabled={safePageIndex <= 0}
+                    onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
+                  >
+                    <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+                    <span>{lang === 'ar' ? 'السابق' : 'Previous'}</span>
+                  </Button>
+
+                  <span className="text-xs sm:text-sm font-bold text-ink-muted tabular-nums">
+                    {lang === 'ar'
+                      ? `صفحة ${formatNumber(safePageIndex + 1, { useArabicIndicDigits: useArabicIndic })} من ${formatNumber(totalPages, { useArabicIndicDigits: useArabicIndic })}`
+                      : `Page ${formatNumber(safePageIndex + 1, { useArabicIndicDigits: useArabicIndic })} of ${formatNumber(totalPages, { useArabicIndicDigits: useArabicIndic })}`}
+                  </span>
+
+                  <Button
+                    variant="calm"
+                    size="sm"
+                    disabled={safePageIndex >= totalPages - 1}
+                    onClick={() => setPageIndex((p) => Math.min(totalPages - 1, p + 1))}
+                  >
+                    <span>{lang === 'ar' ? 'التالي' : 'Next'}</span>
+                    <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+                  </Button>
+                </nav>
+              )}
+            </>
           )}
         </div>
       </section>

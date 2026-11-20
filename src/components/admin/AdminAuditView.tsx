@@ -130,7 +130,9 @@ export function AdminAuditView() {
 
   useEffect(() => {
     loadData();
-    const unsub = realtime.subscribe('*', () => {
+    const unsub = realtime.subscribe('*', (msg) => {
+      const payloadGameId = (msg.payload as { gameId?: string } | undefined)?.gameId;
+      if (payloadGameId === 'game-demo' || msg.event === 'timer.updated') return;
       loadData();
     });
     return unsub;

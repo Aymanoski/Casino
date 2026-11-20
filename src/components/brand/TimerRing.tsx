@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
 import { Pause, Play, RotateCcw } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { cn, formatNumber } from '@/lib/utils';
@@ -34,7 +33,7 @@ const SIZE_CONFIG = {
  * TimerRing
  * Per DESIGN.md §6:
  * - Large tabular numeric with circular progress ring: gold on Stage, red on Paper.
- * - Last 5 seconds: pulse + crisp white flash border.
+ * - Last 5 seconds: GPU-composited pulse + crisp white flash border (auto-disabled under prefers-reduced-motion).
  * - Minimum 44px standard / 56px scorer touch controls.
  */
 export function TimerRing({
@@ -52,7 +51,6 @@ export function TimerRing({
   className,
 }: TimerRingProps) {
   const { lang } = useI18n();
-  const prefersReducedMotion = useReducedMotion();
 
   const cfg = SIZE_CONFIG[size];
   const viewSize = 160;
@@ -98,32 +96,13 @@ export function TimerRing({
 
   return (
     <div className={cn('inline-flex max-w-full flex-col items-center gap-3', className)}>
-      <motion.div
-        animate={
-          isUrgent && !prefersReducedMotion
-            ? {
-                scale: [1, 1.06, 1],
-                boxShadow: [
-                  '0 0 0 3px var(--white), 0 0 0 6px var(--red-900)',
-                  '0 0 0 6px var(--white), 0 0 24px rgb(var(--live-rgb) / 0.9)',
-                  '0 0 0 3px var(--white), 0 0 0 6px var(--red-900)',
-                ],
-              }
-            : { scale: 1 }
-        }
-        transition={
-          isUrgent && !prefersReducedMotion
-            ? { duration: 0.65, repeat: Infinity, ease: 'easeInOut' }
-            : undefined
-        }
+      <div
         className={cn(
           '@container relative inline-flex aspect-square max-w-full items-center justify-center rounded-pill border-[3px]',
           cfg.fluidWidth,
-          isStage
-            ? 'bg-red-900 text-white'
-            : 'bg-white text-ink',
+          isStage ? 'bg-red-900 text-white' : 'bg-white text-ink',
           isUrgent
-            ? 'border-white ring-4 ring-white/90 shadow-[0_0_0_6px_var(--outline)]'
+            ? 'animate-timer-urgent border-white ring-4 ring-white/90 shadow-[0_0_0_6px_var(--outline),0_0_24px_rgb(var(--live-rgb)/0.85)]'
             : 'border-outline shadow-sticker'
         )}
         role="timer"
@@ -212,7 +191,7 @@ export function TimerRing({
                       : 'READY'}
           </span>
         </div>
-      </motion.div>
+      </div>
 
       {/* Start / Pause / Reset Controls */}
       {showControls && (
@@ -226,7 +205,7 @@ export function TimerRing({
                 btnMinH
               )}
             >
-              <Pause className="h-3.5 w-3.5 shrink-0" />
+              <Pause className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span>{lang === 'ar' ? 'إيقاف' : 'Pause'}</span>
             </button>
           ) : (
@@ -241,7 +220,7 @@ export function TimerRing({
                 btnMinH
               )}
             >
-              <Play className="h-3.5 w-3.5 shrink-0 fill-current" />
+              <Play className="h-3.5 w-3.5 shrink-0 fill-current" aria-hidden="true" />
               <span>{lang === 'ar' ? 'بدء' : 'Start'}</span>
             </button>
           )}
@@ -253,7 +232,7 @@ export function TimerRing({
               btnMinH
             )}
           >
-            <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+            <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span>{lang === 'ar' ? 'إعادة' : 'Reset'}</span>
           </button>
         </div>

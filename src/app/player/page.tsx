@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { PlayerProfileView } from '@/components/player';
+import { PlayerProfileView } from '@/components/player/PlayerProfileView';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function PlayerProfilePage() {

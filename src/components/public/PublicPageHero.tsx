@@ -1,14 +1,10 @@
 'use client';
 
 import React from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import {
-  LanternCluster,
-  Spotlight,
-  StageDivider,
-  SunburstStage,
-} from '@/components/brand';
+import { LanternCluster } from '@/components/brand/Lantern';
+import { Spotlight } from '@/components/brand/Spotlight';
+import { StageDivider, SunburstStage } from '@/components/brand/SunburstStage';
 
 export interface PublicPageHeroProps {
   title: string;
@@ -27,7 +23,7 @@ export interface PublicPageHeroProps {
  * PublicPageHero
  * Stage sunburst header band for all public spectator pages.
  * Follows DESIGN.md §1–§4 (red sunburst stage, gold-outlined display title, white text)
- * and craft floor discipline (zero eyebrow/kicker labels above the h1).
+ * and craft floor discipline (zero eyebrow/kicker labels above the h1, instant visible LCP).
  */
 export function PublicPageHero({
   title,
@@ -41,8 +37,6 @@ export function PublicPageHero({
   compact = false,
   className,
 }: PublicPageHeroProps) {
-  const prefersReducedMotion = useReducedMotion();
-
   const renderTitle = () => {
     if (!goldHighlight) {
       return <span className="text-gold-sticker-lg">{title}</span>;
@@ -84,14 +78,9 @@ export function PublicPageHero({
         )}
 
         <div className="mx-auto max-w-content-wide px-safe space-y-6">
-          <motion.div
-            initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, ease: 'easeOut' }}
-            className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"
-          >
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0 max-w-3xl space-y-3 text-start">
-              <h1 className="font-display text-fluid-4xl sm:text-fluid-5xl text-white [text-shadow:0_4px_0_var(--red-900)] ltr:tracking-tight ltr:leading-[1.08] rtl:tracking-normal rtl:leading-[1.32] [text-wrap:balance]">
+              <h1 className="font-display text-fluid-4xl sm:text-fluid-hero text-white [text-shadow:0_4px_0_var(--red-900)] ltr:tracking-tight ltr:leading-[1.08] rtl:tracking-normal rtl:leading-[1.32] [text-wrap:balance] break-words">
                 {renderTitle()}
               </h1>
 
@@ -102,7 +91,7 @@ export function PublicPageHero({
               )}
 
               {meta && (
-                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2.5 pt-1">
                   {meta}
                 </div>
               )}
@@ -113,7 +102,7 @@ export function PublicPageHero({
                 {actions}
               </div>
             )}
-          </motion.div>
+          </div>
 
           {children}
         </div>

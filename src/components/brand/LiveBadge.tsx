@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { useReducedMotion } from 'framer-motion';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
@@ -28,8 +27,6 @@ export function LiveBadge({
   ...props
 }: LiveBadgeProps) {
   const { t } = useI18n();
-  const prefersReducedMotion = useReducedMotion();
-  const shouldPulse = pulse && !prefersReducedMotion;
 
   const sizeStyles = {
     sm: 'px-2.5 py-0.5 text-[11px] gap-1.5',
@@ -50,10 +47,10 @@ export function LiveBadge({
       {...props}
     >
       <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
-        {shouldPulse && (
+        {pulse && (
           <span
             className={cn(
-              'absolute inline-flex h-full w-full animate-ping rounded-pill opacity-75',
+              'absolute inline-flex h-full w-full animate-ping motion-reduce:animate-none rounded-pill opacity-75',
               isPaper ? 'bg-white' : 'bg-red-600'
             )}
           />

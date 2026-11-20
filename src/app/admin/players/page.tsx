@@ -1,5 +1,5 @@
 import React from 'react';
-import { AdminPlayersView } from '@/components/admin';
+import { AdminPlayersView } from '@/components/admin/AdminPlayersView';
 
 export default function AdminPlayersPage() {
   return <AdminPlayersView />;

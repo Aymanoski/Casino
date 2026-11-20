@@ -22,7 +22,8 @@ import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { SectionHeading, StageDivider } from '@/components/brand';
+import { SectionHeading } from '@/components/brand/SectionHeading';
+import { StageDivider } from '@/components/brand/SunburstStage';
 
 const CATEGORY_META: Record<
   SegmentCategory,
@@ -88,10 +89,12 @@ export function SegmentsSection({ settings }: SegmentsSectionProps) {
       }
     };
     load();
-    const unsub = realtime.subscribe('data.reset', load);
+    const unsub1 = realtime.subscribe('segment.updated', load);
+    const unsub2 = realtime.subscribe('data.reset', load);
     return () => {
       mounted = false;
-      unsub();
+      unsub1();
+      unsub2();
     };
   }, []);
 

@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { PlayerHistoryView } from '@/components/player';
+import { PlayerHistoryView } from '@/components/player/PlayerHistoryView';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function PlayerHistoryPage() {

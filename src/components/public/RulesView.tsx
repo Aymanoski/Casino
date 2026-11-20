@@ -29,7 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ScoreChip } from '@/components/brand';
+import { ScoreChip } from '@/components/brand/ScoreChip';
 import { PublicErrorBanner } from './PublicErrorBanner';
 import { PublicPageHero } from './PublicPageHero';
 
@@ -89,8 +89,16 @@ export function RulesView() {
 
   useEffect(() => {
     void loadAll(true);
-    const unsub = realtime.subscribe('*', () => {
-      void loadAll(false);
+    const unsub = realtime.subscribe('*', (msg) => {
+      if (
+        msg.event === 'content.updated' ||
+        msg.event === 'segment.updated' ||
+        msg.event === 'bracket.updated' ||
+        msg.event === 'settings.updated' ||
+        msg.event === 'data.reset'
+      ) {
+        void loadAll(false);
+      }
     });
     return () => unsub();
   }, [loadAll]);
@@ -300,9 +308,9 @@ export function RulesView() {
                 ) : (
                   <div className="divide-y divide-border-paper rounded-card border border-border-paper bg-white shadow-soft overflow-hidden">
                     {rules.map((rule) => (
-                      <article key={rule.id} className="p-5 sm:p-6 space-y-2.5">
+                      <article key={rule.id} className="min-w-0 p-5 sm:p-6 space-y-2.5">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <h3 className="font-display text-xl text-red-900 leading-snug">
+                          <h3 className="min-w-0 font-display text-xl text-red-900 leading-snug break-words">
                             {localizeText(lang, rule.titleEn, rule.titleAr)}
                           </h3>
                           {rule.badgeEn && (
@@ -311,7 +319,7 @@ export function RulesView() {
                             </Badge>
                           )}
                         </div>
-                        <p className="text-base leading-relaxed text-ink">
+                        <p className="text-base leading-relaxed text-ink break-words">
                           {localizeText(lang, rule.bodyEn, rule.bodyAr)}
                         </p>
                       </article>
@@ -339,28 +347,28 @@ export function RulesView() {
                     return (
                       <div
                         key={round.id}
-                        className="rounded-card border border-border-paper bg-white p-4 shadow-soft space-y-2"
+                        className="min-w-0 rounded-card border border-border-paper bg-white p-4 shadow-soft space-y-2"
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <Badge variant={isFinal ? 'gold' : 'red'}>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <h3 className="min-w-0 flex-1 font-display text-lg text-red-900 leading-snug break-words">
+                            {localizeText(lang, round.name.en, round.name.ar)}
+                          </h3>
+                          <Badge variant={isFinal ? 'gold' : 'red'} className="shrink-0">
                             {lang === 'ar'
                               ? `المرحلة ${formatNumber(round.order, { useArabicIndicDigits: useArabicIndic })}`
-                              : `Stage ${round.order}`}
+                              : `Stage ${formatNumber(round.order, { useArabicIndicDigits: useArabicIndic })}`}
                           </Badge>
-                          <span className="text-xs font-extrabold text-red-900">
-                            {isFinal
-                              ? lang === 'ar'
-                                ? 'بطل واحد'
-                                : '1 Champion'
-                              : lang === 'ar'
-                                ? `يتأهل أفضل ${formatNumber(round.advancePerGame, { useArabicIndicDigits: useArabicIndic })}`
-                                : `Top ${round.advancePerGame} Advances`}
-                          </span>
                         </div>
-                        <h3 className="font-display text-lg text-red-900">
-                          {localizeText(lang, round.name.en, round.name.ar)}
-                        </h3>
-                        <p className="text-sm text-ink-muted leading-relaxed">
+                        <p className="text-xs font-extrabold text-red-700">
+                          {isFinal
+                            ? lang === 'ar'
+                              ? 'بطل واحد'
+                              : '1 Champion'
+                            : lang === 'ar'
+                              ? `يتأهل أفضل ${formatNumber(round.advancePerGame, { useArabicIndicDigits: useArabicIndic })} لكل طاولة`
+                              : `Top ${formatNumber(round.advancePerGame, { useArabicIndicDigits: useArabicIndic })} Advances per Table`}
+                        </p>
+                        <p className="text-sm text-ink-muted leading-relaxed break-words">
                           {isFinal
                             ? lang === 'ar'
                               ? 'يتنافس المتأهلان النهائيان أمام مروان سري على طاولة اللقب المباشرة.'

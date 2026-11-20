@@ -4,9 +4,9 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Calendar, Globe, Mail, MapPin } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
-import { settingsRepo } from '@/lib/repos';
+import { gameRepo, settingsRepo } from '@/lib/repos';
 import { realtime } from '@/lib/realtime';
-import type { Settings } from '@/lib/schemas';
+import type { Game, Settings } from '@/lib/schemas';
 import { localizeText } from '@/lib/utils';
 import {
   FanousIcon,
@@ -17,23 +17,38 @@ import { Badge } from '@/components/ui/badge';
 export function PublicFooter() {
   const { lang, t, toggleLang } = useI18n();
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [liveGame, setLiveGame] = useState<Game | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    const loadSettings = async () => {
-      const s = await settingsRepo.get();
-      if (mounted) setSettings(s);
+    const loadFooterData = async () => {
+      const [s, liveGames] = await Promise.all([
+        settingsRepo.get(),
+        gameRepo.getLiveGames(),
+      ]);
+      if (!mounted) return;
+      setSettings(s);
+      setLiveGame(liveGames[0] ?? null);
     };
-    loadSettings();
+    loadFooterData();
 
-    const unsub1 = realtime.subscribe('settings.updated', loadSettings);
-    const unsub2 = realtime.subscribe('data.reset', loadSettings);
+    const unsub1 = realtime.subscribe('settings.updated', loadFooterData);
+    const unsub2 = realtime.subscribe('game.started', loadFooterData);
+    const unsub3 = realtime.subscribe('game.finished', loadFooterData);
+    const unsub4 = realtime.subscribe('bracket.updated', loadFooterData);
+    const unsub5 = realtime.subscribe('data.reset', loadFooterData);
     return () => {
       mounted = false;
       unsub1();
       unsub2();
+      unsub3();
+      unsub4();
+      unsub5();
     };
   }, []);
+
+  const scorerHref = liveGame ? `/scorer/${liveGame.id}` : '/scorer';
+  const screenHref = liveGame ? `/screen/${liveGame.id}` : '/screen/leaderboard';
 
   const contactEmail = settings?.contactEmail ?? 'partnerships@casinoelal3ab-pitch.com';
   const venueLabel = settings
@@ -52,44 +67,46 @@ export function PublicFooter() {
       <div className="mx-auto max-w-content-wide px-4 md:px-6">
         <GoldHairlineDivider className="mb-8" />
 
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-w-0 gap-8 sm:grid-cols-2 lg:grid-cols-3">
           {/* Brand Column */}
-          <div className="space-y-3 sm:col-span-2 lg:col-span-1">
-            <div className="flex items-center gap-3">
+          <div className="min-w-0 space-y-3 sm:col-span-2 lg:col-span-1">
+            <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-button border-2 border-outline bg-white shadow-sticker-sm">
                 <FanousIcon className="h-6 w-6" />
               </div>
-              <div>
-                <div className="font-display text-2xl text-gold-sticker">
+              <div className="min-w-0">
+                <div className="truncate font-display text-2xl text-gold-sticker">
                   {t.brandName}
                 </div>
-                <div className="text-xs font-semibold text-white/90">
+                <div className="truncate text-xs font-semibold text-white/90">
                   {t.brandSubtitle}
                 </div>
               </div>
             </div>
-            <p className="text-sm text-white/90 leading-relaxed">
+            <p className="text-sm text-white/90 leading-relaxed break-words">
               {t.common.footerTagline}
             </p>
-            <Badge variant="gold">{t.common.placeholderBadge}</Badge>
+            <Badge variant="gold" className="max-w-full">
+              <span className="truncate">{t.common.placeholderBadge}</span>
+            </Badge>
 
             <ul className="space-y-1.5 pt-2 text-xs text-white/90">
-              <li className="flex items-start gap-2">
+              <li className="flex min-w-0 items-start gap-2">
                 <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold-300" aria-hidden="true" />
                 <a
                   href={`mailto:${contactEmail}`}
-                  className="underline decoration-gold-300/70 underline-offset-4 hover:text-gold-200 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white rounded-highlight"
+                  className="min-w-0 break-all sm:break-words underline decoration-gold-300/70 underline-offset-4 hover:text-gold-200 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white rounded-highlight"
                 >
                   {contactEmail}
                 </a>
               </li>
-              <li className="flex items-start gap-2">
+              <li className="flex min-w-0 items-start gap-2">
                 <Calendar className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold-300" aria-hidden="true" />
-                <span>{datesLabel}</span>
+                <span className="min-w-0 break-words">{datesLabel}</span>
               </li>
-              <li className="flex items-start gap-2">
+              <li className="flex min-w-0 items-start gap-2">
                 <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold-300" aria-hidden="true" />
-                <span>{venueLabel}</span>
+                <span className="min-w-0 break-all sm:break-words">{venueLabel}</span>
               </li>
             </ul>
           </div>
@@ -160,13 +177,13 @@ export function PublicFooter() {
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm font-semibold text-white/90">
               <Link
-                href="/scorer/game-11"
+                href={scorerHref}
                 className="inline-flex min-h-[44px] items-center rounded-button px-1 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >
                 {t.nav.scorerConsole}
               </Link>
               <Link
-                href="/screen/game-11"
+                href={screenHref}
                 className="inline-flex min-h-[44px] items-center rounded-button px-1 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >
                 {t.nav.bigScreen}

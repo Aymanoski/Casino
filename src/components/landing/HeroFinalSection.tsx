@@ -1,50 +1,22 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
-import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowDownRight, ArrowUpRight, Calendar, Crown, MapPin, Play, Sparkles, Trophy } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import type { Player, Settings } from '@/lib/schemas';
-import { formatNumber, localizeText } from '@/lib/utils';
+import { localizeText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  CrescentStar,
-  LanternCluster,
-  LiveBadge,
-  MarqueeBulbs,
-  PlayerAvatar,
-  PlayingCardFan,
-  PlayingDice,
-  Spotlight,
-  StageDivider,
-  SunburstStage,
-} from '@/components/brand';
-
-interface CountdownParts {
-  days: number;
-  hours: number;
-  minutes: number;
-  seconds: number;
-  reached: boolean;
-}
-
-function computeCountdown(targetIso: string, nowMs: number): CountdownParts {
-  const targetMs = new Date(targetIso).getTime();
-  if (Number.isNaN(targetMs)) {
-    return { days: 0, hours: 0, minutes: 0, seconds: 0, reached: false };
-  }
-  const diff = Math.max(0, targetMs - nowMs);
-  if (diff === 0) {
-    return { days: 0, hours: 0, minutes: 0, seconds: 0, reached: true };
-  }
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-  const minutes = Math.floor((diff / (1000 * 60)) % 60);
-  const seconds = Math.floor((diff / 1000) % 60);
-  return { days, hours, minutes, seconds, reached: false };
-}
+import { CrescentStar } from '@/components/brand/CrescentStar';
+import { FinalCountdown } from '@/components/brand/FinalCountdown';
+import { LanternCluster } from '@/components/brand/Lantern';
+import { LiveBadge } from '@/components/brand/LiveBadge';
+import { MarqueeBulbs } from '@/components/brand/MarqueeBulbs';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
+import { PlayingCardFan, PlayingDice } from '@/components/brand/GameMotifs';
+import { Spotlight } from '@/components/brand/Spotlight';
+import { StageDivider, SunburstStage } from '@/components/brand/SunburstStage';
 
 export interface HeroFinalSectionProps {
   settings: Settings | null;
@@ -56,22 +28,8 @@ export function HeroFinalSection({
   marwanPlayer,
 }: HeroFinalSectionProps) {
   const { lang } = useI18n();
-  const prefersReducedMotion = useReducedMotion();
   const useArabicIndic = settings?.useArabicIndicDigits ?? false;
-
   const targetIso = settings?.finalNightIso ?? '2027-03-22T21:00:00.000Z';
-  const [nowMs, setNowMs] = useState<number | null>(null);
-
-  useEffect(() => {
-    setNowMs(Date.now());
-    const id = window.setInterval(() => {
-      setNowMs(Date.now());
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  const countdown =
-    nowMs === null ? null : computeCountdown(targetIso, nowMs);
 
   const marwanName = marwanPlayer
     ? localizeText(lang, marwanPlayer.fullName, marwanPlayer.fullNameAr)
@@ -90,33 +48,6 @@ export function HeroFinalSection({
     : lang === 'ar'
       ? 'استوديو النيل الكبير، القاهرة (موقع مبدئي)'
       : 'Grand Nile Studio, Cairo (Placeholder Venue)';
-
-  const countdownCells = [
-    {
-      key: 'days',
-      val: countdown?.days ?? null,
-      labelEn: 'DAYS',
-      labelAr: 'يوم',
-    },
-    {
-      key: 'hours',
-      val: countdown?.hours ?? null,
-      labelEn: 'HOURS',
-      labelAr: 'ساعة',
-    },
-    {
-      key: 'minutes',
-      val: countdown?.minutes ?? null,
-      labelEn: 'MINS',
-      labelAr: 'دقيقة',
-    },
-    {
-      key: 'seconds',
-      val: countdown?.seconds ?? null,
-      labelEn: 'SECS',
-      labelAr: 'ثانية',
-    },
-  ];
 
   const qualifierSeats = [
     {
@@ -159,13 +90,8 @@ export function HeroFinalSection({
 
         <div className="mx-auto max-w-content-wide px-safe">
           <div className="grid items-center gap-8 lg:grid-cols-12 lg:gap-10">
-            {/* Start Column: Headline, Countdown & Primary CTAs */}
-            <motion.div
-              initial={prefersReducedMotion ? false : { opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45, ease: 'easeOut' }}
-              className="min-w-0 space-y-6 lg:col-span-6 text-start"
-            >
+            {/* Start Column: Headline, Countdown & Primary CTAs (immediately visible for crisp LCP) */}
+            <div className="min-w-0 space-y-6 lg:col-span-6 text-start">
               <h1 className="font-display text-fluid-hero text-white [text-shadow:0_4px_0_var(--red-900)] ltr:tracking-tight ltr:leading-[1.06] rtl:tracking-normal rtl:leading-[1.28]">
                 {lang === 'ar' ? (
                   <>
@@ -188,7 +114,7 @@ export function HeroFinalSection({
                   : 'Twenty-seven challengers battle across music, wordplay, and trivia tables all Ramadan—for just two seats opposite Marwan Serry under the Final Night lights.'}
               </p>
 
-              {/* Countdown to Placeholder Final Night Date from Settings */}
+              {/* Isolated 1s Countdown to Placeholder Final Night Date from Settings */}
               <div className="space-y-2.5 pt-1">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-white">
                   <CrescentStar size="sm" glow />
@@ -202,33 +128,11 @@ export function HeroFinalSection({
                   </span>
                 </div>
 
-                <div
-                  className="grid max-w-md grid-cols-4 gap-2 sm:gap-3"
-                  role="timer"
-                  aria-label={
-                    lang === 'ar'
-                      ? 'العد التنازلي للنهائي الكبير'
-                      : 'Countdown to Grand Final'
-                  }
-                >
-                  {countdownCells.map((cell) => (
-                    <div
-                      key={cell.key}
-                      className="flex flex-col items-center justify-center rounded-card border-[2.5px] border-outline bg-white px-2 py-2.5 sm:py-3 text-center shadow-sticker-sm"
-                    >
-                      <span className="font-score text-2xl sm:text-4xl font-black leading-none text-red-600 tabular-nums">
-                        {cell.val === null
-                          ? '--'
-                          : formatNumber(String(cell.val).padStart(2, '0'), {
-                              useArabicIndicDigits: useArabicIndic,
-                            })}
-                      </span>
-                      <span className="mt-1 text-[11px] font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
-                        {lang === 'ar' ? cell.labelAr : cell.labelEn}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                <FinalCountdown
+                  targetIso={targetIso}
+                  useArabicIndicDigits={useArabicIndic}
+                  size="compact"
+                />
 
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs sm:text-sm font-medium text-white/95">
                   <span className="inline-flex items-center gap-1.5">
@@ -262,15 +166,10 @@ export function HeroFinalSection({
                   </a>
                 </Button>
               </div>
-            </motion.div>
+            </div>
 
             {/* End Column: Marquee-Framed 3-Seat Final Card + Game-Show Motifs */}
-            <motion.div
-              initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.08, ease: 'easeOut' }}
-              className="relative min-w-0 lg:col-span-6"
-            >
+            <div className="relative min-w-0 lg:col-span-6">
               {/* Decorative Dice & Playing Card Fan (Outside card bounds on sm+) */}
               <div
                 className="pointer-events-none absolute -top-6 -start-3 z-20 hidden sm:block"
@@ -412,7 +311,7 @@ export function HeroFinalSection({
                   </div>
                 </div>
               </MarqueeBulbs>
-            </motion.div>
+            </div>
           </div>
         </div>
       </SunburstStage>

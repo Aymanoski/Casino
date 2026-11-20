@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { useReducedMotion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 export interface MarqueeBulbsProps {
@@ -15,7 +14,7 @@ export interface MarqueeBulbsProps {
   children?: React.ReactNode;
 }
 
-export function MarqueeBulbs({
+export const MarqueeBulbs = React.memo(function MarqueeBulbs({
   variant = 'strip',
   bulbCount = 14,
   chase = true,
@@ -24,8 +23,6 @@ export function MarqueeBulbs({
   className,
   children,
 }: MarqueeBulbsProps) {
-  const prefersReducedMotion = useReducedMotion();
-  const shouldChase = chase && !prefersReducedMotion;
   const isStageSize = size === 'stage';
 
   const renderBulb = (index: number, keyPrefix: string) => {
@@ -36,7 +33,7 @@ export function MarqueeBulbs({
       <span
         key={`${keyPrefix}-${index}`}
         style={
-          shouldChase
+          chase
             ? {
                 animationDelay: `${delayMs}ms`,
               }
@@ -54,8 +51,8 @@ export function MarqueeBulbs({
             : isEven
               ? 'bg-white shadow-[0_0_8px_2px_rgba(255,255,255,0.85)]'
               : 'bg-red-400 shadow-[0_0_8px_2px_rgba(229,64,92,0.75)]',
-          shouldChase
-            ? 'animate-pulse'
+          chase
+            ? 'animate-pulse motion-reduce:animate-none'
             : isEven
               ? 'opacity-100'
               : 'opacity-75'
@@ -95,7 +92,7 @@ export function MarqueeBulbs({
       <div
         className={cn(
           'pointer-events-none absolute inset-0 border-[3px] border-outline bg-red-900 shadow-sticker-lg',
-          isStageSize ? 'rounded-[22px] sm:rounded-[28px]' : 'rounded-[26px]'
+          isStageSize ? 'rounded-[22px] sm:rounded-[28px]' : 'rounded-marquee'
         )}
         aria-hidden="true"
       >
@@ -158,4 +155,4 @@ export function MarqueeBulbs({
       </div>
     </div>
   );
-}
+});

@@ -4,10 +4,11 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   AlertCircle,
   CheckCircle2,
@@ -29,7 +30,6 @@ export interface ToastItem {
 }
 
 export interface ToastContextValue {
-  toasts: ToastItem[];
   toast: (item: Omit<ToastItem, 'id'>) => string;
   dismissToast: (id: string) => void;
 }
@@ -69,9 +69,22 @@ const VARIANT_STYLES: Record<
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const { lang } = useI18n();
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const prefersReducedMotion = useReducedMotion();
+  const timersRef = useRef<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach((handle) => window.clearTimeout(handle));
+      timers.clear();
+    };
+  }, []);
 
   const dismissToast = useCallback((id: string) => {
+    const existing = timersRef.current.get(id);
+    if (existing !== undefined) {
+      window.clearTimeout(existing);
+      timersRef.current.delete(id);
+    }
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
@@ -86,20 +99,23 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       };
       setToasts((prev) => [...prev.slice(-3), next]);
 
-      if (durationMs > 0) {
-        setTimeout(() => {
-          dismissToast(id);
+      if (durationMs > 0 && typeof window !== 'undefined') {
+        const handle = window.setTimeout(() => {
+          timersRef.current.delete(id);
+          setToasts((prev) => prev.filter((t) => t.id !== id));
         }, durationMs);
+        timersRef.current.set(id, handle);
       }
 
       return id;
     },
-    [dismissToast]
+    []
   );
 
+  // Stable context identity: firing/dismissing a toast never re-renders consumers of useToast()
   const value = useMemo(
-    () => ({ toasts, toast, dismissToast }),
-    [toasts, toast, dismissToast]
+    () => ({ toast, dismissToast }),
+    [toast, dismissToast]
   );
 
   return (
@@ -112,62 +128,48 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         aria-live="polite"
         className="pointer-events-none fixed inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-[60] flex w-auto flex-col gap-2.5 sm:inset-x-auto sm:bottom-4 sm:end-4 sm:w-full sm:max-w-sm"
       >
-        <AnimatePresence mode="popLayout">
-          {toasts.map((item) => {
-            const v = VARIANT_STYLES[item.variant ?? 'gold'];
-            const Icon = v.Icon;
-            return (
-              <motion.div
-                key={item.id}
-                layout={!prefersReducedMotion}
-                initial={
-                  prefersReducedMotion
-                    ? { opacity: 1 }
-                    : { opacity: 0, y: 16, scale: 0.96 }
-                }
-                animate={
-                  prefersReducedMotion
-                    ? { opacity: 1 }
-                    : { opacity: 1, y: 0, scale: 1 }
-                }
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.22, ease: 'easeOut' }}
-                className="pointer-events-auto relative flex items-start gap-3 overflow-hidden rounded-card border-[2.5px] border-outline bg-white p-3.5 sm:p-4 text-ink shadow-sticker"
+        {toasts.map((item) => {
+          const v = VARIANT_STYLES[item.variant ?? 'gold'];
+          const Icon = v.Icon;
+          return (
+            <div
+              key={item.id}
+              className="pointer-events-auto relative flex items-start gap-3 overflow-hidden rounded-card border-[2.5px] border-outline bg-white p-3.5 sm:p-4 text-ink shadow-sticker animate-in fade-in slide-in-from-bottom-3 duration-200 motion-reduce:animate-none"
+            >
+              <span
+                className={cn('absolute inset-y-0 start-0 w-1.5', v.accentBg)}
+                aria-hidden="true"
+              />
+              <span
+                className={cn(
+                  'ms-1 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-pill border-2',
+                  v.iconBox
+                )}
+                aria-hidden="true"
               >
-                <span
-                  className={cn('absolute inset-y-0 start-0 w-1.5', v.accentBg)}
-                  aria-hidden="true"
-                />
-                <span
-                  className={cn(
-                    'ms-1 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-pill border-2',
-                    v.iconBox
-                  )}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-red-900">
-                    {item.title}
+                <Icon className="h-4 w-4 shrink-0" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-red-900 break-words">
+                  {item.title}
+                </p>
+                {item.description && (
+                  <p className="mt-0.5 text-xs text-ink-muted leading-relaxed break-words">
+                    {item.description}
                   </p>
-                  {item.description && (
-                    <p className="mt-0.5 text-xs text-ink-muted leading-relaxed">
-                      {item.description}
-                    </p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => dismissToast(item.id)}
-                  aria-label={lang === 'ar' ? 'إغلاق الإشعار' : 'Dismiss notification'}
-                  className="-m-1 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-pill text-ink-muted hover:bg-paper-2 hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => dismissToast(item.id)}
+                aria-label={lang === 'ar' ? 'إغلاق الإشعار' : 'Dismiss notification'}
+                className="-m-1 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-pill text-ink-muted hover:bg-paper-2 hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          );
+        })}
       </div>
     </ToastContext.Provider>
   );

@@ -11,7 +11,8 @@ import { cn, localizeText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { SectionHeading, StageDivider } from '@/components/brand';
+import { SectionHeading } from '@/components/brand/SectionHeading';
+import { StageDivider } from '@/components/brand/SunburstStage';
 
 export interface SponsorsSectionProps {
   settings: Settings | null;
@@ -32,10 +33,12 @@ export function SponsorsSection({ settings }: SponsorsSectionProps) {
       }
     };
     load();
-    const unsub = realtime.subscribe('data.reset', load);
+    const unsub1 = realtime.subscribe('sponsor.updated', load);
+    const unsub2 = realtime.subscribe('data.reset', load);
     return () => {
       mounted = false;
-      unsub();
+      unsub1();
+      unsub2();
     };
   }, []);
 

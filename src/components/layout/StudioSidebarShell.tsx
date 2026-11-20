@@ -68,6 +68,22 @@ export function StudioSidebarShell({
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [primaryGameId, setPrimaryGameId] = useState<string>('game-11');
   const resetTimerRef = useRef<number | null>(null);
+  const mobileDrawerTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const mobileDrawerCloseRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!mobileDrawerOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const raf = window.requestAnimationFrame(() => {
+      mobileDrawerCloseRef.current?.focus();
+    });
+    return () => {
+      window.cancelAnimationFrame(raf);
+      document.body.style.overflow = prevOverflow;
+      mobileDrawerTriggerRef.current?.focus();
+    };
+  }, [mobileDrawerOpen]);
 
   useEffect(() => {
     return () => {
@@ -233,12 +249,14 @@ export function StudioSidebarShell({
 
       {/* Spacer for fixed Tablet Rail */}
       <div
-        className="hidden w-[88px] shrink-0 transition-all duration-200 md:block xl:hidden"
+        className="hidden w-[88px] shrink-0 md:block xl:hidden"
         aria-hidden="true"
       />
 
       {/* Deep Red Sidebar (Right side in RTL via start-0) */}
       <aside
+        role={mobileDrawerOpen ? 'dialog' : undefined}
+        aria-modal={mobileDrawerOpen ? true : undefined}
         aria-label={
           mode === 'admin'
             ? lang === 'ar'
@@ -249,8 +267,7 @@ export function StudioSidebarShell({
               : 'Scorer Navigation'
         }
         className={cn(
-          'fixed inset-y-0 start-0 z-50 flex flex-col border-e-[3px] border-outline pt-safe pb-safe ps-safe text-white transition-all duration-200',
-          isScorer ? 'bg-red-800' : 'bg-red-800',
+          'fixed inset-y-0 start-0 z-50 flex flex-col border-e-[3px] border-outline bg-red-800 pt-safe pb-safe ps-safe text-white transition-[width,transform] duration-200',
           mobileDrawerOpen
             ? 'w-[min(85vw,300px)] translate-x-0 visible shadow-sticker-lg'
             : 'w-[min(85vw,300px)] -translate-x-full rtl:translate-x-full invisible md:visible',
@@ -290,13 +307,14 @@ export function StudioSidebarShell({
           </Link>
 
           <Button
+            ref={mobileDrawerCloseRef}
             variant="surface"
             size="icon"
             onClick={() => setMobileDrawerOpen(false)}
             className="md:hidden"
             aria-label={lang === 'ar' ? 'إغلاق القائمة الجانبية' : 'Close Sidebar'}
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </Button>
         </div>
 
@@ -475,13 +493,14 @@ export function StudioSidebarShell({
         >
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <Button
+              ref={mobileDrawerTriggerRef}
               variant="surface"
               size="icon"
               className="md:hidden"
               onClick={() => setMobileDrawerOpen(true)}
               aria-label={lang === 'ar' ? 'فتح القائمة الجانبية' : 'Open Sidebar'}
             >
-              <Menu className="h-5 w-5" />
+              <Menu className="h-5 w-5" aria-hidden="true" />
             </Button>
             <Badge variant="gold" className="hidden sm:inline-flex shrink-0">
               {user ? t.roles[user.role] : t.roles.visitor}
@@ -508,6 +527,11 @@ export function StudioSidebarShell({
               }}
               className="min-h-[44px] h-11 min-w-0 max-w-[155px] xs:max-w-[190px] sm:max-w-[235px] rounded-input border-2 border-border-paper bg-white px-2.5 sm:px-3 text-base font-medium text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
             >
+              {!user && (
+                <option value="" disabled>
+                  {t.roles.visitor}
+                </option>
+              )}
               {demoUsers.map((u) => (
                 <option key={u.id} value={u.id}>
                   {localizeText(lang, u.name, u.nameAr)} ({t.roles[u.role]})
@@ -526,14 +550,18 @@ export function StudioSidebarShell({
                   : 'bg-red-600 text-white'
               )}
             >
-              <Globe className="h-3.5 w-3.5 shrink-0" />
+              <Globe className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span>{t.common.switchLanguage}</span>
             </button>
           </div>
         </header>
 
         {resetMessage && (
-          <div className="border-b-2 border-positive bg-positive-soft px-4 py-2.5 text-center text-xs font-bold text-positive-ink">
+          <div
+            role="status"
+            aria-live="polite"
+            className="border-b-2 border-positive bg-positive-soft px-4 py-2.5 text-center text-xs font-bold text-positive-ink"
+          >
             {resetMessage}
           </div>
         )}

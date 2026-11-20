@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {
   AlertCircle,
@@ -69,14 +70,19 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { PlayerPanelSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
-import {
-  AnimatedNumber,
-  LiveBadge,
-  PlayerAvatar,
-  PlayerPanel,
-  TimerRing,
-} from '@/components/brand';
-import { SessionHistoryDrawer } from './SessionHistoryDrawer';
+import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
+import { LiveBadge } from '@/components/brand/LiveBadge';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
+import { PlayerPanel } from '@/components/brand/PlayerPanel';
+import { TimerRing } from '@/components/brand/TimerRing';
+
+const SessionHistoryDrawer = dynamic(
+  () =>
+    import('./SessionHistoryDrawer').then((m) => ({
+      default: m.SessionHistoryDrawer,
+    })),
+  { ssr: false }
+);
 
 const CATEGORY_LABELS: Record<
   SegmentCategory,
@@ -2109,20 +2115,22 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
       )}
 
       {/* =================================================================== */}
-      {/* SESSION HISTORY & FULL SCORE CONTROL DRAWER                         */}
+      {/* SESSION HISTORY & FULL SCORE CONTROL DRAWER (lazy-loaded on open)   */}
       {/* =================================================================== */}
-      <SessionHistoryDrawer
-        open={historyOpen}
-        onOpenChange={setHistoryOpen}
-        game={game}
-        players={seatedPlayers}
-        segments={allSegments}
-        users={allUsers}
-        scoreEvents={scoreEvents}
-        buzzEvents={buzzEvents}
-        useArabicIndicDigits={useArabicIndic}
-        onChanged={loadConsoleState}
-      />
+      {historyOpen && (
+        <SessionHistoryDrawer
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          game={game}
+          players={seatedPlayers}
+          segments={allSegments}
+          users={allUsers}
+          scoreEvents={scoreEvents}
+          buzzEvents={buzzEvents}
+          useArabicIndicDigits={useArabicIndic}
+          onChanged={loadConsoleState}
+        />
+      )}
 
       {/* =================================================================== */}
       {/* CONFIRMATION DIALOGS (Destructive & State-Transition Guardrails)    */}

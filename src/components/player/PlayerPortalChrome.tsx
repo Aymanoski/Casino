@@ -152,16 +152,16 @@ export function PlayerPortalChrome({
                   onClick={() => onSelectPreviewPlayer(p.id)}
                   aria-pressed={isSelected}
                   className={cn(
-                    'inline-flex min-h-[44px] items-center gap-1.5 rounded-pill border-2 px-3 py-1 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
+                    'inline-flex max-w-full min-w-0 min-h-[44px] items-center gap-1.5 rounded-pill border-2 px-3 py-1 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
                     isSelected
                       ? 'border-outline bg-red-600 text-white shadow-sticker-sm'
                       : 'border-outline/30 bg-white text-red-900 hover:border-outline'
                   )}
                 >
-                  <span>{localizeText(lang, p.fullName, p.fullNameAr)}</span>
+                  <span className="truncate">{localizeText(lang, p.fullName, p.fullNameAr)}</span>
                   <span
                     className={cn(
-                      'rounded-pill px-1.5 py-0.5 text-[10px] font-extrabold',
+                      'shrink-0 rounded-pill px-1.5 py-0.5 text-[10px] font-extrabold',
                       isSelected
                         ? 'bg-white/20 text-white'
                         : 'bg-paper-2 text-ink-muted'

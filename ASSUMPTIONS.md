@@ -250,4 +250,17 @@
 - **Highlight Player Path on `/bracket`:** Added a live **Highlight Player Path** selector (also deep-linked from every row on `/leaderboard` via `/bracket?player=<id>`) that rings every table a contestant played or is seated in across all rounds in white-buffered electric blue, reporting the exact matched table count.
 - **Smart Default-Expanded Played Match on `/player/history` & One-Click Pitch Email Copy on `/sponsors`:** `/player/history` automatically expands the contestant's most recent LIVE or FINISHED match first (falling back to a scheduled table only for pre-debut players) so rich segment-by-segment timestamps and notes are visible immediately on arrival; `/sponsors` adds a 1-click **Copy Contact Email** action with themed toast feedback alongside pre-filled `mailto:` CTAs.
 
+---
+
+## Global Optimize & Polish Pass Decisions (2026-11-20)
+
+### 39. Zero-Framer-Motion Base Shell, Route Code-Splitting & Cached Storage Reads
+- **Context:** Baseline `next build` showed monolithic barrel chunks across every route (`/admin/*` 306 kB, public spectator routes 285 kB, `/scorer/*` 266 kB, `/` 254 kB), `ToastProvider` pulled `framer-motion` into `RootLayout`, `storage.readSnapshot()` re-parsed JSON and re-ran full Zod `DatabaseSnapshotSchema.safeParse()` on every read, and wildcard `realtime.subscribe('*')` handlers reloaded unrelated views on `timer.updated` / `game-demo` events.
+- **Decisions:**
+  - Enabled `experimental.optimizePackageImports` (`lucide-react`, `framer-motion`, `@radix-ui/*`), replaced route and component barrel imports with direct module imports, and lazy-loaded `LiveDemoSection`, `SessionHistoryDrawer`, and `GameEditorDialog` via `next/dynamic`.
+  - Moved `ToastProvider`, `SunburstStage` (with `IntersectionObserver` offscreen rotation pausing and `[contain:layout_paint]`), `MarqueeBulbs`, `LiveBadge`, `Lantern`, `PlayingDice`, `PlayingCardMotif`, `TimerRing`, `PlayerPanel`, `HeroFinalSection`, `PublicPageHero`, and `FinalShowcaseView` to pure GPU-composited CSS animations + zero-dependency `requestAnimationFrame` `AnimatedNumber` (eliminating `framer-motion` from 25 of 28 routes and removing above-the-fold `opacity: 0` LCP delays). Kept Framer Motion strictly for true layout-reordering/broadcast surfaces (`/leaderboard`, `/screen/*`, `LiveDemoSection`, `/styleguide`).
+  - Cached `memoryCache` + `cachedRaw` in `src/lib/storage/index.ts` (returning `structuredClone(memoryCache)` when raw `localStorage` is unchanged and invalidating on cross-tab `storage` events), isolated the 1-second Final Night countdown into `FinalCountdown` (`React.memo`), split `ToastProvider` actions from toast list state, and scoped all `realtime.subscribe` listeners to ignore `timer.updated` / `game-demo` where irrelevant.
+  - Added missing `DESIGN.md` radii tokens (`highlight`, `chip-sm`, `ribbon`, `marquee`) to `tailwind.config.ts`, fixed phantom `sm:text-fluid-5xl` → `sm:text-fluid-hero` in `PublicPageHero`, removed dead `RouteShellPlaceholder.tsx` and duplicate `.tabular-nums`, added branded bilingual `src/app/not-found.tsx` and `src/app/error.tsx`, replaced stale hardcoded `game-11` shell links with dynamic live-game resolution, added mobile drawer focus management + body scroll lock, added `DataTable` clear search button + `aria-pressed`, and sorted/badged unlocking accounts in `RoleGuard`.
+
+
 

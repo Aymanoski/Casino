@@ -29,11 +29,8 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
-import {
-  SectionHeading,
-  StageDivider,
-  SunburstStage,
-} from '@/components/brand';
+import { SectionHeading } from '@/components/brand/SectionHeading';
+import { StageDivider, SunburstStage } from '@/components/brand/SunburstStage';
 import { PublicErrorBanner } from './PublicErrorBanner';
 import { PublicPageHero } from './PublicPageHero';
 
@@ -138,8 +135,14 @@ export function SponsorsDeckView() {
 
   useEffect(() => {
     void loadAll(true);
-    const unsub = realtime.subscribe('*', () => {
-      void loadAll(false);
+    const unsub = realtime.subscribe('*', (msg) => {
+      if (
+        msg.event === 'sponsor.updated' ||
+        msg.event === 'settings.updated' ||
+        msg.event === 'data.reset'
+      ) {
+        void loadAll(false);
+      }
     });
     return () => unsub();
   }, [loadAll]);
@@ -349,26 +352,26 @@ export function SponsorsDeckView() {
                         </Badge>
                       </div>
 
-                      <div>
-                        <div className="inline-block rounded-input border border-border-paper bg-paper-2 px-2.5 py-1 text-[11px] font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
+                      <div className="min-w-0">
+                        <div className="inline-block max-w-full truncate rounded-input border border-border-paper bg-paper-2 px-2.5 py-1 text-[11px] font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
                           {sponsor.logoText}
                         </div>
-                        <h3 className="mt-2 font-display text-xl text-red-900 leading-snug">
+                        <h3 className="mt-2 font-display text-xl text-red-900 leading-snug break-words">
                           {localizeText(lang, sponsor.name, sponsor.nameAr)}
                         </h3>
-                        <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
+                        <p className="mt-1.5 text-sm leading-relaxed text-ink-muted break-words">
                           {localizeText(lang, sponsor.blurb, sponsor.blurbAr)}
                         </p>
                       </div>
 
                       <ul className="space-y-2 border-t border-border-paper pt-3 text-xs sm:text-sm text-ink">
                         {benefits.map((item, idx) => (
-                          <li key={idx} className="flex items-start gap-2">
+                          <li key={idx} className="flex min-w-0 items-start gap-2">
                             <Check
                               className="mt-0.5 h-4 w-4 shrink-0 text-positive-ink"
                               aria-hidden="true"
                             />
-                            <span>{item}</span>
+                            <span className="min-w-0 break-words">{item}</span>
                           </li>
                         ))}
                       </ul>

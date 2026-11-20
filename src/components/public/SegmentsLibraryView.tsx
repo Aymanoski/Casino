@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -47,7 +47,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LiveBadge, ScoreChip } from '@/components/brand';
+import { LiveBadge } from '@/components/brand/LiveBadge';
+import { ScoreChip } from '@/components/brand/ScoreChip';
 import {
   formatPublicDateTime,
   SEGMENT_CATEGORY_INFO,
@@ -73,6 +74,7 @@ export function SegmentsLibraryView() {
   const [error, setError] = useState<string | null>(null);
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearch = useDeferredValue(searchQuery);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
 
   const loadSeqRef = useRef(0);
@@ -116,8 +118,19 @@ export function SegmentsLibraryView() {
 
   useEffect(() => {
     void loadAll(true);
-    const unsub = realtime.subscribe('*', () => {
-      void loadAll(false);
+    const unsub = realtime.subscribe('*', (msg) => {
+      const payloadGameId = (msg.payload as { gameId?: string } | undefined)?.gameId;
+      if (payloadGameId === 'game-demo') return;
+      if (
+        msg.event === 'segment.updated' ||
+        msg.event === 'bracket.updated' ||
+        msg.event === 'game.started' ||
+        msg.event === 'game.finished' ||
+        msg.event === 'settings.updated' ||
+        msg.event === 'data.reset'
+      ) {
+        void loadAll(false);
+      }
     });
     return () => unsub();
   }, [loadAll]);
@@ -146,7 +159,7 @@ export function SegmentsLibraryView() {
       );
     }
 
-    const q = normalizeSearchText(searchQuery);
+    const q = normalizeSearchText(deferredSearch);
     const filtered = data.segments.filter((seg) => {
       if (category !== 'all' && seg.category !== category) return false;
       if (!q) return true;
@@ -187,7 +200,7 @@ export function SegmentsLibraryView() {
       prevSegment,
       nextSegment,
     };
-  }, [data, category, searchQuery, selectedSegmentId]);
+  }, [data, category, deferredSearch, selectedSegmentId]);
 
   const selectSegment = useCallback((segId: string | null) => {
     setSelectedSegmentId(segId);
@@ -339,20 +352,31 @@ export function SegmentsLibraryView() {
                       ? 'مثال: أغنية، كلمات معكوسة، سينما...'
                       : 'e.g. Song, Reversed Words, Cinema...'
                   }
-                  className="ps-10 pe-10"
+                  className="ps-10 pe-12"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery('')}
                     aria-label={lang === 'ar' ? 'مسح البحث' : 'Clear search'}
-                    className="absolute end-1 top-1/2 -translate-y-1/2 inline-flex h-10 w-10 items-center justify-center rounded-pill text-ink-muted hover:text-ink"
+                    className="absolute end-0.5 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-pill text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-4 w-4" aria-hidden="true" />
                   </button>
                 )}
               </div>
             </div>
+          </div>
+
+          <div
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className="text-xs sm:text-sm font-bold text-ink-muted"
+          >
+            {lang === 'ar'
+              ? `عرض ${formatNumber(derived.filtered.length, { useArabicIndicDigits: useArabicIndic })} من ${formatNumber(data.segments.length, { useArabicIndicDigits: useArabicIndic })} فقرة`
+              : `Showing ${formatNumber(derived.filtered.length, { useArabicIndicDigits: useArabicIndic })} of ${formatNumber(data.segments.length, { useArabicIndicDigits: useArabicIndic })} segments`}
           </div>
 
           {/* Segment Cards Grid */}
@@ -411,11 +435,11 @@ export function SegmentsLibraryView() {
                         </span>
                       </div>
 
-                      <div>
-                        <h2 className="font-display text-xl text-red-900 leading-snug">
+                      <div className="min-w-0">
+                        <h2 className="font-display text-xl text-red-900 leading-snug break-words">
                           {localizeText(lang, seg.nameEn, seg.nameAr)}
                         </h2>
-                        <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
+                        <p className="mt-1.5 text-sm leading-relaxed text-ink-muted break-words">
                           {localizeText(lang, seg.descriptionEn, seg.descriptionAr)}
                         </p>
                       </div>

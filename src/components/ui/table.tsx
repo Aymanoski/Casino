@@ -11,6 +11,7 @@ import {
   Search,
   SlidersHorizontal,
   Table2,
+  X,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { cn, normalizeSearchText } from '@/lib/utils';
@@ -334,14 +335,25 @@ export function DataTable<T>({
         <div className="space-y-2.5">
           <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
             {searchable ? (
-              <div className="w-full sm:max-w-md">
+              <div className="relative w-full sm:max-w-md">
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={searchPlaceholder}
-                  startIcon={<Search className="h-4 w-4" />}
+                  startIcon={<Search className="h-4 w-4" aria-hidden="true" />}
                   aria-label={searchPlaceholder}
+                  className={query ? 'pe-12' : undefined}
                 />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery('')}
+                    aria-label={lang === 'ar' ? 'مسح البحث' : 'Clear search'}
+                    className="absolute end-0.5 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-pill text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
+                  >
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                )}
               </div>
             ) : (
               <div />
@@ -397,27 +409,29 @@ export function DataTable<T>({
                   <button
                     type="button"
                     onClick={() => setViewMode('cards')}
+                    aria-pressed={viewMode === 'cards'}
                     className={cn(
-                      'inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-xs font-bold transition-colors',
+                      'inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
                       viewMode === 'cards'
                         ? 'bg-red-600 text-white shadow-sticker-sm'
                         : 'text-ink-muted hover:text-ink'
                     )}
                   >
-                    <LayoutGrid className="h-3.5 w-3.5" />
+                    <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
                     <span>{cardsLabel}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setViewMode('scroll')}
+                    aria-pressed={viewMode === 'scroll'}
                     className={cn(
-                      'inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-xs font-bold transition-colors',
+                      'inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
                       viewMode === 'scroll'
                         ? 'bg-red-600 text-white shadow-sticker-sm'
                         : 'text-ink-muted hover:text-ink'
                     )}
                   >
-                    <Table2 className="h-3.5 w-3.5" />
+                    <Table2 className="h-3.5 w-3.5" aria-hidden="true" />
                     <span>{tableLabel}</span>
                   </button>
                 </div>

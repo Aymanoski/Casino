@@ -130,7 +130,7 @@ const SIZE_STYLES = {
  * hard offset sticker shadow, and tabular numerals per DESIGN.md §5 & §6.
  * Classic 4 chip colors (red, white, blue, gold) + positive/negative with explicit +/- icons.
  */
-export function ScoreChip({
+export const ScoreChip = React.memo(function ScoreChip({
   value,
   tone,
   size = 'md',
@@ -255,6 +255,6 @@ export function ScoreChip({
       {chipContent}
     </div>
   );
-}
+});
 
 export const ChipBadge = ScoreChip;

@@ -55,7 +55,8 @@ import { Skeleton, TableRowSkeleton } from '@/components/ui/skeleton';
 import { DataTable, type DataTableColumn } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
-import { PlayerAvatar, ScoreChip } from '@/components/brand';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
+import { ScoreChip } from '@/components/brand/ScoreChip';
 import {
   AdminErrorBanner,
   AdminPageHeader,

@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Crown, Minus, Plus, Trophy, Zap } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { cn, formatNumber } from '@/lib/utils';
@@ -61,7 +60,6 @@ export function PlayerPanel({
   className,
 }: PlayerPanelProps) {
   const { lang } = useI18n();
-  const prefersReducedMotion = useReducedMotion();
 
   const resolvedSurface =
     surface ?? (variant === 'scorer' ? 'dark' : 'light');
@@ -230,42 +228,28 @@ export function PlayerPanel({
         </span>
 
         <div className="relative ms-auto flex min-w-0 max-w-full items-baseline gap-2">
-          <AnimatePresence>
-            {flashDelta && (
-              <motion.span
-                key={flashDelta.id}
-                initial={
-                  prefersReducedMotion
-                    ? { opacity: 1, y: 0 }
-                    : { opacity: 0, y: flashDelta.delta > 0 ? 10 : -10, scale: 0.9 }
-                }
-                animate={
-                  prefersReducedMotion
-                    ? { opacity: 1, y: 0 }
-                    : { opacity: 1, y: flashDelta.delta > 0 ? -8 : 6, scale: 1 }
-                }
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.35, ease: 'easeOut' }}
-                className={cn(
-                  'inline-flex shrink-0 items-center gap-1 rounded-pill border-2 border-outline px-2.5 py-0.5 font-score text-lg @sm:text-xl font-black tabular-nums shadow-sticker-sm',
-                  flashDelta.delta > 0
-                    ? 'bg-positive-soft text-positive-ink'
-                    : 'bg-negative text-white'
-                )}
-              >
-                {flashDelta.delta > 0 ? (
-                  <Plus className="h-3.5 w-3.5 stroke-[3] shrink-0" aria-hidden="true" />
-                ) : (
-                  <Minus className="h-3.5 w-3.5 stroke-[3] shrink-0" aria-hidden="true" />
-                )}
-                <span>
-                  {formatNumber(Math.abs(flashDelta.delta), {
-                    useArabicIndicDigits,
-                  })}
-                </span>
-              </motion.span>
-            )}
-          </AnimatePresence>
+          {flashDelta && (
+            <span
+              key={flashDelta.id}
+              className={cn(
+                'inline-flex shrink-0 items-center gap-1 rounded-pill border-2 border-outline px-2.5 py-0.5 font-score text-lg @sm:text-xl font-black tabular-nums shadow-sticker-sm animate-in fade-in duration-200 motion-reduce:animate-none',
+                flashDelta.delta > 0
+                  ? 'slide-in-from-bottom-2 bg-positive-soft text-positive-ink'
+                  : 'slide-in-from-top-2 bg-negative text-white'
+              )}
+            >
+              {flashDelta.delta > 0 ? (
+                <Plus className="h-3.5 w-3.5 stroke-[3] shrink-0" aria-hidden="true" />
+              ) : (
+                <Minus className="h-3.5 w-3.5 stroke-[3] shrink-0" aria-hidden="true" />
+              )}
+              <span>
+                {formatNumber(Math.abs(flashDelta.delta), {
+                  useArabicIndicDigits,
+                })}
+              </span>
+            </span>
+          )}
 
           <AnimatedNumber
             value={score}
@@ -290,8 +274,7 @@ export function PlayerPanel({
   );
 
   return (
-    <motion.div
-      layout={!prefersReducedMotion && !isScorerCard}
+    <div
       onClick={useOuterButton ? onSelect : undefined}
       role={useOuterButton ? 'button' : undefined}
       tabIndex={useOuterButton ? 0 : undefined}
@@ -307,7 +290,7 @@ export function PlayerPanel({
           : undefined
       }
       className={cn(
-        '@container relative flex min-w-0 flex-col justify-between overflow-hidden rounded-card transition-all duration-200',
+        '@container relative flex min-w-0 flex-col justify-between overflow-hidden rounded-card transition-[box-shadow,border-color,background-color] duration-200',
         isScorerCard ? 'p-3.5 @sm:p-4' : 'p-4 @xs:p-5 @md:p-6',
         'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
         isDark
@@ -336,11 +319,9 @@ export function PlayerPanel({
       )}
     >
       {/* Pulsing Gold Ring Overlay when Buzzed */}
-      {isBuzzed && !prefersReducedMotion && (
-        <motion.div
-          className="pointer-events-none absolute inset-0 rounded-card border-[3px] border-gold-300"
-          animate={{ opacity: [0.35, 1, 0.35] }}
-          transition={{ duration: 1.3, repeat: Infinity, ease: 'easeInOut' }}
+      {isBuzzed && (
+        <div
+          className="pointer-events-none absolute inset-0 rounded-card border-[3px] border-gold-300 animate-pulse motion-reduce:animate-none"
           aria-hidden="true"
         />
       )}
@@ -385,6 +366,7 @@ export function PlayerPanel({
               )}
             >
               <Zap
+                aria-hidden="true"
                 className={cn(
                   'h-5 w-5 shrink-0',
                   isBuzzed ? 'fill-red-900 text-red-900' : 'text-red-600'
@@ -434,6 +416,6 @@ export function PlayerPanel({
           )}
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }

@@ -44,7 +44,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LiveBadge, MarqueeBulbs, PlayerAvatar } from '@/components/brand';
+import { LiveBadge } from '@/components/brand/LiveBadge';
+import { MarqueeBulbs } from '@/components/brand/MarqueeBulbs';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
 
 type StatusFilter = 'all' | GameStatus;
 
@@ -147,7 +149,9 @@ export function ScorerDashboardView() {
 
   useEffect(() => {
     loadDashboard();
-    const unsub = realtime.subscribe('*', () => {
+    const unsub = realtime.subscribe('*', (msg) => {
+      const payloadGameId = (msg.payload as { gameId?: string } | undefined)?.gameId;
+      if (payloadGameId === 'game-demo' || msg.event === 'timer.updated') return;
       loadDashboard();
     });
     return () => unsub();

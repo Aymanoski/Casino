@@ -168,9 +168,13 @@ const config: Config = {
         svh: '100svh',
       },
       borderRadius: {
-        card: '20px',
-        button: '14px',
+        highlight: '4px',
+        'chip-sm': '8px',
+        ribbon: '10px',
         input: '12px',
+        button: '14px',
+        card: '20px',
+        marquee: '26px',
         pill: '9999px',
       },
       boxShadow: {

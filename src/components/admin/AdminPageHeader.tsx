@@ -4,7 +4,7 @@ import React from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { ScoreChip, type ScoreChipTone } from '@/components/brand';
+import { ScoreChip, type ScoreChipTone } from '@/components/brand/ScoreChip';
 
 export interface AdminPageHeaderProps {
   title: string;

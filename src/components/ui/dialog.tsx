@@ -70,7 +70,7 @@ export const DialogContent = React.forwardRef<
           aria-label={lang === 'ar' ? 'إغلاق النافذة' : 'Close dialog'}
           className="absolute end-3 top-3.5 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-pill border-2 border-outline bg-paper text-ink shadow-sticker-sm transition-colors hover:bg-paper-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
         >
-          <X className="h-4 w-4" />
+          <X className="h-4 w-4" aria-hidden="true" />
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>
     </DialogPortal>
@@ -166,7 +166,7 @@ export function ConfirmDialog({
         <DialogHeader>
           <div className="flex items-center gap-2.5">
             {destructive && (
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill border-2 border-outline bg-negative text-white shadow-sticker-sm">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill border-2 border-outline bg-negative text-white shadow-sticker-sm" aria-hidden="true">
                 <AlertTriangle className="h-4 w-4" />
               </span>
             )}

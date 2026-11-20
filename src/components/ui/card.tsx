@@ -38,7 +38,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
       <div
         ref={ref}
         className={cn(
-          '@container relative min-w-0 overflow-hidden rounded-card p-card-pad transition-all duration-200',
+          '@container relative min-w-0 overflow-hidden rounded-card p-card-pad transition-[box-shadow,border-color,background-color] duration-200',
           appearance === 'sticker'
             ? 'bg-white text-ink border-[2.5px] border-outline shadow-sticker'
             : appearance === 'calm'

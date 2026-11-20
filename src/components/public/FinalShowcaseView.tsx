@@ -2,7 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { motion, useReducedMotion } from 'framer-motion';
 import {
   ArrowRight,
   Calendar,
@@ -38,21 +37,17 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
+import { CrescentStar } from '@/components/brand/CrescentStar';
+import { FinalCountdown } from '@/components/brand/FinalCountdown';
+import { LiveBadge } from '@/components/brand/LiveBadge';
+import { MarqueeBulbs } from '@/components/brand/MarqueeBulbs';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
+import { PlayingCardFan, PlayingDice } from '@/components/brand/GameMotifs';
+import { SectionHeading } from '@/components/brand/SectionHeading';
+import { Spotlight } from '@/components/brand/Spotlight';
+import { StageDivider, SunburstStage } from '@/components/brand/SunburstStage';
 import {
-  AnimatedNumber,
-  CrescentStar,
-  LiveBadge,
-  MarqueeBulbs,
-  PlayerAvatar,
-  PlayingCardFan,
-  PlayingDice,
-  SectionHeading,
-  Spotlight,
-  StageDivider,
-  SunburstStage,
-} from '@/components/brand';
-import {
-  computeCountdown,
   formatPublicDateTime,
   resolvePlayerDisplay,
   SEGMENT_CATEGORY_INFO,
@@ -71,12 +66,10 @@ interface FinalData {
 
 export function FinalShowcaseView() {
   const { lang } = useI18n();
-  const prefersReducedMotion = useReducedMotion();
 
   const [data, setData] = useState<FinalData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [nowMs, setNowMs] = useState<number | null>(null);
   const loadSeqRef = useRef(0);
 
   const loadAll = useCallback(async (showSpinner = false) => {
@@ -121,19 +114,13 @@ export function FinalShowcaseView() {
 
   useEffect(() => {
     void loadAll(true);
-    const unsub = realtime.subscribe('*', () => {
+    const unsub = realtime.subscribe('*', (msg) => {
+      const payloadGameId = (msg.payload as { gameId?: string } | undefined)?.gameId;
+      if (payloadGameId === 'game-demo' || msg.event === 'timer.updated') return;
       void loadAll(false);
     });
     return () => unsub();
   }, [loadAll]);
-
-  useEffect(() => {
-    setNowMs(Date.now());
-    const tid = window.setInterval(() => {
-      setNowMs(Date.now());
-    }, 1000);
-    return () => window.clearInterval(tid);
-  }, []);
 
   const useArabicIndic = data?.settings.useArabicIndicDigits ?? false;
 
@@ -233,21 +220,15 @@ export function FinalShowcaseView() {
       semiGame,
       semiFinished,
       liveGames,
-      seats: [seatLeft, seatCenter, seatRight] as const,
+      // Priority DOM order (Marwan Golden Seat first for mobile top-to-bottom + logical focus;
+      // CSS Grid placement puts Marwan dead-center on md+)
+      seats: [seatCenter, seatLeft, seatRight] as const,
       finalSegments,
       roadRounds,
     };
   }, [data, lang]);
 
   const targetIso = data?.settings.finalNightIso ?? '2027-03-22T21:00:00.000Z';
-  const countdown = nowMs === null ? null : computeCountdown(targetIso, nowMs);
-
-  const countdownCells = [
-    { key: 'days', val: countdown?.days ?? null, labelEn: 'DAYS', labelAr: 'يوم' },
-    { key: 'hours', val: countdown?.hours ?? null, labelEn: 'HOURS', labelAr: 'ساعة' },
-    { key: 'minutes', val: countdown?.minutes ?? null, labelEn: 'MINS', labelAr: 'دقيقة' },
-    { key: 'seconds', val: countdown?.seconds ?? null, labelEn: 'SECS', labelAr: 'ثانية' },
-  ];
 
   if (loading) {
     return (
@@ -327,9 +308,9 @@ export function FinalShowcaseView() {
                 </span>
               </Badge>
             )}
-            <Badge variant="white">
+            <Badge variant="white" className="max-w-full min-w-0">
               <MapPin className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
-              <span>{localizeText(lang, settings.venue, settings.venueAr)}</span>
+              <span className="truncate">{localizeText(lang, settings.venue, settings.venueAr)}</span>
             </Badge>
           </>
         }
@@ -372,33 +353,12 @@ export function FinalShowcaseView() {
                 </span>
               </div>
 
-              <div
-                className="grid grid-cols-4 gap-2 sm:gap-2.5"
-                role="timer"
-                aria-label={
-                  lang === 'ar'
-                    ? 'العد التنازلي للنهائي الكبير'
-                    : 'Countdown to Grand Final'
-                }
-              >
-                {countdownCells.map((cell) => (
-                  <div
-                    key={cell.key}
-                    className="flex min-w-[60px] flex-col items-center justify-center rounded-input border-2 border-outline bg-white px-2.5 py-1.5 text-center shadow-sticker-sm"
-                  >
-                    <span className="font-score text-2xl sm:text-3xl font-black leading-none text-red-600 tabular-nums">
-                      {cell.val === null
-                        ? '--'
-                        : formatNumber(String(cell.val).padStart(2, '0'), {
-                            useArabicIndicDigits: useArabicIndic,
-                          })}
-                    </span>
-                    <span className="mt-0.5 text-[11px] font-extrabold uppercase text-red-900">
-                      {lang === 'ar' ? cell.labelAr : cell.labelEn}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <FinalCountdown
+                targetIso={targetIso}
+                useArabicIndicDigits={useArabicIndic}
+                size="compact"
+                className="sm:max-w-sm"
+              />
             </div>
           )}
 
@@ -486,25 +446,18 @@ export function FinalShowcaseView() {
                   <div className="mt-6 grid grid-cols-1 items-stretch gap-4 md:grid-cols-3 md:gap-5">
                     {seats.map((seat, idx) => {
                       const isCenter = seat.isCenterHost;
-                      const mobileOrder = isCenter
-                        ? 'order-1 md:order-2'
-                        : idx === 0
-                          ? 'order-2 md:order-1'
-                          : 'order-3 md:order-3';
+                      const desktopGridPos = isCenter
+                        ? 'md:col-start-2 md:row-start-1'
+                        : idx === 1
+                          ? 'md:col-start-1 md:row-start-1'
+                          : 'md:col-start-3 md:row-start-1';
 
                       return (
-                        <motion.div
+                        <div
                           key={`${seat.id}-${idx}`}
-                          initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{
-                            duration: 0.35,
-                            delay: idx * 0.06,
-                            ease: 'easeOut',
-                          }}
                           className={cn(
-                            'relative flex flex-col justify-between gap-4 rounded-card p-5 transition-transform',
-                            mobileOrder,
+                            'relative min-w-0 flex flex-col justify-between gap-4 rounded-card p-5 transition-transform',
+                            desktopGridPos,
                             isCenter
                               ? 'border-[3px] border-outline bg-gold-gradient text-red-900 shadow-sticker md:-my-2'
                               : seat.isWinner
@@ -653,7 +606,7 @@ export function FinalShowcaseView() {
                               </span>
                             )}
                           </div>
-                        </motion.div>
+                        </div>
                       );
                     })}
                   </div>
@@ -761,18 +714,18 @@ export function FinalShowcaseView() {
                       </span>
                     </div>
 
-                    <h3 className="font-display text-xl text-red-900 leading-snug">
+                    <h3 className="font-display text-xl text-red-900 leading-snug break-words">
                       {localizeText(lang, round.name.en, round.name.ar)}
                     </h3>
 
-                    <p className="text-sm text-ink-muted leading-relaxed">
+                    <p className="text-sm text-ink-muted leading-relaxed break-words">
                       {isFinalRound
                         ? lang === 'ar'
                           ? 'المتأهلان من نصف النهائي + مروان سري على طاولة اللقب.'
                           : 'Top 2 Semi-Finalists + Marwan Serry in the 3-player finale.'
                         : lang === 'ar'
                           ? `يتأهل أفضل ${formatNumber(round.advancePerGame, { useArabicIndicDigits: useArabicIndic })} من كل طاولة.`
-                          : `Top ${round.advancePerGame} per table advances to the next stage.`}
+                          : `Top ${formatNumber(round.advancePerGame, { useArabicIndicDigits: useArabicIndic })} per table advances to the next stage.`}
                     </p>
                   </div>
 
@@ -960,25 +913,25 @@ export function FinalShowcaseView() {
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2 pt-1 text-sm">
-                  <div className="rounded-input border border-border-paper bg-paper p-3.5 space-y-1">
+                  <div className="min-w-0 rounded-input border border-border-paper bg-paper p-3.5 space-y-1">
                     <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase text-red-700">
                       <Calendar className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                       <span>{lang === 'ar' ? 'الموعد والمكان' : 'Dates & Venue'}</span>
                     </div>
-                    <p className="font-bold text-ink">
+                    <p className="font-bold text-ink break-words">
                       {localizeText(lang, settings.eventDates, settings.eventDatesAr)}
                     </p>
-                    <p className="text-ink-muted">
+                    <p className="text-ink-muted break-words">
                       {localizeText(lang, settings.venue, settings.venueAr)}
                     </p>
                   </div>
 
-                  <div className="rounded-input border border-border-paper bg-paper p-3.5 space-y-1">
+                  <div className="min-w-0 rounded-input border border-border-paper bg-paper p-3.5 space-y-1">
                     <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase text-red-700">
                       <Trophy className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                       <span>{lang === 'ar' ? 'جائزة البطولة' : 'Championship Prize'}</span>
                     </div>
-                    <p className="font-bold text-ink">
+                    <p className="font-bold text-ink break-words">
                       {localizeText(lang, settings.prizeText, settings.prizeTextAr)}
                     </p>
                     <p className="text-xs text-ink-muted">

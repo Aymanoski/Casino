@@ -13,11 +13,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   BracketNode,
   type BracketPlayerSlot,
-  ScoreChip,
-  SectionHeading,
-  StageDivider,
-  SunburstStage,
-} from '@/components/brand';
+} from '@/components/brand/BracketNode';
+import { ScoreChip } from '@/components/brand/ScoreChip';
+import { SectionHeading } from '@/components/brand/SectionHeading';
+import { StageDivider, SunburstStage } from '@/components/brand/SunburstStage';
 
 export interface HowItWorksSectionProps {
   settings: Settings | null;
@@ -44,7 +43,22 @@ export function HowItWorksSection({ settings }: HowItWorksSectionProps) {
         roundRepo.list(),
         playerRepo.list({ includeHost: true }),
       ]);
-      const targetIds = ['game-11', 'game-13', 'game-14'];
+      const featured =
+        gList.find((g) => g.id === 'game-11') ??
+        gList.find((g) => g.status === 'live') ??
+        gList.find((g) => !g.isFinal);
+      const semi =
+        gList.find((g) => g.id === 'game-13') ??
+        gList.find((g) => g.roundId === 'round-semi');
+      const final =
+        gList.find((g) => g.isFinal) ??
+        gList.find((g) => g.id === 'game-14');
+
+      const targetIds = Array.from(
+        new Set(
+          [featured?.id, semi?.id, final?.id].filter((id): id is string => Boolean(id))
+        )
+      );
       const totalsEntries = await Promise.all(
         targetIds.map(async (gid) => [gid, await scoreRepo.getGameTotals(gid)] as const)
       );
@@ -57,8 +71,19 @@ export function HowItWorksSection({ settings }: HowItWorksSectionProps) {
     };
     load();
 
-    const unsub = realtime.subscribe('*', () => {
-      load();
+    const unsub = realtime.subscribe('*', (msg) => {
+      const payloadGameId = (msg.payload as { gameId?: string } | undefined)?.gameId;
+      if (payloadGameId === 'game-demo') return;
+      if (
+        msg.event === 'score.changed' ||
+        msg.event === 'game.started' ||
+        msg.event === 'game.finished' ||
+        msg.event === 'bracket.updated' ||
+        msg.event === 'player.updated' ||
+        msg.event === 'data.reset'
+      ) {
+        load();
+      }
     });
     return () => {
       mounted = false;
@@ -134,9 +159,16 @@ export function HowItWorksSection({ settings }: HowItWorksSectionProps) {
     };
   };
 
-  const liveGame = games.find((g) => g.id === 'game-11');
-  const semiGame = games.find((g) => g.id === 'game-13');
-  const finalGame = games.find((g) => g.id === 'game-14');
+  const liveGame =
+    games.find((g) => g.id === 'game-11') ??
+    games.find((g) => g.status === 'live') ??
+    games.find((g) => !g.isFinal);
+  const semiGame =
+    games.find((g) => g.id === 'game-13') ??
+    games.find((g) => g.roundId === 'round-semi');
+  const finalGame =
+    games.find((g) => g.isFinal) ??
+    games.find((g) => g.id === 'game-14');
 
   const getRoundLabel = (roundId: string) => {
     const round = rounds.find((r) => r.id === roundId);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -35,25 +35,56 @@ export function PublicHeader() {
   const [liveGame, setLiveGame] = useState<Game | null>(null);
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuBtnRef = useRef<HTMLButtonElement | null>(null);
+  const drawerCloseBtnRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     let mounted = true;
     const loadLive = async () => {
       const games = await gameRepo.getLiveGames();
-      if (mounted) {
-        setLiveGame(games[0] ?? null);
-      }
+      if (!mounted) return;
+      const next = games[0] ?? null;
+      setLiveGame((prev) =>
+        prev?.id === next?.id &&
+        prev?.tableName === next?.tableName &&
+        prev?.tableNameAr === next?.tableNameAr
+          ? prev
+          : next
+      );
     };
     loadLive();
 
-    const unsub = realtime.subscribe('*', () => {
-      loadLive();
+    const unsub = realtime.subscribe('*', (msg) => {
+      const payloadGameId = (msg.payload as { gameId?: string } | undefined)?.gameId;
+      if (payloadGameId === 'game-demo') return;
+      if (
+        msg.event === 'game.started' ||
+        msg.event === 'game.finished' ||
+        msg.event === 'bracket.updated' ||
+        msg.event === 'data.reset'
+      ) {
+        loadLive();
+      }
     });
     return () => {
       mounted = false;
       unsub();
     };
   }, []);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const raf = window.requestAnimationFrame(() => {
+      drawerCloseBtnRef.current?.focus();
+    });
+    return () => {
+      window.cancelAnimationFrame(raf);
+      document.body.style.overflow = prevOverflow;
+      mobileMenuBtnRef.current?.focus();
+    };
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -83,6 +114,8 @@ export function PublicHeader() {
   ];
 
   const roleLabel = user ? t.roles[user.role] : t.roles.visitor;
+  const scorerQuickHref = liveGame ? `/scorer/${liveGame.id}` : '/scorer';
+  const screenQuickHref = liveGame ? `/screen/${liveGame.id}` : '/screen/leaderboard';
 
   const handleQuickRoleSwitch = async (userId: string, navigateToDefault = false) => {
     const loggedIn = await loginAs(userId);
@@ -163,7 +196,7 @@ export function PublicHeader() {
                 <LiveBadge
                   surface="stage"
                   size="sm"
-                  label={`${t.common.live} · ${t.common.viewLiveGame}`}
+                  label={`${t.common.live} · ${localizeText(lang, liveGame.tableName, liveGame.tableNameAr)}`}
                   className="hidden 2xl:inline-flex"
                 />
               </Link>
@@ -181,7 +214,7 @@ export function PublicHeader() {
                 }`}
                 className="inline-flex min-h-[44px] min-w-[44px] h-11 items-center justify-center gap-1.5 rounded-pill border-2 border-outline bg-white px-2.5 xs:px-3 text-xs font-extrabold text-red-900 shadow-sticker-sm sticker-press hover:bg-paper focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >
-                <ShieldCheck className="h-4 w-4 shrink-0 text-red-600" />
+                <ShieldCheck className="h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
                 <span className="hidden sm:inline max-w-[104px] 2xl:max-w-[150px] truncate">
                   {user
                     ? localizeText(lang, user.name, user.nameAr)
@@ -193,7 +226,7 @@ export function PublicHeader() {
                     </span>
                   )}
                 </span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-muted" />
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
               </button>
 
               {roleMenuOpen && (
@@ -222,35 +255,39 @@ export function PublicHeader() {
                     {/* Quick Workspace Shortcuts */}
                     <div className="mb-2 grid grid-cols-2 gap-1.5">
                       <Link
-                        href="/scorer/game-11"
+                        href={scorerQuickHref}
+                        role="menuitem"
                         onClick={() => setRoleMenuOpen(false)}
                         className="flex min-h-[44px] items-center gap-1.5 rounded-input border-2 border-border-paper bg-paper px-2.5 py-2 text-xs font-bold text-ink hover:border-outline"
                       >
-                        <Tablet className="h-3.5 w-3.5 shrink-0 text-red-600" />
+                        <Tablet className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
                         <span className="truncate">{t.nav.scorerConsole}</span>
                       </Link>
                       <Link
-                        href="/screen/game-11"
+                        href={screenQuickHref}
+                        role="menuitem"
                         onClick={() => setRoleMenuOpen(false)}
                         className="flex min-h-[44px] items-center gap-1.5 rounded-input border-2 border-border-paper bg-paper px-2.5 py-2 text-xs font-bold text-ink hover:border-outline"
                       >
-                        <MonitorPlay className="h-3.5 w-3.5 shrink-0 text-red-600" />
+                        <MonitorPlay className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
                         <span className="truncate">{t.nav.bigScreen}</span>
                       </Link>
                       <Link
                         href="/admin"
+                        role="menuitem"
                         onClick={() => setRoleMenuOpen(false)}
                         className="flex min-h-[44px] items-center gap-1.5 rounded-input border-2 border-border-paper bg-paper px-2.5 py-2 text-xs font-bold text-ink hover:border-outline"
                       >
-                        <LayoutDashboard className="h-3.5 w-3.5 shrink-0 text-red-600" />
+                        <LayoutDashboard className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
                         <span className="truncate">{t.nav.adminArea}</span>
                       </Link>
                       <Link
                         href="/player"
+                        role="menuitem"
                         onClick={() => setRoleMenuOpen(false)}
                         className="flex min-h-[44px] items-center gap-1.5 rounded-input border-2 border-border-paper bg-paper px-2.5 py-2 text-xs font-bold text-ink hover:border-outline"
                       >
-                        <UserCheck className="h-3.5 w-3.5 shrink-0 text-red-600" />
+                        <UserCheck className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
                         <span className="truncate">{t.nav.playerPortal}</span>
                       </Link>
                     </div>
@@ -262,6 +299,7 @@ export function PublicHeader() {
                           <button
                             key={demoAcc.id}
                             type="button"
+                            role="menuitem"
                             onClick={() => handleQuickRoleSwitch(demoAcc.id, false)}
                             className={cn(
                               'flex min-h-[44px] w-full items-center justify-between rounded-input border-2 px-2.5 py-2 text-start text-xs transition-colors',
@@ -312,12 +350,13 @@ export function PublicHeader() {
               aria-label={lang === 'ar' ? 'تبديل اللغة إلى الإنجليزية' : 'Switch language to Arabic'}
               className="inline-flex min-h-[44px] min-w-[44px] h-11 shrink-0 items-center justify-center gap-1.5 rounded-pill border-2 border-outline bg-gold-400 px-3 xs:px-3.5 text-xs font-black text-red-900 shadow-sticker-sm sticker-press hover:bg-gold-300 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             >
-              <Globe className="h-3.5 w-3.5 shrink-0 text-red-900" />
+              <Globe className="h-3.5 w-3.5 shrink-0 text-red-900" aria-hidden="true" />
               <span>{t.common.switchLanguage}</span>
             </button>
 
             {/* Mobile / Tablet Drawer Menu Trigger (< xl) */}
             <Button
+              ref={mobileMenuBtnRef}
               variant="surface"
               size="icon"
               className="xl:hidden"
@@ -326,7 +365,7 @@ export function PublicHeader() {
               aria-controls="public-nav-drawer"
               aria-label={lang === 'ar' ? 'فتح أو إغلاق القائمة' : 'Toggle Menu'}
             >
-              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              {mobileMenuOpen ? <X className="h-5 w-5" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
             </Button>
           </div>
         </div>
@@ -357,12 +396,13 @@ export function PublicHeader() {
                 </span>
               </div>
               <Button
+                ref={drawerCloseBtnRef}
                 variant="surface"
                 size="icon"
                 onClick={() => setMobileMenuOpen(false)}
                 aria-label={lang === 'ar' ? 'إغلاق القائمة' : 'Close Navigation Drawer'}
               >
-                <X className="h-5 w-5" />
+                <X className="h-5 w-5" aria-hidden="true" />
               </Button>
             </div>
 
@@ -416,19 +456,19 @@ export function PublicHeader() {
                 </div>
                 <div className="grid grid-cols-1 gap-2">
                   <Link
-                    href="/scorer/game-11"
+                    href={scorerQuickHref}
                     onClick={() => setMobileMenuOpen(false)}
                     className="flex min-h-[44px] items-center gap-2.5 rounded-input border-2 border-outline bg-red-900 px-3.5 py-2.5 text-sm font-bold text-white shadow-sticker-sm"
                   >
-                    <Tablet className="h-4 w-4 shrink-0 text-gold-300" />
+                    <Tablet className="h-4 w-4 shrink-0 text-gold-300" aria-hidden="true" />
                     <span>{t.nav.scorerConsole}</span>
                   </Link>
                   <Link
-                    href="/screen/game-11"
+                    href={screenQuickHref}
                     onClick={() => setMobileMenuOpen(false)}
                     className="flex min-h-[44px] items-center gap-2.5 rounded-input border-2 border-outline bg-white px-3.5 py-2.5 text-sm font-bold text-ink shadow-sticker-sm"
                   >
-                    <MonitorPlay className="h-4 w-4 shrink-0 text-red-600" />
+                    <MonitorPlay className="h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
                     <span>{t.nav.bigScreen}</span>
                   </Link>
                   <Link
@@ -436,7 +476,7 @@ export function PublicHeader() {
                     onClick={() => setMobileMenuOpen(false)}
                     className="flex min-h-[44px] items-center gap-2.5 rounded-input border-2 border-outline bg-white px-3.5 py-2.5 text-sm font-bold text-ink shadow-sticker-sm"
                   >
-                    <LayoutDashboard className="h-4 w-4 shrink-0 text-red-600" />
+                    <LayoutDashboard className="h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
                     <span>{t.nav.adminArea}</span>
                   </Link>
                   <Link
@@ -444,7 +484,7 @@ export function PublicHeader() {
                     onClick={() => setMobileMenuOpen(false)}
                     className="flex min-h-[44px] items-center gap-2.5 rounded-input border-2 border-outline bg-white px-3.5 py-2.5 text-sm font-bold text-ink shadow-sticker-sm"
                   >
-                    <UserCheck className="h-4 w-4 shrink-0 text-red-600" />
+                    <UserCheck className="h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
                     <span>{t.nav.playerPortal}</span>
                   </Link>
                   <Link
@@ -452,7 +492,7 @@ export function PublicHeader() {
                     onClick={() => setMobileMenuOpen(false)}
                     className="flex min-h-[44px] items-center gap-2.5 rounded-input border-2 border-outline bg-white px-3.5 py-2.5 text-sm font-bold text-ink shadow-sticker-sm"
                   >
-                    <LogIn className="h-4 w-4 shrink-0 text-red-600" />
+                    <LogIn className="h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
                     <span>{t.nav.login}</span>
                   </Link>
                 </div>

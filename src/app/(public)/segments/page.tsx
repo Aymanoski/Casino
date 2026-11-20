@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { SegmentsLibraryView } from '@/components/public';
+import { SegmentsLibraryView } from '@/components/public/SegmentsLibraryView';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function SegmentsPage() {

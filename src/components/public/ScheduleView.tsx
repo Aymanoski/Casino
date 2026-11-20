@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -38,7 +38,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LiveBadge, PlayerAvatar } from '@/components/brand';
+import { LiveBadge } from '@/components/brand/LiveBadge';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
 import {
   formatPublicDateTime,
   formatPublicDayHeading,
@@ -61,6 +62,8 @@ interface ScheduleDataset {
 type GroupMode = 'day' | 'round';
 type StatusFilter = 'all' | GameStatus;
 
+const SCHEDULE_PAGE_STEP = 24;
+
 export function ScheduleView() {
   const { lang } = useI18n();
 
@@ -70,6 +73,8 @@ export function ScheduleView() {
   const [groupMode, setGroupMode] = useState<GroupMode>('day');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearch = useDeferredValue(searchQuery);
+  const [visibleLimit, setVisibleLimit] = useState(SCHEDULE_PAGE_STEP);
   const loadSeqRef = useRef(0);
 
   const loadAll = useCallback(
@@ -108,13 +113,29 @@ export function ScheduleView() {
 
   useEffect(() => {
     void loadAll(true);
-    const unsub = realtime.subscribe('*', () => {
-      void loadAll(false);
+    const unsub = realtime.subscribe('*', (msg) => {
+      const payloadGameId = (msg.payload as { gameId?: string } | undefined)?.gameId;
+      if (payloadGameId === 'game-demo') return;
+      if (
+        msg.event === 'game.started' ||
+        msg.event === 'game.finished' ||
+        msg.event === 'bracket.updated' ||
+        msg.event === 'player.updated' ||
+        msg.event === 'content.updated' ||
+        msg.event === 'settings.updated' ||
+        msg.event === 'data.reset'
+      ) {
+        void loadAll(false);
+      }
     });
     return () => unsub();
   }, [loadAll]);
 
   const useArabicIndic = data?.settings.useArabicIndicDigits ?? false;
+
+  useEffect(() => {
+    setVisibleLimit(SCHEDULE_PAGE_STEP);
+  }, [groupMode, statusFilter, deferredSearch]);
 
   const maps = useMemo(() => {
     if (!data) return null;
@@ -122,7 +143,7 @@ export function ScheduleView() {
     const roundMap = new Map(data.rounds.map((r) => [r.id, r]));
     const sortedRounds = [...data.rounds].sort((a, b) => a.order - b.order);
 
-    const q = normalizeSearchText(searchQuery);
+    const q = normalizeSearchText(deferredSearch);
     const filteredGames = [...data.games]
       .filter((g) => {
         if (statusFilter !== 'all' && g.status !== statusFilter) return false;
@@ -146,6 +167,8 @@ export function ScheduleView() {
           new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
       );
 
+    const visibleGames = filteredGames.slice(0, visibleLimit);
+
     // Group by calendar day
     const dayGroups: Array<{
       key: string;
@@ -155,7 +178,7 @@ export function ScheduleView() {
     }> = [];
     const dayLookup = new Map<string, number>();
 
-    for (const g of filteredGames) {
+    for (const g of visibleGames) {
       const key = getLocalDayKey(g.scheduledAt);
       const existingIdx = dayLookup.get(key);
       if (existingIdx !== undefined) {
@@ -175,7 +198,7 @@ export function ScheduleView() {
     const roundGroups = sortedRounds
       .map((round) => ({
         round,
-        games: filteredGames.filter((g) => g.roundId === round.id),
+        games: visibleGames.filter((g) => g.roundId === round.id),
       }))
       .filter((rg) => rg.games.length > 0);
 
@@ -190,11 +213,12 @@ export function ScheduleView() {
       playerMap,
       roundMap,
       filteredGames,
+      visibleGames,
       dayGroups,
       roundGroups,
       statusCounts,
     };
-  }, [data, statusFilter, searchQuery, lang, useArabicIndic]);
+  }, [data, statusFilter, deferredSearch, visibleLimit, lang, useArabicIndic]);
 
   if (loading) {
     return (
@@ -285,8 +309,8 @@ export function ScheduleView() {
         </div>
 
         {/* Table Name & 3 Players */}
-        <div className="space-y-3">
-          <h3 className="font-display text-lg sm:text-xl text-red-900 leading-snug">
+        <div className="min-w-0 space-y-3">
+          <h3 className="font-display text-lg sm:text-xl text-red-900 leading-snug break-words">
             {localizeText(lang, game.tableName, game.tableNameAr)}
           </h3>
 
@@ -389,15 +413,15 @@ export function ScheduleView() {
         compact
         meta={
           <>
-            <Badge variant="white">
+            <Badge variant="white" className="max-w-full min-w-0">
               <Calendar className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
-              <span>
+              <span className="truncate">
                 {localizeText(lang, settings.eventDates, settings.eventDatesAr)}
               </span>
             </Badge>
-            <Badge variant="white">
+            <Badge variant="white" className="max-w-full min-w-0">
               <MapPin className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
-              <span>{localizeText(lang, settings.venue, settings.venueAr)}</span>
+              <span className="truncate">{localizeText(lang, settings.venue, settings.venueAr)}</span>
             </Badge>
           </>
         }
@@ -574,20 +598,31 @@ export function ScheduleView() {
                       ? 'ابحث عن طاولة أو متسابق...'
                       : 'Search table name or player...'
                   }
-                  className="ps-10 pe-10"
+                  className="ps-10 pe-12"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery('')}
                     aria-label={lang === 'ar' ? 'مسح البحث' : 'Clear search'}
-                    className="absolute end-1 top-1/2 -translate-y-1/2 inline-flex h-10 w-10 items-center justify-center rounded-pill text-ink-muted hover:text-ink"
+                    className="absolute end-0.5 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-pill text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-4 w-4" aria-hidden="true" />
                   </button>
                 )}
               </div>
             </div>
+          </div>
+
+          <div
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className="text-xs sm:text-sm font-bold text-ink-muted"
+          >
+            {lang === 'ar'
+              ? `عرض ${formatNumber(maps.visibleGames.length, { useArabicIndicDigits: useArabicIndic })} من ${formatNumber(maps.filteredGames.length, { useArabicIndicDigits: useArabicIndic })} جلسة`
+              : `Showing ${formatNumber(maps.visibleGames.length, { useArabicIndicDigits: useArabicIndic })} of ${formatNumber(maps.filteredGames.length, { useArabicIndicDigits: useArabicIndic })} sessions`}
           </div>
 
           {/* Schedule Groups */}
@@ -683,6 +718,22 @@ export function ScheduleView() {
                   </div>
                 </section>
               ))}
+            </div>
+          )}
+
+          {maps.visibleGames.length < maps.filteredGames.length && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => setVisibleLimit((n) => n + SCHEDULE_PAGE_STEP)}
+              >
+                <span>
+                  {lang === 'ar'
+                    ? `عرض المزيد (${formatNumber(maps.filteredGames.length - maps.visibleGames.length, { useArabicIndicDigits: useArabicIndic })} متبقية)`
+                    : `Load more sessions (${formatNumber(maps.filteredGames.length - maps.visibleGames.length, { useArabicIndicDigits: useArabicIndic })} remaining)`}
+                </span>
+              </Button>
             </div>
           )}
         </div>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { SkipLink } from '@/components/layout/SkipLink';
-import { BigScreenGameView } from '@/components/screen';
+import { BigScreenGameView } from '@/components/screen/BigScreenGameView';
 
 export default async function BigScreenGamePage({
   params,

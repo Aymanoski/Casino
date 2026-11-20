@@ -55,14 +55,14 @@ import {
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
 import {
-  AnimatedNumber,
   BracketNode,
   BracketTrack,
-  LiveBadge,
-  PlayerAvatar,
   type BracketPlayerSlot,
-} from '@/components/brand';
+} from '@/components/brand/BracketNode';
+import { LiveBadge } from '@/components/brand/LiveBadge';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
 import {
   computeGameTotalsFromEvents,
   formatPublicDateTime,
@@ -95,9 +95,19 @@ export function BracketInteractiveView() {
   const [highlightedPlayerId, setHighlightedPlayerId] = useState<string>('');
   const [mobileRoundId, setMobileRoundId] = useState<string>('');
   const [mobileShowFullTree, setMobileShowFullTree] = useState(false);
+  const [isDesktop, setIsDesktop] = useState<boolean>(true);
 
   const loadSeqRef = useRef(0);
   const initializedFromQueryRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mql = window.matchMedia('(min-width: 1024px)');
+    const sync = () => setIsDesktop(mql.matches);
+    sync();
+    mql.addEventListener('change', sync);
+    return () => mql.removeEventListener('change', sync);
+  }, []);
 
   const loadAll = useCallback(
     async (showSpinner = false) => {
@@ -144,7 +154,9 @@ export function BracketInteractiveView() {
 
   useEffect(() => {
     void loadAll(true);
-    const unsub = realtime.subscribe('*', () => {
+    const unsub = realtime.subscribe('*', (msg) => {
+      const payloadGameId = (msg.payload as { gameId?: string } | undefined)?.gameId;
+      if (payloadGameId === 'game-demo' || msg.event === 'timer.updated') return;
       void loadAll(false);
     });
     return () => unsub();
@@ -482,7 +494,12 @@ export function BracketInteractiveView() {
               </div>
 
               {highlightedPlayer && (
-                <Badge variant="info" className="self-start sm:self-center">
+                <Badge
+                  variant="info"
+                  role="status"
+                  aria-live="polite"
+                  className="self-start sm:self-center"
+                >
                   <UserCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   <span>
                     {formatNumber(highlightedGamesCount, {
@@ -526,97 +543,100 @@ export function BracketInteractiveView() {
             />
           ) : (
             <>
-              {/* MOBILE / SMALL TABLET ROUND FOCUS (< lg) */}
-              <div className="space-y-4 lg:hidden">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Tabs
-                    value={mobileRoundId}
-                    onValueChange={(v) => {
-                      setMobileRoundId(v);
-                      setMobileShowFullTree(false);
-                    }}
-                    className="w-full"
-                  >
-                    <TabsList
-                      aria-label={
-                        lang === 'ar' ? 'اختيار الجولة' : 'Select tournament round'
-                      }
+              {/* MOBILE / SMALL TABLET ROUND FOCUS (< lg) — Mounted only when viewport < 1024px to avoid duplicate interactive DOM */}
+              {!isDesktop && (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Tabs
+                      value={mobileRoundId}
+                      onValueChange={(v) => {
+                        setMobileRoundId(v);
+                        setMobileShowFullTree(false);
+                      }}
+                      className="w-full"
                     >
-                      {maps.sortedRounds.map((r) => {
-                        const rGames = maps.gamesByRound.get(r.id) ?? [];
-                        const hasLive = rGames.some((g) => g.status === 'live');
+                      <TabsList
+                        aria-label={
+                          lang === 'ar' ? 'اختيار الجولة' : 'Select tournament round'
+                        }
+                      >
+                        {maps.sortedRounds.map((r) => {
+                          const rGames = maps.gamesByRound.get(r.id) ?? [];
+                          const hasLive = rGames.some((g) => g.status === 'live');
+                          return (
+                            <TabsTrigger key={r.id} value={r.id}>
+                              {hasLive && (
+                                <span
+                                  className="h-2 w-2 rounded-pill bg-gold-400"
+                                  aria-hidden="true"
+                                />
+                              )}
+                              <span>{localizeText(lang, r.name.en, r.name.ar)}</span>
+                            </TabsTrigger>
+                          );
+                        })}
+                      </TabsList>
+                    </Tabs>
+
+                    <Button
+                      variant="calm"
+                      size="sm"
+                      onClick={() => setMobileShowFullTree((v) => !v)}
+                      className="ms-auto"
+                    >
+                      <LayoutGrid className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span>
+                        {mobileShowFullTree
+                          ? lang === 'ar'
+                            ? 'العودة لعرض الجولة'
+                            : 'Back to Round Focus'
+                          : lang === 'ar'
+                            ? 'عرض الشجرة الكاملة'
+                            : 'View Full Tree'}
+                      </span>
+                    </Button>
+                  </div>
+
+                  {!mobileShowFullTree && (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {(maps.gamesByRound.get(mobileRoundId) ?? []).map((game) => {
+                        const round = maps.roundMap.get(game.roundId);
                         return (
-                          <TabsTrigger key={r.id} value={r.id}>
-                            {hasLive && (
-                              <span
-                                className="h-2 w-2 rounded-pill bg-gold-400"
-                                aria-hidden="true"
-                              />
+                          <BracketNode
+                            key={game.id}
+                            tableName={localizeText(
+                              lang,
+                              game.tableName,
+                              game.tableNameAr
                             )}
-                            <span>{localizeText(lang, r.name.en, r.name.ar)}</span>
-                          </TabsTrigger>
+                            roundLabel={
+                              round
+                                ? localizeText(lang, round.name.en, round.name.ar)
+                                : undefined
+                            }
+                            metaLabel={formatPublicDateTime(
+                              game.scheduledAt,
+                              lang,
+                              useArabicIndic
+                            )}
+                            status={game.status}
+                            isFinal={game.isFinal}
+                            players={buildBracketSlots(game)}
+                            activeBuzzPlayerId={game.activeBuzzPlayerId}
+                            highlightedPlayerId={highlightedPlayerId || null}
+                            useArabicIndicDigits={useArabicIndic}
+                            onSelect={() => setSelectedGameId(game.id)}
+                          />
                         );
                       })}
-                    </TabsList>
-                  </Tabs>
-
-                  <Button
-                    variant="calm"
-                    size="sm"
-                    onClick={() => setMobileShowFullTree((v) => !v)}
-                    className="ms-auto"
-                  >
-                    <LayoutGrid className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span>
-                      {mobileShowFullTree
-                        ? lang === 'ar'
-                          ? 'العودة لعرض الجولة'
-                          : 'Back to Round Focus'
-                        : lang === 'ar'
-                          ? 'عرض الشجرة الكاملة'
-                          : 'View Full Tree'}
-                    </span>
-                  </Button>
+                    </div>
+                  )}
                 </div>
-
-                {!mobileShowFullTree && (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {(maps.gamesByRound.get(mobileRoundId) ?? []).map((game) => {
-                      const round = maps.roundMap.get(game.roundId);
-                      return (
-                        <BracketNode
-                          key={game.id}
-                          tableName={localizeText(
-                            lang,
-                            game.tableName,
-                            game.tableNameAr
-                          )}
-                          roundLabel={
-                            round
-                              ? localizeText(lang, round.name.en, round.name.ar)
-                              : undefined
-                          }
-                          metaLabel={formatPublicDateTime(
-                            game.scheduledAt,
-                            lang,
-                            useArabicIndic
-                          )}
-                          status={game.status}
-                          isFinal={game.isFinal}
-                          players={buildBracketSlots(game)}
-                          activeBuzzPlayerId={game.activeBuzzPlayerId}
-                          highlightedPlayerId={highlightedPlayerId || null}
-                          useArabicIndicDigits={useArabicIndic}
-                          onSelect={() => setSelectedGameId(game.id)}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              )}
 
               {/* FULL INTERACTIVE CONNECTED TREE (lg+ always, or toggled on mobile) */}
-              <div className={cn(mobileShowFullTree ? 'block' : 'hidden lg:block')}>
+              {(isDesktop || mobileShowFullTree) && (
+                <div>
                 <BracketTrack
                   title={
                     lang === 'ar'
@@ -721,7 +741,8 @@ export function BracketInteractiveView() {
                     })}
                   </div>
                 </BracketTrack>
-              </div>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -767,7 +788,7 @@ export function BracketInteractiveView() {
                   )}
                 </div>
 
-                <DialogTitle>
+                <DialogTitle className="break-words">
                   {localizeText(
                     lang,
                     selectedGameDetails.game.tableName,

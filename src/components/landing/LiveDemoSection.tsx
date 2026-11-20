@@ -34,17 +34,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton, PlayerPanelSkeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
-import {
-  AnimatedNumber,
-  LiveBadge,
-  MarqueeBulbs,
-  PlayerAvatar,
-  ScoreboardRow,
-  SectionHeading,
-  StageDivider,
-  SunburstStage,
-  TimerRing,
-} from '@/components/brand';
+import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
+import { LiveBadge } from '@/components/brand/LiveBadge';
+import { MarqueeBulbs } from '@/components/brand/MarqueeBulbs';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
+import { ScoreboardRow } from '@/components/brand/ScoreboardRow';
+import { SectionHeading } from '@/components/brand/SectionHeading';
+import { StageDivider, SunburstStage } from '@/components/brand/SunburstStage';
+import { TimerRing } from '@/components/brand/TimerRing';
 
 const DEMO_GAME_ID = 'game-demo';
 const DEMO_SCORER_ID = 'user-scorer-1';
@@ -73,15 +70,17 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
   const [displayRemainingSec, setDisplayRemainingSec] = useState<number>(32);
   const [loading, setLoading] = useState<boolean>(true);
   const [busyAction, setBusyAction] = useState<boolean>(false);
+  const [liveOfficialGameId, setLiveOfficialGameId] = useState<string | null>(null);
 
   const loadDemoState = useCallback(async () => {
-    const [demoGame, allPlayers, allSegments, gameTotals, gameEvents] =
+    const [demoGame, allPlayers, allSegments, gameTotals, gameEvents, liveGames] =
       await Promise.all([
         gameRepo.get(DEMO_GAME_ID),
         playerRepo.list({ includeHost: false }),
         segmentRepo.list(),
         scoreRepo.getGameTotals(DEMO_GAME_ID),
         scoreRepo.list({ gameId: DEMO_GAME_ID, order: 'newest' }),
+        gameRepo.getLiveGames(),
       ]);
 
     const resolvedGame =
@@ -89,12 +88,11 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
 
     if (resolvedGame) {
       setGame(resolvedGame);
-      if (
-        !resolvedGame.playerIds.includes(selectedPlayerId) &&
-        resolvedGame.playerIds[0]
-      ) {
-        setSelectedPlayerId(resolvedGame.playerIds[0]);
-      }
+      setSelectedPlayerId((prev) =>
+        resolvedGame.playerIds.includes(prev)
+          ? prev
+          : (resolvedGame.playerIds[0] ?? prev)
+      );
 
       if (resolvedGame.timer?.status === 'running' && resolvedGame.timer.endsAt) {
         const left = Math.max(
@@ -109,12 +107,13 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
       }
     }
 
+    setLiveOfficialGameId(liveGames[0]?.id ?? null);
     setPlayers(allPlayers);
     setSegments(allSegments);
     setTotals(gameTotals);
     setEvents(gameEvents);
     setLoading(false);
-  }, [selectedPlayerId]);
+  }, []);
 
   useEffect(() => {
     loadDemoState();
@@ -994,7 +993,7 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
 
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <Button variant="gold" size="sm" asChild>
-                          <Link href="/scorer/game-11">
+                          <Link href={liveOfficialGameId ? `/scorer/${liveOfficialGameId}` : '/scorer'}>
                             <Tablet className="h-4 w-4 shrink-0" aria-hidden="true" />
                             <span>
                               {lang === 'ar'
@@ -1004,12 +1003,12 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
                           </Link>
                         </Button>
                         <Button variant="secondary" size="sm" asChild>
-                          <Link href="/screen/game-11">
+                          <Link href={liveOfficialGameId ? `/screen/${liveOfficialGameId}` : '/screen/leaderboard'}>
                             <MonitorPlay className="h-4 w-4 shrink-0" aria-hidden="true" />
                             <span>
                               {lang === 'ar'
                                 ? 'شاهد المباراة المباشرة'
-                                : 'Watch Live Table B'}
+                                : 'Watch Live Big Screen'}
                             </span>
                           </Link>
                         </Button>

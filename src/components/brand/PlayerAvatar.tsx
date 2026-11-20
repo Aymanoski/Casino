@@ -47,7 +47,7 @@ function getInitials(name: string): string {
  * Generated geometric SVG pattern + initials in a thick outlined ring per DESIGN.md §6 & §9.
  * Uses only brand palette colors (red, maroon, blue, gold) with zero real-person photos.
  */
-export function PlayerAvatar({
+export const PlayerAvatar = React.memo(function PlayerAvatar({
   name,
   avatarSeed,
   size = 'md',
@@ -88,7 +88,7 @@ export function PlayerAvatar({
       {/* Thick Outlined Ring */}
       <div
         className={cn(
-          'relative flex h-full w-full items-center justify-center overflow-hidden rounded-pill border-[2.5px] bg-gradient-to-br transition-all duration-200',
+          'relative flex h-full w-full items-center justify-center overflow-hidden rounded-pill border-[2.5px] bg-gradient-to-br transition-[box-shadow,border-color] duration-200',
           bgGradient,
           isHost
             ? 'border-outline ring-2 ring-gold-300 shadow-glow-gold'
@@ -191,4 +191,4 @@ export function PlayerAvatar({
       )}
     </div>
   );
-}
+});

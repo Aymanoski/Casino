@@ -5,13 +5,10 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Crown, Minus, Plus, Trophy, Zap } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { cn, formatNumber } from '@/lib/utils';
-import {
-  AnimatedNumber,
-  MarqueeBulbs,
-  PlayerAvatar,
-  ScoreChip,
-  type ScoreChipTone,
-} from '@/components/brand';
+import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
+import { MarqueeBulbs } from '@/components/brand/MarqueeBulbs';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
+import { ScoreChip, type ScoreChipTone } from '@/components/brand/ScoreChip';
 
 export interface BroadcastDeltaEvent {
   id: string | number;

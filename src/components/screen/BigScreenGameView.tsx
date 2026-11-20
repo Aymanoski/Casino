@@ -37,15 +37,13 @@ import type {
   Settings,
 } from '@/lib/schemas';
 import { cn, formatNumber, localizeText } from '@/lib/utils';
-import {
-  AnimatedNumber,
-  LiveBadge,
-  MarqueeBulbs,
-  PlayerAvatar,
-  PlayingDice,
-  ScoreChip,
-  TimerRing,
-} from '@/components/brand';
+import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
+import { LiveBadge } from '@/components/brand/LiveBadge';
+import { MarqueeBulbs } from '@/components/brand/MarqueeBulbs';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
+import { PlayingDice } from '@/components/brand/GameMotifs';
+import { ScoreChip } from '@/components/brand/ScoreChip';
+import { TimerRing } from '@/components/brand/TimerRing';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BroadcastFrame } from './BroadcastFrame';

@@ -14,7 +14,8 @@ import {
 import { useI18n } from '@/lib/i18n';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { SectionHeading, StageDivider, SunburstStage } from '@/components/brand';
+import { SectionHeading } from '@/components/brand/SectionHeading';
+import { StageDivider, SunburstStage } from '@/components/brand/SunburstStage';
 
 export function FeaturesSection() {
   const { lang } = useI18n();
@@ -164,13 +165,13 @@ export function FeaturesSection() {
 
               <div className="flex flex-wrap items-center gap-2.5">
                 <Button variant="red" size="md" asChild>
-                  <Link href="/scorer/game-11">
+                  <Link href="/scorer">
                     <Tablet className="h-4 w-4 shrink-0" aria-hidden="true" />
                     <span>{lang === 'ar' ? 'لوحة الحكم' : 'Scorer Console'}</span>
                   </Link>
                 </Button>
                 <Button variant="info" size="md" asChild>
-                  <Link href="/screen/game-11">
+                  <Link href="/screen/leaderboard">
                     <MonitorPlay className="h-4 w-4 shrink-0" aria-hidden="true" />
                     <span>{lang === 'ar' ? 'شاشة العرض' : 'Big Screen'}</span>
                   </Link>

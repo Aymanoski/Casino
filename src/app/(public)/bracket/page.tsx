@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { BracketInteractiveView } from '@/components/public';
+import { BracketInteractiveView } from '@/components/public/BracketInteractiveView';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function BracketPage() {

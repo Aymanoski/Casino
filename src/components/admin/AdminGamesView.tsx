@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {
   Crown,
@@ -38,14 +39,18 @@ import { ConfirmDialog } from '@/components/ui/dialog';
 import { Skeleton, TableRowSkeleton } from '@/components/ui/skeleton';
 import { DataTable, type DataTableColumn } from '@/components/ui/table';
 import { useToast } from '@/components/ui/toast';
-import { LiveBadge } from '@/components/brand';
+import { LiveBadge } from '@/components/brand/LiveBadge';
 import {
   AdminErrorBanner,
   AdminPageHeader,
   AdminStatChipStrip,
 } from './AdminPageHeader';
-import { GameEditorDialog } from './GameEditorDialog';
 import { formatAdminTimeShort, getGameStatusMeta } from './adminFormatters';
+
+const GameEditorDialog = dynamic(
+  () => import('./GameEditorDialog').then((m) => ({ default: m.GameEditorDialog })),
+  { ssr: false }
+);
 
 export function AdminGamesView() {
   const { user } = useAuth();
@@ -586,17 +591,19 @@ export function AdminGamesView() {
         }
       />
 
-      <GameEditorDialog
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        game={editingGame}
-        rounds={rounds}
-        players={players}
-        scorers={scorers}
-        segments={segments}
-        defaultPlayersPerGame={settings?.bracketConfig.playersPerGame ?? 3}
-        onSave={handleSaveGame}
-      />
+      {editorOpen && (
+        <GameEditorDialog
+          open={editorOpen}
+          onOpenChange={setEditorOpen}
+          game={editingGame}
+          rounds={rounds}
+          players={players}
+          scorers={scorers}
+          segments={segments}
+          defaultPlayersPerGame={settings?.bracketConfig.playersPerGame ?? 3}
+          onSave={handleSaveGame}
+        />
+      )}
     </div>
   );
 }

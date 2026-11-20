@@ -7,14 +7,11 @@ import { useI18n } from '@/lib/i18n';
 import type { Player } from '@/lib/schemas';
 import { localizeText } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import {
-  CrescentStar,
-  MarqueeBulbs,
-  PlayingCardMotif,
-  PlayingDice,
-  Spotlight,
-  SunburstStage,
-} from '@/components/brand';
+import { CrescentStar } from '@/components/brand/CrescentStar';
+import { MarqueeBulbs } from '@/components/brand/MarqueeBulbs';
+import { PlayingCardMotif, PlayingDice } from '@/components/brand/GameMotifs';
+import { Spotlight } from '@/components/brand/Spotlight';
+import { SunburstStage } from '@/components/brand/SunburstStage';
 
 export interface ClosingCtaSectionProps {
   marwanPlayer: Player | null;

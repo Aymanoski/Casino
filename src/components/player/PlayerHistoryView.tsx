@@ -39,12 +39,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  AnimatedNumber,
-  LiveBadge,
-  PlayerAvatar,
-  ScoreChip,
-} from '@/components/brand';
+import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
+import { LiveBadge } from '@/components/brand/LiveBadge';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
+import { ScoreChip } from '@/components/brand/ScoreChip';
 import {
   computeGameTotalsFromEvents,
   formatPublicFullDateTime,
@@ -66,6 +64,8 @@ interface HistoryDataset {
 
 type StatusFilter = 'all' | GameStatus;
 
+const HISTORY_PAGE_STEP = 15;
+
 export function PlayerHistoryView() {
   const { user } = useAuth();
   const { lang } = useI18n();
@@ -78,6 +78,7 @@ export function PlayerHistoryView() {
   const [roundFilter, setRoundFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [visibleLimit, setVisibleLimit] = useState<number>(HISTORY_PAGE_STEP);
   const [expandedGames, setExpandedGames] = useState<Record<string, boolean>>({});
 
   const loadSeqRef = useRef(0);
@@ -119,8 +120,21 @@ export function PlayerHistoryView() {
 
   useEffect(() => {
     void loadAll(true);
-    const unsub = realtime.subscribe('*', () => {
-      void loadAll(false);
+    const unsub = realtime.subscribe('*', (msg) => {
+      const payloadGameId = (msg.payload as { gameId?: string } | undefined)?.gameId;
+      if (payloadGameId === 'game-demo') return;
+      if (
+        msg.event === 'score.changed' ||
+        msg.event === 'game.started' ||
+        msg.event === 'game.finished' ||
+        msg.event === 'bracket.updated' ||
+        msg.event === 'player.updated' ||
+        msg.event === 'segment.updated' ||
+        msg.event === 'settings.updated' ||
+        msg.event === 'data.reset'
+      ) {
+        void loadAll(false);
+      }
     });
     return () => unsub();
   }, [loadAll]);
@@ -142,12 +156,17 @@ export function PlayerHistoryView() {
   const handleSelectPreviewPlayer = useCallback((nextId: string) => {
     setPreviewPlayerId(nextId);
     setExpandedGames({});
+    setVisibleLimit(HISTORY_PAGE_STEP);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       url.searchParams.set('player', nextId);
       window.history.replaceState({}, '', url.toString());
     }
   }, []);
+
+  useEffect(() => {
+    setVisibleLimit(HISTORY_PAGE_STEP);
+  }, [roundFilter, statusFilter, sortOrder]);
 
   const activePlayerId = useMemo(() => {
     if (user?.role === 'player' && user.playerId) {
@@ -341,7 +360,7 @@ export function PlayerHistoryView() {
               size="lg"
             />
             <div className="min-w-0">
-              <h1 className="font-display text-fluid-2xl sm:text-fluid-3xl text-red-900 leading-tight">
+              <h1 className="font-display text-fluid-2xl sm:text-fluid-3xl text-red-900 leading-tight break-words">
                 {lang === 'ar'
                   ? `سجل مباريات ${localizeText(lang, player.fullName, player.fullNameAr)}`
                   : `${localizeText(lang, player.fullName, player.fullNameAr)} — Match History`}
@@ -356,10 +375,9 @@ export function PlayerHistoryView() {
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <ScoreChip
-              value={formatNumber(player.stats.totalPoints, {
-                useArabicIndicDigits: useArabicIndic,
-              })}
-              tone="gold"
+              value={player.stats.totalPoints}
+              tone={player.stats.totalPoints < 0 ? 'negative' : 'gold'}
+              useArabicIndicDigits={useArabicIndic}
               size="md"
             />
             <div className="text-start">
@@ -493,6 +511,17 @@ export function PlayerHistoryView() {
       </div>
 
       {/* Game History Cards */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="text-xs sm:text-sm font-bold text-ink-muted"
+      >
+        {lang === 'ar'
+          ? `عرض ${formatNumber(Math.min(visibleLimit, enrichedGames?.length ?? 0), { useArabicIndicDigits: useArabicIndic })} من ${formatNumber(enrichedGames?.length ?? 0, { useArabicIndicDigits: useArabicIndic })} مباراة`
+          : `Showing ${formatNumber(Math.min(visibleLimit, enrichedGames?.length ?? 0), { useArabicIndicDigits: useArabicIndic })} of ${formatNumber(enrichedGames?.length ?? 0, { useArabicIndicDigits: useArabicIndic })} matches`}
+      </div>
+
       {!enrichedGames || enrichedGames.length === 0 ? (
         <EmptyState
           title={
@@ -529,7 +558,7 @@ export function PlayerHistoryView() {
         />
       ) : (
         <div className="space-y-4">
-          {enrichedGames.map(
+          {enrichedGames.slice(0, visibleLimit).map(
             ({
               game,
               round,
@@ -601,7 +630,7 @@ export function PlayerHistoryView() {
                         )}
                       </div>
 
-                      <h2 className="font-display text-xl text-red-900 leading-snug">
+                      <h2 className="font-display text-xl text-red-900 leading-snug break-words">
                         {localizeText(lang, game.tableName, game.tableNameAr)}
                       </h2>
 
@@ -677,7 +706,7 @@ export function PlayerHistoryView() {
                               <div
                                 key={`${p.id}-${idx}`}
                                 className={cn(
-                                  'inline-flex items-center gap-2 rounded-pill border px-3 py-1.5 text-xs font-bold',
+                                  'inline-flex max-w-full min-w-0 items-center gap-2 rounded-pill border px-3 py-1.5 text-xs font-bold',
                                   isMe
                                     ? 'border-blue-600 bg-blue-100 text-blue-800'
                                     : p.isHost
@@ -685,12 +714,12 @@ export function PlayerHistoryView() {
                                       : 'border-border-paper bg-white text-ink'
                                 )}
                               >
-                                <span className="tabular-nums text-red-700">
+                                <span className="shrink-0 tabular-nums text-red-700">
                                   #{formatNumber(idx + 1, { useArabicIndicDigits: useArabicIndic })}
                                 </span>
-                                <span>{p.name}</span>
+                                <span className="truncate">{p.name}</span>
                                 {game.status !== 'scheduled' && (
-                                  <span className="font-score text-sm font-black tabular-nums">
+                                  <span className="shrink-0 font-score text-sm font-black tabular-nums">
                                     {formatNumber(p.score, {
                                       useArabicIndicDigits: useArabicIndic,
                                     })}
@@ -867,7 +896,7 @@ export function PlayerHistoryView() {
                                                     : 'Preset'}
                                             </span>
                                             {ev.note && (
-                                              <span className="text-ink font-medium">
+                                              <span className="min-w-0 break-all sm:break-words text-ink font-medium">
                                                 {ev.note}
                                               </span>
                                             )}
@@ -895,6 +924,22 @@ export function PlayerHistoryView() {
                 </article>
               );
             }
+          )}
+
+          {enrichedGames.length > visibleLimit && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => setVisibleLimit((n) => n + HISTORY_PAGE_STEP)}
+              >
+                <span>
+                  {lang === 'ar'
+                    ? `عرض المزيد (${formatNumber(enrichedGames.length - visibleLimit, { useArabicIndicDigits: useArabicIndic })} متبقية)`
+                    : `Load more matches (${formatNumber(enrichedGames.length - visibleLimit, { useArabicIndicDigits: useArabicIndic })} remaining)`}
+                </span>
+              </Button>
+            </div>
           )}
         </div>
       )}

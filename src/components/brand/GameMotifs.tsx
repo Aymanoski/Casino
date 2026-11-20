@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 /* -------------------------------------------------------------------------- */
@@ -57,7 +56,7 @@ const PIP_POSITIONS: Record<number, Array<[number, number]>> = {
   ],
 };
 
-export function PlayingDice({
+export const PlayingDice = React.memo(function PlayingDice({
   value = 5,
   size = 'md',
   tilt = -8,
@@ -65,7 +64,6 @@ export function PlayingDice({
   accent = 'red',
   className,
 }: PlayingDiceProps) {
-  const prefersReducedMotion = useReducedMotion();
   const px = DICE_SIZE[size];
   const pips = PIP_POSITIONS[value] ?? PIP_POSITIONS[5];
   const pipColor =
@@ -77,22 +75,26 @@ export function PlayingDice({
           ? '#C4163A'
           : '#4F0716';
 
-  const shouldFloat = float && !prefersReducedMotion;
+  const floatStyle = (
+    float
+      ? {
+          '--motif-tilt': `${tilt}deg`,
+          '--motif-float-y': '-6px',
+          '--motif-tilt-delta': '3deg',
+          '--float-duration': '4.4s',
+          transform: `rotate(${tilt}deg)`,
+        }
+      : { transform: `rotate(${tilt}deg)` }
+  ) as React.CSSProperties;
 
   return (
-    <motion.div
-      className={cn('inline-flex shrink-0 select-none', className)}
-      style={{ rotate: tilt }}
-      animate={
-        shouldFloat
-          ? { y: [0, -6, 0], rotate: [tilt, tilt + 3, tilt] }
-          : undefined
-      }
-      transition={
-        shouldFloat
-          ? { duration: 4.4, repeat: Infinity, ease: 'easeInOut' }
-          : undefined
-      }
+    <div
+      className={cn(
+        'inline-flex shrink-0 select-none',
+        float && 'animate-motif-float',
+        className
+      )}
+      style={floatStyle}
       aria-hidden="true"
     >
       <svg
@@ -135,9 +137,9 @@ export function PlayingDice({
           />
         ))}
       </svg>
-    </motion.div>
+    </div>
   );
-}
+});
 
 /* -------------------------------------------------------------------------- */
 /* 2. Original Playing Cards & Card Fan (Sticker Style, No Gambling Motifs)   */
@@ -159,7 +161,7 @@ const CARD_DIMS = {
   lg: { w: 78, h: 108 },
 };
 
-export function PlayingCardMotif({
+export const PlayingCardMotif = React.memo(function PlayingCardMotif({
   suit = 'star',
   cornerText = 'A',
   tone = 'white',
@@ -168,29 +170,33 @@ export function PlayingCardMotif({
   float = false,
   className,
 }: PlayingCardMotifProps) {
-  const prefersReducedMotion = useReducedMotion();
   const dims = CARD_DIMS[size];
-  const shouldFloat = float && !prefersReducedMotion;
 
   const faceFill =
     tone === 'gold' ? '#FFE899' : tone === 'blue' ? '#E6EEFF' : '#FFFFFF';
   const accentFill =
     tone === 'blue' ? '#1F4FD8' : tone === 'gold' ? '#C4163A' : '#C4163A';
 
+  const floatStyle = (
+    float
+      ? {
+          '--motif-tilt': `${tilt}deg`,
+          '--motif-float-y': '-7px',
+          '--motif-tilt-delta': '-2.5deg',
+          '--float-duration': '5s',
+          transform: `rotate(${tilt}deg)`,
+        }
+      : { transform: `rotate(${tilt}deg)` }
+  ) as React.CSSProperties;
+
   return (
-    <motion.div
-      className={cn('inline-flex shrink-0 select-none', className)}
-      style={{ rotate: tilt }}
-      animate={
-        shouldFloat
-          ? { y: [0, -7, 0], rotate: [tilt, tilt - 2.5, tilt] }
-          : undefined
-      }
-      transition={
-        shouldFloat
-          ? { duration: 5, repeat: Infinity, ease: 'easeInOut' }
-          : undefined
-      }
+    <div
+      className={cn(
+        'inline-flex shrink-0 select-none',
+        float && 'animate-motif-float',
+        className
+      )}
+      style={floatStyle}
       aria-hidden="true"
     >
       <svg
@@ -283,9 +289,9 @@ export function PlayingCardMotif({
           {cornerText}
         </text>
       </svg>
-    </motion.div>
+    </div>
   );
-}
+});
 
 export function PlayingCardFan({
   className,

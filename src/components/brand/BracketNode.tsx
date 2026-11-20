@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Crown, Trophy, Zap, ZoomIn, ZoomOut } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
-import { cn, formatNumber } from '@/lib/utils';
+import { cn, formatCompactChipNumber, formatNumber } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { LiveBadge } from './LiveBadge';
 import { MarqueeBulbs } from './MarqueeBulbs';
@@ -44,7 +44,7 @@ export interface BracketNodeProps {
  * live node glowing & pulsing, and Marwan's final node a distinct "boss" node with
  * marquee bulbs and the golden seat.
  */
-export function BracketNode({
+export const BracketNode = React.memo(function BracketNode({
   tableName,
   roundLabel,
   status,
@@ -62,11 +62,32 @@ export function BracketNode({
     highlightedPlayerId && players.some((p) => p.id === highlightedPlayerId)
   );
 
+  const statusAria =
+    status === 'live'
+      ? lang === 'ar'
+        ? 'مباشر الآن'
+        : 'Live now'
+      : status === 'finished'
+        ? lang === 'ar'
+          ? 'منتهية'
+          : 'Finished'
+        : lang === 'ar'
+          ? 'قادمة'
+          : 'Upcoming';
+
+  const nodeAriaLabel = onSelect
+    ? lang === 'ar'
+      ? `${tableName} — ${statusAria}. اضغط لعرض التفاصيل`
+      : `${tableName} — ${statusAria}. Open match details`
+    : undefined;
+
   const innerNode = (
     <div
       onClick={onSelect}
       role={onSelect ? 'button' : undefined}
       tabIndex={onSelect ? 0 : undefined}
+      aria-label={nodeAriaLabel}
+      aria-haspopup={onSelect ? 'dialog' : undefined}
       onKeyDown={
         onSelect
           ? (e) => {
@@ -78,7 +99,7 @@ export function BracketNode({
           : undefined
       }
       className={cn(
-        '@container relative flex w-full min-w-0 flex-col gap-2.5 rounded-card border-[2.5px] border-outline bg-white p-3.5 @xs:p-4 text-ink transition-all duration-200',
+        '@container relative flex w-full min-w-0 flex-col gap-2.5 rounded-card border-[2.5px] border-outline bg-white p-3.5 @xs:p-4 text-ink transition-[box-shadow,border-color,transform] duration-200',
         isFinal
           ? 'bg-white bg-gradient-to-b from-gold-200/50 via-paper to-white shadow-sticker-lg'
           : status === 'live'
@@ -210,11 +231,14 @@ export function BracketNode({
               <div className="shrink-0 text-end font-score text-base @xs:text-lg font-black tabular-nums">
                 {typeof slot.score === 'number' ? (
                   <span
+                    title={formatNumber(slot.score, { useArabicIndicDigits })}
                     className={cn(
                       slot.isHost || highlighted ? 'text-red-900' : 'text-ink'
                     )}
                   >
-                    {formatNumber(slot.score, { useArabicIndicDigits })}
+                    {Math.abs(slot.score) >= 100_000
+                      ? `${slot.score < 0 ? '−' : ''}${formatCompactChipNumber(slot.score, useArabicIndicDigits)}`
+                      : formatNumber(slot.score, { useArabicIndicDigits })}
                   </span>
                 ) : (
                   <span className="text-xs text-ink-muted">—</span>
@@ -236,7 +260,7 @@ export function BracketNode({
   }
 
   return innerNode;
-}
+});
 
 export interface BracketTrackProps {
   children: React.ReactNode;
@@ -266,29 +290,37 @@ export function BracketTrack({ children, title, className }: BracketTrackProps) 
         <div className="inline-flex items-center gap-1 rounded-button border-2 border-outline bg-white p-1 shadow-sticker-sm">
           <button
             type="button"
+            disabled={zoom <= 0.75}
             onClick={() => setZoom((z) => Math.max(0.75, Number((z - 0.15).toFixed(2))))}
             aria-label={lang === 'ar' ? 'تصغير الشجرة' : 'Zoom out bracket'}
-            className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-[10px] text-ink hover:bg-paper-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
+            className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-[10px] text-ink hover:bg-paper-2 disabled:opacity-40 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
           >
-            <ZoomOut className="h-4 w-4" />
+            <ZoomOut className="h-4 w-4" aria-hidden="true" />
           </button>
-          <span className="min-w-[48px] text-center text-xs font-extrabold tabular-nums text-red-900">
-            {Math.round(zoom * 100)}%
-          </span>
           <button
             type="button"
+            onClick={() => setZoom(1)}
+            disabled={zoom === 1}
+            aria-label={lang === 'ar' ? 'إعادة التكبير إلى ١٠٠٪' : 'Reset zoom to 100%'}
+            className="inline-flex min-h-[44px] min-w-[52px] items-center justify-center rounded-[10px] px-2 text-center text-xs font-extrabold tabular-nums text-red-900 hover:bg-paper-2 disabled:opacity-80 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            type="button"
+            disabled={zoom >= 1.25}
             onClick={() => setZoom((z) => Math.min(1.25, Number((z + 0.15).toFixed(2))))}
             aria-label={lang === 'ar' ? 'تكبير الشجرة' : 'Zoom in bracket'}
-            className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-[10px] text-ink hover:bg-paper-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
+            className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-[10px] text-ink hover:bg-paper-2 disabled:opacity-40 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
           >
-            <ZoomIn className="h-4 w-4" />
+            <ZoomIn className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       </div>
 
-      <div className="w-full overflow-x-auto overscroll-x-contain border-y-2 border-outline bg-paper-2/70 py-4 sm:py-6 px-2 sm:px-4">
+      <div className="w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-x touch-pan-y border-y-2 border-outline bg-paper-2/70 py-4 sm:py-6 px-2 sm:px-4">
         <div
-          className="origin-top-start transition-transform duration-200"
+          className="ltr:origin-top-left rtl:origin-top-right transition-transform duration-200"
           style={
             zoom !== 1
               ? {

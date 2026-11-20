@@ -1,7 +1,6 @@
 'use client';
 
-import React from 'react';
-import { useReducedMotion } from 'framer-motion';
+import React, { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface SunburstStageProps extends React.HTMLAttributes<HTMLElement> {
@@ -14,8 +13,8 @@ export interface SunburstStageProps extends React.HTMLAttributes<HTMLElement> {
 /**
  * SunburstStage
  * Full-bleed Stage surface featuring DESIGN.md §2 repeating-conic sunburst rays,
- * warm center spotlight glow, edge maroon vignette, and optional slow rotation
- * (respecting `prefers-reduced-motion`).
+ * warm center spotlight glow, edge maroon vignette, and viewport-aware slow rotation
+ * (pauses automatically when scrolled out of view and under `prefers-reduced-motion`).
  */
 export function SunburstStage({
   variant = 'stage',
@@ -26,25 +25,42 @@ export function SunburstStage({
   children,
   ...props
 }: SunburstStageProps) {
-  const prefersReducedMotion = useReducedMotion();
-  const shouldRotate = animateRays && !prefersReducedMotion;
   const isDark = variant === 'stageDark';
+  const containerRef = useRef<HTMLElement | null>(null);
+  const [inView, setInView] = useState(true);
+
+  useEffect(() => {
+    if (!animateRays || typeof IntersectionObserver === 'undefined') return;
+    const node = containerRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry) setInView(entry.isIntersecting);
+      },
+      { rootMargin: '120px 0px' }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [animateRays]);
 
   return (
     <Tag
+      ref={containerRef as React.RefObject<never>}
       className={cn(
-        'relative overflow-hidden',
+        'relative overflow-hidden [contain:layout_paint]',
         isDark ? 'theme-stage-dark bg-red-900 text-white' : 'theme-stage bg-red-600 text-white',
         className
       )}
       {...props}
     >
-      {/* Rotating Sunburst Conic Rays Layer */}
+      {/* Rotating Sunburst Conic Rays Layer (right-sized for diagonal coverage, pauses offscreen) */}
       <div
         aria-hidden="true"
+        data-paused={animateRays && !inView ? 'true' : undefined}
         className={cn(
-          'pointer-events-none absolute left-1/2 top-1/2 h-[max(220vmax,2200px)] w-[max(220vmax,2200px)] -translate-x-1/2 -translate-y-1/2 select-none',
-          shouldRotate && 'animate-sunburst-slow'
+          'pointer-events-none absolute left-1/2 top-1/2 h-[max(175vmax,1600px)] w-[max(175vmax,1600px)] -translate-x-1/2 -translate-y-1/2 select-none',
+          animateRays && 'animate-sunburst-slow'
         )}
         style={{
           backgroundImage: isDark
@@ -100,7 +116,7 @@ const SURFACE_HEX: Record<'stage' | 'stageDark' | 'paper', string> = {
  * Angled, zig-zag, or scalloped SVG section transition between Stage and Paper
  * with a thick maroon sticker stroke per DESIGN.md §4.
  */
-export function StageDivider({
+export const StageDivider = React.memo(function StageDivider({
   variant = 'zigzag',
   from = 'stage',
   to = 'paper',
@@ -173,4 +189,4 @@ export function StageDivider({
       )}
     </div>
   );
-}
+});

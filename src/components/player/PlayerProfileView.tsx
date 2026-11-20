@@ -44,12 +44,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  AnimatedNumber,
-  LiveBadge,
-  PlayerAvatar,
-  ScoreChip,
-} from '@/components/brand';
+import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
+import { LiveBadge } from '@/components/brand/LiveBadge';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
+import { ScoreChip } from '@/components/brand/ScoreChip';
 import { getPlayerStatusMeta } from '@/components/admin/adminFormatters';
 import {
   computeGameTotalsFromEvents,
@@ -128,8 +126,21 @@ export function PlayerProfileView() {
 
   useEffect(() => {
     void loadAll(true);
-    const unsub = realtime.subscribe('*', () => {
-      void loadAll(false);
+    const unsub = realtime.subscribe('*', (msg) => {
+      const payloadGameId = (msg.payload as { gameId?: string } | undefined)?.gameId;
+      if (payloadGameId === 'game-demo') return;
+      if (
+        msg.event === 'score.changed' ||
+        msg.event === 'game.started' ||
+        msg.event === 'game.finished' ||
+        msg.event === 'bracket.updated' ||
+        msg.event === 'player.updated' ||
+        msg.event === 'segment.updated' ||
+        msg.event === 'settings.updated' ||
+        msg.event === 'data.reset'
+      ) {
+        void loadAll(false);
+      }
     });
     return () => unsub();
   }, [loadAll]);
@@ -335,7 +346,7 @@ export function PlayerProfileView() {
                 </Badge>
               </div>
               <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm font-bold text-white/95">
-                <span>
+                <span className="max-w-full truncate">
                   “{localizeText(lang, player.nickname, player.nicknameAr)}”
                 </span>
                 <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 text-xs font-semibold text-white/85">
@@ -372,7 +383,7 @@ export function PlayerProfileView() {
         aria-label={lang === 'ar' ? 'إحصائيات المتسابق' : 'Contestant statistics'}
         className="grid grid-cols-1 xs:grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4"
       >
-        <div className="flex items-center gap-3.5 rounded-card border border-border-paper bg-white p-4 shadow-soft">
+        <div className="flex min-w-0 items-center gap-3.5 rounded-card border border-border-paper bg-white p-4 shadow-soft">
           <ScoreChip
             value={`#${formatNumber(currentRank, { useArabicIndicDigits: useArabicIndic })}`}
             tone="gold"
@@ -385,17 +396,16 @@ export function PlayerProfileView() {
             <div className="text-sm font-bold text-ink tabular-nums">
               {lang === 'ar'
                 ? `من أصل ${formatNumber(totalContestants, { useArabicIndicDigits: useArabicIndic })}`
-                : `of ${totalContestants} players`}
+                : `of ${formatNumber(totalContestants, { useArabicIndicDigits: useArabicIndic })} players`}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3.5 rounded-card border border-border-paper bg-white p-4 shadow-soft">
+        <div className="flex min-w-0 items-center gap-3.5 rounded-card border border-border-paper bg-white p-4 shadow-soft">
           <ScoreChip
-            value={formatNumber(player.stats.totalPoints, {
-              useArabicIndicDigits: useArabicIndic,
-            })}
-            tone="red"
+            value={player.stats.totalPoints}
+            tone={player.stats.totalPoints < 0 ? 'negative' : 'red'}
+            useArabicIndicDigits={useArabicIndic}
             size="md"
           />
           <div className="min-w-0">
@@ -408,12 +418,11 @@ export function PlayerProfileView() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3.5 rounded-card border border-border-paper bg-white p-4 shadow-soft">
+        <div className="flex min-w-0 items-center gap-3.5 rounded-card border border-border-paper bg-white p-4 shadow-soft">
           <ScoreChip
-            value={formatNumber(player.stats.gamesPlayed, {
-              useArabicIndicDigits: useArabicIndic,
-            })}
+            value={player.stats.gamesPlayed}
             tone="blue"
+            useArabicIndicDigits={useArabicIndic}
             size="md"
           />
           <div className="min-w-0">
@@ -426,12 +435,11 @@ export function PlayerProfileView() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3.5 rounded-card border border-border-paper bg-white p-4 shadow-soft">
+        <div className="flex min-w-0 items-center gap-3.5 rounded-card border border-border-paper bg-white p-4 shadow-soft">
           <ScoreChip
-            value={formatNumber(player.stats.wins, {
-              useArabicIndicDigits: useArabicIndic,
-            })}
+            value={player.stats.wins}
             tone="white"
+            useArabicIndicDigits={useArabicIndic}
             size="md"
           />
           <div className="min-w-0">
@@ -500,8 +508,8 @@ export function PlayerProfileView() {
               </div>
 
               {/* Table Name, Exact Date/Time & Venue */}
-              <div className="space-y-2.5">
-                <h3 className="font-display text-2xl text-red-900 leading-snug">
+              <div className="min-w-0 space-y-2.5">
+                <h3 className="font-display text-2xl text-red-900 leading-snug break-words">
                   {localizeText(
                     lang,
                     spotlightGame.tableName,
@@ -509,7 +517,7 @@ export function PlayerProfileView() {
                   )}
                 </h3>
 
-                <div className="grid min-w-0 gap-2 sm:grid-cols-2 text-sm">
+                <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 text-sm">
                   <div className="flex min-w-0 items-center gap-2 rounded-input border border-border-paper bg-paper px-3 py-2.5">
                     <Calendar
                       className="h-4 w-4 shrink-0 text-red-600"
@@ -631,7 +639,7 @@ export function PlayerProfileView() {
                               )}
                             </div>
                             {p.nickname && !p.isPlaceholder && (
-                              <div className="text-xs text-ink-muted">
+                              <div className="truncate text-xs text-ink-muted">
                                 “{p.nickname}”
                               </div>
                             )}
@@ -674,16 +682,16 @@ export function PlayerProfileView() {
                           key={`${seg.id}-${i}`}
                           href={`/segments?segment=${encodeURIComponent(seg.id)}`}
                           className={cn(
-                            'inline-flex items-center gap-1 rounded-pill border px-2.5 py-1 text-xs font-bold transition-colors',
+                            'inline-flex max-w-full min-w-0 items-center gap-1 rounded-pill border px-2.5 py-1 text-xs font-bold transition-colors',
                             isCurrent
                               ? 'border-outline bg-gold-400 text-red-900 shadow-sticker-sm'
                               : 'border-border-paper bg-paper text-ink hover:border-outline'
                           )}
                         >
-                          <span className="tabular-nums text-red-700">
+                          <span className="shrink-0 tabular-nums text-red-700">
                             {formatNumber(i + 1, { useArabicIndicDigits: useArabicIndic })}.
                           </span>
-                          <span>{localizeText(lang, seg.nameEn, seg.nameAr)}</span>
+                          <span className="truncate">{localizeText(lang, seg.nameEn, seg.nameAr)}</span>
                         </Link>
                       );
                     })}

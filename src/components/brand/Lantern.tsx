@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useId } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 export interface LanternProps {
@@ -25,8 +24,9 @@ const SIZE_MAP = {
  * Lantern (Fanous)
  * Subtle secondary Ramadan motif per DESIGN.md §5:
  * gold-to-orange gradient body, deep maroon sticker outline, warm cream flame.
+ * Uses pure compositor-thread CSS sway (auto-disabled in `prefers-reduced-motion`).
  */
-export function Lantern({
+export const Lantern = React.memo(function Lantern({
   size = 'md',
   sway = true,
   swayDuration = 4.2,
@@ -35,30 +35,28 @@ export function Lantern({
   glow = true,
   className,
 }: LanternProps) {
-  const prefersReducedMotion = useReducedMotion();
   const uid = useId().replace(/:/g, '');
   const dims = SIZE_MAP[size];
-  const shouldSway = sway && !prefersReducedMotion;
+
+  const swayStyle = {
+    transformOrigin: 'top center',
+    ...(sway
+      ? {
+          '--sway-duration': `${swayDuration}s`,
+          '--sway-delay': `${swayDelay}s`,
+        }
+      : {}),
+  } as React.CSSProperties;
 
   return (
-    <motion.div
+    <div
       className={cn(
         'inline-flex flex-col items-center select-none',
         glow && 'drop-shadow-[0_0_18px_rgba(255,193,43,0.45)]',
+        sway && 'animate-lantern-sway',
         className
       )}
-      style={{ transformOrigin: 'top center' }}
-      animate={shouldSway ? { rotate: [-2.4, 2.4, -2.4] } : { rotate: 0 }}
-      transition={
-        shouldSway
-          ? {
-              duration: swayDuration,
-              delay: swayDelay,
-              repeat: Infinity,
-              ease: 'easeInOut',
-            }
-          : undefined
-      }
+      style={swayStyle}
       aria-hidden="true"
     >
       <svg
@@ -196,11 +194,15 @@ export function Lantern({
           <circle cx="32" cy="94" r="2.2" fill="#FFE899" stroke="#4F0716" strokeWidth="1.5" />
         </g>
       </svg>
-    </motion.div>
+    </div>
   );
-}
+});
 
-export function LanternCluster({ className }: { className?: string }) {
+export const LanternCluster = React.memo(function LanternCluster({
+  className,
+}: {
+  className?: string;
+}) {
   return (
     <div
       className={cn('inline-flex items-start gap-3 md:gap-5', className)}
@@ -211,4 +213,4 @@ export function LanternCluster({ className }: { className?: string }) {
       <Lantern size="md" chainLength={26} swayDuration={4.1} swayDelay={0.6} />
     </div>
   );
-}
+});

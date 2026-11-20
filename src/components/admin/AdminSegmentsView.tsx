@@ -41,7 +41,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
-import { ScoreChip } from '@/components/brand';
+import { ScoreChip } from '@/components/brand/ScoreChip';
 import { AdminErrorBanner, AdminPageHeader } from './AdminPageHeader';
 import { getSegmentCategoryMeta } from './adminFormatters';
 

@@ -76,6 +76,8 @@ export function ScoreboardRow({
   useEffect(() => {
     if (typeof recentDelta === 'number' && recentDelta !== 0) {
       setDeltaEvent({ id: Date.now(), delta: recentDelta });
+      const timer = setTimeout(() => setDeltaEvent(null), 1800);
+      return () => clearTimeout(timer);
     }
   }, [recentDelta]);
 
@@ -87,12 +89,12 @@ export function ScoreboardRow({
       layout={!prefersReducedMotion}
       transition={{ duration: 0.35, ease: 'easeOut' }}
       className={cn(
-        '@container group relative flex flex-wrap @sm:flex-nowrap items-center justify-between gap-2.5 @sm:gap-4 rounded-card px-3.5 py-3 @sm:px-5 @sm:py-4 transition-all duration-200',
+        '@container group relative flex flex-wrap @sm:flex-nowrap items-center justify-between gap-2.5 @sm:gap-4 rounded-card px-3.5 py-3 @sm:px-5 @sm:py-4 transition-[box-shadow,border-color,background-color] duration-200',
         appearance === 'sticker'
           ? 'border-[2.5px] border-outline shadow-sticker'
           : 'border border-border-paper shadow-soft',
         isHighlighted || rank === 1
-          ? 'ltr:bg-gradient-to-r rtl:bg-gradient-to-l from-gold-200 via-paper to-white text-ink'
+          ? 'bg-white ltr:bg-gradient-to-r rtl:bg-gradient-to-l from-gold-200/45 via-paper to-white text-ink'
           : 'bg-white text-ink hover:bg-paper',
         className
       )}

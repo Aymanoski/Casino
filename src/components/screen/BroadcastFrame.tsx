@@ -2,7 +2,9 @@
 
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { Lantern, MarqueeBulbs, SunburstStage } from '@/components/brand';
+import { Lantern } from '@/components/brand/Lantern';
+import { MarqueeBulbs } from '@/components/brand/MarqueeBulbs';
+import { SunburstStage } from '@/components/brand/SunburstStage';
 
 export interface BroadcastFrameProps {
   /** Final mode enriches stage lighting with warmer golden top aura & denser marquee bulbs */

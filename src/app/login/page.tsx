@@ -23,12 +23,10 @@ import { SkipLink } from '@/components/layout/SkipLink';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { PokerChipIcon } from '@/components/motifs/RamadanMotifs';
-import {
-  SectionHeading,
-  StageDivider,
-  SunburstStage,
-} from '@/components/brand';
+import { SectionHeading } from '@/components/brand/SectionHeading';
+import { StageDivider, SunburstStage } from '@/components/brand/SunburstStage';
 
 const ROLE_META: Record<
   UserRole,
@@ -88,7 +86,7 @@ const ROLE_META: Record<
 export default function LoginPage() {
   const router = useRouter();
   const { lang, t } = useI18n();
-  const { user, demoUsers, loginAs, logout } = useAuth();
+  const { user, demoUsers, isLoading, loginAs, logout } = useAuth();
 
   const handleSelectAccount = async (userId: string, redirect: boolean) => {
     const logged = await loginAs(userId);
@@ -173,7 +171,7 @@ export default function LoginPage() {
                   {lang === 'ar' ? 'الذهاب إلى لوحة الدور' : 'Open Role Workspace'}
                 </Button>
                 <Button variant="secondary" size="sm" onClick={logout}>
-                  <LogOut className="h-4 w-4 shrink-0" />
+                  <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <span>
                     {lang === 'ar' ? 'التبديل لوضع الزائر العام' : 'Switch to Public Visitor'}
                   </span>
@@ -182,7 +180,7 @@ export default function LoginPage() {
             )}
             {!user && (
               <Badge variant="muted" className="min-h-[44px] justify-center">
-                <Eye className="h-3.5 w-3.5 shrink-0" />
+                <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 <span>
                   {lang === 'ar' ? 'وضع المشاهد العام فقط' : 'Public Spectator Mode'}
                 </span>
@@ -192,6 +190,20 @@ export default function LoginPage() {
         </Card>
 
         {/* Role Groups (flat sections directly on Paper to avoid nested cards) */}
+        {isLoading ? (
+          <div className="space-y-8" aria-busy="true">
+            {Array.from({ length: 3 }).map((_, idx) => (
+              <div key={idx} className="space-y-4">
+                <Skeleton className="h-14 w-72 max-w-full" />
+                <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+                  <Skeleton className="h-36 w-full" />
+                  <Skeleton className="h-36 w-full" />
+                  <Skeleton className="h-36 w-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
         <div className="space-y-10 sm:space-y-12">
           {rolesOrder.map((roleKey) => {
             const meta = ROLE_META[roleKey];
@@ -203,7 +215,7 @@ export default function LoginPage() {
                 <div className="flex flex-wrap items-start justify-between gap-4 border-b-2 border-border-paper pb-4">
                   <div className="flex min-w-0 items-start gap-3.5">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-button border-2 border-outline bg-gold-400 text-red-900 shadow-sticker-sm">
-                      <Icon className="h-5 w-5" />
+                      <Icon className="h-5 w-5" aria-hidden="true" />
                     </div>
                     <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -232,7 +244,7 @@ export default function LoginPage() {
                         key={acc.id}
                         appearance="calm"
                         className={cn(
-                          'flex min-w-0 flex-col justify-between p-4 transition-all',
+                          'flex min-w-0 flex-col justify-between p-4 transition-[border-color,background-color,box-shadow]',
                           isSelected
                             ? 'border-2 border-blue-500 ring-2 ring-blue-500 bg-blue-100/50'
                             : 'hover:border-outline'
@@ -244,7 +256,7 @@ export default function LoginPage() {
                               {localizeText(lang, acc.name, acc.nameAr)}
                             </span>
                             {isSelected && (
-                              <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />
+                              <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" aria-hidden="true" />
                             )}
                           </div>
                           <div className="truncate text-xs font-bold text-red-700">
@@ -277,6 +289,7 @@ export default function LoginPage() {
             );
           })}
         </div>
+        )}
       </main>
 
       <PublicFooter />

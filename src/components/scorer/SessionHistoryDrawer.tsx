@@ -48,7 +48,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
-import { PlayerAvatar } from '@/components/brand';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
 
 type FeedTab = 'all' | 'scores' | 'buzzes';
 

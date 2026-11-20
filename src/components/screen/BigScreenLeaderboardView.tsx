@@ -36,14 +36,11 @@ import {
 } from '@/lib/repos';
 import type { Game, Round, Settings } from '@/lib/schemas';
 import { cn, formatNumber, localizeText } from '@/lib/utils';
-import {
-  AnimatedNumber,
-  LiveBadge,
-  PlayerAvatar,
-  PlayingDice,
-  ScoreChip,
-  type ScoreChipTone,
-} from '@/components/brand';
+import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
+import { LiveBadge } from '@/components/brand/LiveBadge';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
+import { PlayingDice } from '@/components/brand/GameMotifs';
+import { ScoreChip, type ScoreChipTone } from '@/components/brand/ScoreChip';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BroadcastFrame } from './BroadcastFrame';

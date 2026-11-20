@@ -74,7 +74,6 @@ const dictionary = {
       placeholderBadge: 'RAMADAN 2027 PITCH PROTOTYPE',
       footerTagline: 'A bold, joyful Ramadan trivia & game-show tournament culminating in a Grand Final against Marwan Serry.',
       footerDisclaimer: 'Pitch prototype: dates, venue, prizes, and sponsor packages are editable placeholders. No real-money gambling.',
-      phaseShellReady: 'Phase 1 Architecture & App Shell Ready',
     },
   },
   ar: {
@@ -138,7 +137,6 @@ const dictionary = {
       placeholderBadge: 'نموذج عرض أولي: رمضان ٢٠٢٧',
       footerTagline: 'بطولة ترفيهية رمضانية على طراز برامج المسابقات الكبرى تُختتم بمواجهة مروان سري في النهائي.',
       footerDisclaimer: 'نسخة عرض أولية: جميع المواعيد والمكان والجوائز وفئات الرعاية مبدئية وقابلة للتعديل. مسابقة معلومات وترفيه فقط.',
-      phaseShellReady: 'اكتمل تأسيس البنية التحتية والهيكل العام (المرحلة الأولى)',
     },
   },
 } as const;

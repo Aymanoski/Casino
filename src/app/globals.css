@@ -414,10 +414,6 @@ html[dir="rtl"] {
     color: var(--ink-muted);
   }
 
-  .tabular-nums {
-    font-variant-numeric: tabular-nums;
-  }
-
   /* Subtle sunburst rays background */
   .sunburst-bg {
     background-color: var(--red-600);
@@ -526,8 +522,56 @@ html[dir="rtl"] {
   }
 }
 
+@keyframes lantern-sway {
+  0%,
+  100% {
+    transform: rotate(-2.4deg);
+  }
+  50% {
+    transform: rotate(2.4deg);
+  }
+}
+
+@keyframes motif-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(var(--motif-tilt, 0deg));
+  }
+  50% {
+    transform: translate3d(0, var(--motif-float-y, -6px), 0)
+      rotate(calc(var(--motif-tilt, 0deg) + var(--motif-tilt-delta, 2.5deg)));
+  }
+}
+
+@keyframes timer-urgent-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
 .animate-sunburst-slow {
   animation: sunburst-spin 90s linear infinite;
+}
+
+.animate-sunburst-slow[data-paused="true"] {
+  animation-play-state: paused;
+}
+
+.animate-lantern-sway {
+  animation: lantern-sway var(--sway-duration, 4.2s) ease-in-out
+    var(--sway-delay, 0s) infinite;
+}
+
+.animate-motif-float {
+  animation: motif-float var(--float-duration, 4.6s) ease-in-out infinite;
+}
+
+.animate-timer-urgent {
+  animation: timer-urgent-pulse 0.65s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -535,6 +579,9 @@ html[dir="rtl"] {
     scroll-behavior: auto;
   }
   .animate-sunburst-slow,
+  .animate-lantern-sway,
+  .animate-motif-float,
+  .animate-timer-urgent,
   .animate-pulse,
   .animate-ping {
     animation: none !important;

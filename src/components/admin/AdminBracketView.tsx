@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -37,12 +38,16 @@ import { useToast } from '@/components/ui/toast';
 import {
   BracketNode,
   BracketTrack,
-  PlayerAvatar,
   type BracketPlayerSlot,
-} from '@/components/brand';
+} from '@/components/brand/BracketNode';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
 import { AdminErrorBanner, AdminPageHeader } from './AdminPageHeader';
-import { GameEditorDialog } from './GameEditorDialog';
 import { getRoundStatusMeta } from './adminFormatters';
+
+const GameEditorDialog = dynamic(
+  () => import('./GameEditorDialog').then((m) => ({ default: m.GameEditorDialog })),
+  { ssr: false }
+);
 
 function computeFlexibleRounds(
   totalPlayers: number,
@@ -1070,17 +1075,19 @@ export function AdminBracketView() {
         </div>
       </section>
 
-      <GameEditorDialog
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        game={editingGame}
-        rounds={rounds}
-        players={players}
-        scorers={scorers}
-        segments={segments}
-        defaultPlayersPerGame={playersPerGame}
-        onSave={handleSaveGameFromModal}
-      />
+      {editorOpen && (
+        <GameEditorDialog
+          open={editorOpen}
+          onOpenChange={setEditorOpen}
+          game={editingGame}
+          rounds={rounds}
+          players={players}
+          scorers={scorers}
+          segments={segments}
+          defaultPlayersPerGame={playersPerGame}
+          onSave={handleSaveGameFromModal}
+        />
+      )}
     </div>
   );
 }
