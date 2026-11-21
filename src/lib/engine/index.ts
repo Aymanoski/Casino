@@ -9,6 +9,7 @@
  */
 
 export * from './types';
+export * from './blueprint';
 export * from './match';
 export * from './groups';
 export * from './knockout';

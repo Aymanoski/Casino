@@ -1,4 +1,5 @@
 export { FinalShowcaseView } from './FinalShowcaseView';
+export { GroupsStandingsView } from './GroupsStandingsView';
 export { BracketInteractiveView } from './BracketInteractiveView';
 export { LeaderboardLiveView } from './LeaderboardLiveView';
 export { ScheduleView } from './ScheduleView';

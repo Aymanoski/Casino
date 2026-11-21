@@ -34,6 +34,7 @@ import type {
 } from '@/lib/schemas';
 import {
   createSeedSnapshot,
+  createSeedSnapshotAsync,
   SEED_VERSION,
   type CreateSeedOptions,
 } from '@/lib/seed';
@@ -488,7 +489,7 @@ async function ensureInitialized(): Promise<DatabaseSnapshot> {
       }
 
       cleanupLegacyLocalStorage();
-      const fresh = createSeedSnapshot();
+      const fresh = await createSeedSnapshotAsync();
       await writeFullSnapshotToIDB(fresh);
       memorySnapshot = fresh;
       return fresh;
@@ -659,7 +660,7 @@ export const storage: StorageAdapter = {
 
   async resetToSeed(options?: CreateSeedOptions): Promise<DatabaseSnapshot> {
     cleanupLegacyLocalStorage();
-    const fresh = createSeedSnapshot(options);
+    const fresh = await createSeedSnapshotAsync(options);
     if (hasIndexedDB()) {
       await writeFullSnapshotToIDB(fresh);
     }

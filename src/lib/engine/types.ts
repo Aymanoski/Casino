@@ -43,6 +43,14 @@ export interface ComputedMatchOutcome {
   needsReviewReason?: string;
 }
 
+export type GroupTieBreakReason =
+  | 'points'
+  | 'h2h'
+  | 'pointsDiff'
+  | 'cards'
+  | 'tieBreakMatch'
+  | 'deadlock';
+
 export interface GroupStandingRow {
   playerId: string;
   rank: number;
@@ -58,6 +66,7 @@ export interface GroupStandingRow {
   absences: number;
   qualified: boolean;
   tiedForCutoff: boolean;
+  tieBreakReason?: GroupTieBreakReason;
 }
 
 export interface ComputedGroupStandings {
@@ -70,6 +79,32 @@ export interface ComputedGroupStandings {
   qualifierPlayerIds: string[];
   needsTieBreakMatch: boolean;
   tiedCutoffPlayerIds: string[];
+  tieBreakApplied: GroupTieBreakReason;
+  hasThreeWayCycle: boolean;
+}
+
+export interface ScheduleConflict {
+  kind: 'player' | 'table' | 'judge';
+  matchId: string;
+  conflictingMatchId: string;
+  conflictingTableName: string;
+  conflictingTableNameAr: string;
+  resourceId: string;
+  slotStartIso: string;
+  messageEn: string;
+  messageAr: string;
+}
+
+export interface SettingsImpactPreview {
+  tier: 'none' | 'scoring' | 'schedule' | 'structural';
+  requiresConfirmation: boolean;
+  tournamentStarted: boolean;
+  affectedScheduledCount: number;
+  affectedActiveOrFinishedCount: number;
+  affectedGroupsCount: number;
+  cascadeImpact?: CascadeImpact;
+  summaryEn: string;
+  summaryAr: string;
 }
 
 export interface QualifierSlot {

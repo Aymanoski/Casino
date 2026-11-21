@@ -2,8 +2,10 @@ import type { Group } from '@/lib/schemas';
 import {
   computeGroupStandings,
   computeQualifiers,
+  getTournamentProgress,
   type ComputedGroupStandings,
   type QualifierSlot,
+  type TournamentProgressSummary,
 } from '@/lib/engine';
 import { commands } from '@/lib/commands';
 import { storage } from '@/lib/storage';
@@ -17,6 +19,11 @@ export const groupRepo = {
   async get(id: string): Promise<Group | null> {
     const db = await storage.readSnapshot();
     return db.groups.find((g) => g.id === id) ?? null;
+  },
+
+  async getByNumber(groupNumber: number): Promise<Group | null> {
+    const db = await storage.readSnapshot();
+    return db.groups.find((g) => g.number === groupNumber) ?? null;
   },
 
   async getStandings(groupId: string): Promise<ComputedGroupStandings | null> {
@@ -61,9 +68,44 @@ export const groupRepo = {
     return qualifiers;
   },
 
+  async getTournamentProgress(): Promise<TournamentProgressSummary> {
+    const db = await storage.readSnapshot();
+    return getTournamentProgress(
+      db.matches,
+      db.scoreEvents,
+      db.absenceEvents,
+      db.matchEvents
+    );
+  },
+
+  async redraw(
+    actorUserId = 'user-admin',
+    options?: { shuffleSeed?: number; preserveSeedOrder?: boolean }
+  ) {
+    return commands.redrawGroups({
+      actorUserId,
+      shuffleSeed: options?.shuffleSeed,
+      preserveSeedOrder: options?.preserveSeedOrder,
+    });
+  },
+
+  async movePlayer(input: {
+    playerId: string;
+    targetGroupId: string;
+    swapWithPlayerId?: string;
+    actorUserId?: string;
+  }) {
+    return commands.movePlayerBetweenGroups({
+      playerId: input.playerId,
+      targetGroupId: input.targetGroupId,
+      swapWithPlayerId: input.swapWithPlayerId,
+      actorUserId: input.actorUserId ?? 'user-admin',
+    });
+  },
+
   async createTieBreakMatch(
     groupId: string,
-    playerIds: [string, string],
+    playerIds: string[],
     actorUserId = 'user-admin'
   ) {
     return commands.createGroupTieBreakMatch({

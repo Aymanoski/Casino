@@ -17,9 +17,12 @@ export interface BracketPlayerSlot {
   nickname?: string;
   avatarSeed?: string;
   score?: number;
+  yellowCards?: number;
+  redCards?: number;
   isWinner?: boolean;
   isAdvancing?: boolean;
   isHost?: boolean;
+  isBye?: boolean;
   isPlaceholder?: boolean;
 }
 
@@ -28,6 +31,8 @@ export interface BracketNodeProps {
   roundLabel?: string;
   status: MatchStatus;
   isFinal?: boolean;
+  isByeMatch?: boolean;
+  compact?: boolean;
   players:
     | [BracketPlayerSlot, BracketPlayerSlot, BracketPlayerSlot]
     | BracketPlayerSlot[];
@@ -51,6 +56,8 @@ export const BracketNode = React.memo(function BracketNode({
   roundLabel,
   status,
   isFinal = false,
+  isByeMatch = false,
+  compact = false,
   players,
   activeBuzzPlayerId = null,
   highlightedPlayerId = null,
@@ -147,7 +154,11 @@ export const BracketNode = React.memo(function BracketNode({
         </div>
 
         <div className="shrink-0">
-          {status === 'live' ? (
+          {isByeMatch ? (
+            <Badge variant="gold" className="px-2.5 py-0.5 text-[11px]">
+              {lang === 'ar' ? 'تأهل تلقائي' : 'BYE'}
+            </Badge>
+          ) : status === 'live' ? (
             <LiveBadge size="sm" surface="paper" />
           ) : status === 'needsTieBreak' ? (
             <Badge variant="gold" className="px-2.5 py-0.5 text-[11px]">
@@ -173,8 +184,8 @@ export const BracketNode = React.memo(function BracketNode({
         </div>
       </div>
 
-      {/* 3 Contestant Rows */}
-      <div className="space-y-1.5">
+      {/* Contestant Rows (2 players for 1v1, 3 participants for Grand Final) */}
+      <div className={cn('space-y-1.5', compact && 'space-y-1')}>
         {players.map((slot, idx) => {
           const highlighted = slot.isWinner || slot.isAdvancing;
           const isBuzzed = Boolean(
@@ -187,28 +198,33 @@ export const BracketNode = React.memo(function BracketNode({
             <div
               key={slot.id ?? `slot-${idx}`}
               className={cn(
-                'flex min-h-[44px] items-center justify-between gap-2 rounded-input border-2 px-2.5 py-1.5 transition-colors',
+                'flex items-center justify-between gap-2 rounded-input border-2 px-2.5 py-1.5 transition-colors',
+                compact ? 'min-h-[38px] py-1' : 'min-h-[44px]',
                 slot.isHost
                   ? 'border-outline bg-gold-gradient text-red-900 shadow-sticker-sm'
-                  : isBuzzed
-                    ? 'border-outline bg-gold-300/75 text-red-900 shadow-sticker-sm'
-                    : isPathMatch
-                      ? 'border-blue-600 bg-blue-100/80 text-blue-800'
-                      : highlighted
-                        ? 'border-outline bg-gold-200/75 text-red-900'
-                        : slot.isPlaceholder
-                          ? 'border-dashed border-border-paper bg-paper-2/60 opacity-85'
-                          : 'border-border-paper bg-paper text-ink'
+                  : slot.isBye
+                    ? 'border-dashed border-gold-500/70 bg-gold-200/25 text-ink-muted'
+                    : isBuzzed
+                      ? 'border-outline bg-gold-300/75 text-red-900 shadow-sticker-sm'
+                      : isPathMatch
+                        ? 'border-blue-600 bg-blue-100/80 text-blue-800'
+                        : highlighted
+                          ? 'border-outline bg-gold-200/75 text-red-900'
+                          : slot.isPlaceholder
+                            ? 'border-dashed border-border-paper bg-paper-2/60 opacity-85'
+                            : 'border-border-paper bg-paper text-ink'
               )}
             >
               <div className="flex min-w-0 flex-1 items-center gap-2">
-                <PlayerAvatar
-                  name={slot.name}
-                  avatarSeed={slot.avatarSeed ?? slot.name}
-                  size="xs"
-                  isHost={slot.isHost}
-                  className="hidden @2xs:inline-flex"
-                />
+                {!slot.isBye && (
+                  <PlayerAvatar
+                    name={slot.name}
+                    avatarSeed={slot.avatarSeed ?? slot.name}
+                    size="xs"
+                    isHost={slot.isHost}
+                    className="hidden @2xs:inline-flex"
+                  />
+                )}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1 truncate text-xs @xs:text-sm font-bold">
                     {slot.isHost && (
@@ -223,13 +239,14 @@ export const BracketNode = React.memo(function BracketNode({
                     <span
                       className={cn(
                         'truncate',
-                        slot.isPlaceholder && 'italic text-ink-muted font-medium'
+                        slot.isBye && 'uppercase tracking-wider font-extrabold text-red-800/75',
+                        slot.isPlaceholder && !slot.isBye && 'italic text-ink-muted font-medium'
                       )}
                     >
                       {slot.name}
                     </span>
                   </div>
-                  {slot.nickname && !slot.isPlaceholder && (
+                  {slot.nickname && !slot.isPlaceholder && !slot.isBye && !compact && (
                     <div
                       className={cn(
                         'hidden @xs:block truncate text-xs',
@@ -243,7 +260,11 @@ export const BracketNode = React.memo(function BracketNode({
               </div>
 
               <div className="shrink-0 text-end font-score text-base @xs:text-lg font-black tabular-nums">
-                {typeof slot.score === 'number' ? (
+                {slot.isBye ? (
+                  <span className="text-[11px] font-extrabold uppercase text-gold-600">
+                    {lang === 'ar' ? 'تأهل' : 'ADV'}
+                  </span>
+                ) : typeof slot.score === 'number' ? (
                   <span
                     title={formatNumber(slot.score, { useArabicIndicDigits })}
                     className={cn(

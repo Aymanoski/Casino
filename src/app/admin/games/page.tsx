@@ -1,6 +1,5 @@
-import React from 'react';
-import { AdminGamesView } from '@/components/admin/AdminGamesView';
+import { redirect } from 'next/navigation';
 
-export default function AdminGamesPage() {
-  return <AdminGamesView />;
+export default function AdminGamesRedirectPage() {
+  redirect('/admin/matches');
 }

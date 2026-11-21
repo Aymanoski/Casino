@@ -12,6 +12,12 @@ import {
   type CascadePolicy,
   type FinishMatchResult,
 } from '@/lib/commands';
+import {
+  detectConflictsForMatch,
+  detectScheduleConflicts,
+  findNextFreeSlotForMatch,
+  type ScheduleConflict,
+} from '@/lib/engine';
 import { storage } from '@/lib/storage';
 import { redactMatchForRole } from './permissions';
 
@@ -373,5 +379,38 @@ export const matchRepo = {
 
   async resetDemoGame(id = 'game-demo'): Promise<Match | null> {
     return commands.resetDemoMatch(id);
+  },
+
+  async autoSchedule(
+    actorUserId = 'user-admin',
+    options?: { onlyScheduled?: boolean; startIso?: string }
+  ): Promise<{ rescheduledCount: number; remainingConflicts: number }> {
+    return commands.autoScheduleAll({
+      actorUserId,
+      onlyScheduled: options?.onlyScheduled,
+      startIso: options?.startIso,
+    });
+  },
+
+  async detectConflicts(): Promise<ScheduleConflict[]> {
+    const db = await storage.readSnapshot();
+    return detectScheduleConflicts(db.matches, db.settings.tournament);
+  },
+
+  async detectConflictsForDraft(candidate: Match): Promise<ScheduleConflict[]> {
+    const db = await storage.readSnapshot();
+    return detectConflictsForMatch(candidate, db.matches, db.settings.tournament);
+  },
+
+  async findNextFreeSlot(
+    candidate: Match
+  ): Promise<{ tableNumber: number; judgeUserId: string; scheduledAt: string }> {
+    const db = await storage.readSnapshot();
+    return findNextFreeSlotForMatch(
+      candidate,
+      db.matches,
+      db.users,
+      db.settings.tournament
+    );
   },
 };

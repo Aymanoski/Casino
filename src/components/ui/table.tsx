@@ -228,8 +228,12 @@ export interface DataTableProps<T> {
   mobileMode?: 'cards' | 'scroll';
   allowMobileViewToggle?: boolean;
   stickyFirstColumn?: boolean;
-  /** Default rows per page (set 0 to disable pagination). Defaults to 30 so 1,000+ rows remain instantaneous. */
+  /** Default rows per page (set 0 for full virtualized scroll). Defaults to 30 so 1,000+ rows remain instantaneous. */
   defaultPageSize?: number;
+  /** Enable row virtualization whenever rendering >50 rows in the table (defaults to true) */
+  virtualized?: boolean;
+  /** Estimated row height in px when virtualized (default 68) */
+  virtualRowHeight?: number;
   emptyTitle?: string;
   emptyDescription?: string;
   className?: string;
@@ -249,6 +253,8 @@ export function DataTable<T>({
   allowMobileViewToggle = true,
   stickyFirstColumn = true,
   defaultPageSize = 30,
+  virtualized = true,
+  virtualRowHeight = 68,
   emptyTitle = 'No matching records',
   emptyDescription = 'Adjust your search query or filters to see tournament records.',
   className,
@@ -260,6 +266,7 @@ export function DataTable<T>({
   const [viewMode, setViewMode] = React.useState<'cards' | 'scroll'>(mobileMode);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(defaultPageSize);
+  const [tableScrollTop, setTableScrollTop] = React.useState(0);
   const pageSizeId = React.useId();
 
   const handleSort = (key: string) => {
@@ -311,7 +318,24 @@ export function DataTable<T>({
     return filteredAndSorted.slice(start, start + pageSize);
   }, [filteredAndSorted, pageSize, safePage]);
 
-  const rangeStart = totalCount === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const useVirtualRows = virtualized && visibleRows.length > 50;
+  const virtualWindow = React.useMemo(() => {
+    if (!useVirtualRows) {
+      return { slice: visibleRows, padTop: 0, padBottom: 0 };
+    }
+    const viewportH = 620;
+    const overscan = 6;
+    const startIdx = Math.max(0, Math.floor(tableScrollTop / virtualRowHeight) - overscan);
+    const visibleCount = Math.ceil(viewportH / virtualRowHeight) + overscan * 2;
+    const endIdx = Math.min(visibleRows.length, startIdx + visibleCount);
+    return {
+      slice: visibleRows.slice(startIdx, endIdx),
+      padTop: startIdx * virtualRowHeight,
+      padBottom: Math.max(0, (visibleRows.length - endIdx) * virtualRowHeight),
+    };
+  }, [useVirtualRows, visibleRows, tableScrollTop, virtualRowHeight]);
+
+  const rangeStart = totalCount === 0 ? 0 : pageSize <= 0 ? 1 : (safePage - 1) * pageSize + 1;
   const rangeEnd =
     pageSize <= 0 ? totalCount : Math.min(safePage * pageSize, totalCount);
 
@@ -463,10 +487,10 @@ export function DataTable<T>({
         />
       ) : (
         <>
-          {/* Mobile Card List View */}
+          {/* Mobile Card List View (capped cleanly at 50 when in virtualized 'All' mode) */}
           {viewMode === 'cards' && (
             <div className="grid gap-3 md:hidden">
-              {visibleRows.map((row) => (
+              {(pageSize <= 0 ? visibleRows.slice(0, 50) : visibleRows).map((row) => (
                 <div
                   key={getRowKey(row)}
                   className="@container min-w-0 rounded-card border border-border-paper bg-white p-4 text-ink shadow-soft space-y-3"
@@ -496,54 +520,92 @@ export function DataTable<T>({
                   )}
                 </div>
               ))}
+              {pageSize <= 0 && visibleRows.length > 50 && (
+                <p className="py-2 text-center text-xs font-semibold text-ink-muted">
+                  {lang === 'ar'
+                    ? `عرض أول 50 بطاقة — استخدم البحث أو الترقيم لتصفح ${visibleRows.length} سجل.`
+                    : `Showing first 50 cards — use Search or select a page size to browse all ${visibleRows.length} records.`}
+                </p>
+              )}
             </div>
           )}
 
-          {/* Table View */}
+          {/* Table View (auto-virtualized when showing > 50 rows) */}
           <div className={cn(viewMode === 'cards' ? 'hidden md:block' : 'block')}>
-            <Table stickyFirstColumn={stickyFirstColumn}>
-              <TableHeader>
-                <tr>
-                  {columns.map((col) =>
-                    col.sortable ? (
-                      <SortableTableHead
-                        key={col.key}
-                        active={sortKey === col.key}
-                        direction={sortKey === col.key ? sortDir : null}
-                        onSort={() => handleSort(col.key)}
-                        className={col.className}
-                      >
-                        {col.header}
-                      </SortableTableHead>
-                    ) : (
-                      <TableHead key={col.key} className={col.className}>
-                        {col.header}
-                      </TableHead>
-                    )
+            <div
+              onScroll={
+                useVirtualRows
+                  ? (e) => setTableScrollTop(e.currentTarget.scrollTop)
+                  : undefined
+              }
+              className="relative w-full max-h-[min(68dvh,720px)] overflow-auto overscroll-x-contain rounded-card border border-border-paper bg-white shadow-soft"
+            >
+              <table
+                className={cn(
+                  'w-full caption-bottom text-start text-sm text-ink',
+                  stickyFirstColumn &&
+                    '[&_thead_th:first-child]:sticky [&_thead_th:first-child]:start-0 [&_thead_th:first-child]:z-30 [&_thead_th:first-child]:bg-paper-2 [&_tbody_td:first-child]:sticky [&_tbody_td:first-child]:start-0 [&_tbody_td:first-child]:z-10 [&_tbody_tr:nth-child(odd)>td:first-child]:bg-white [&_tbody_tr:nth-child(even)>td:first-child]:bg-paper-2 [&_thead_th:first-child]:shadow-[4px_0_10px_-4px_rgba(79,7,22,0.12)] [&_tbody_td:first-child]:shadow-[4px_0_10px_-4px_rgba(79,7,22,0.10)] rtl:[&_thead_th:first-child]:shadow-[-4px_0_10px_-4px_rgba(79,7,22,0.12)] rtl:[&_tbody_td:first-child]:shadow-[-4px_0_10px_-4px_rgba(79,7,22,0.10)]'
+                )}
+              >
+                <TableHeader>
+                  <tr>
+                    {columns.map((col) =>
+                      col.sortable ? (
+                        <SortableTableHead
+                          key={col.key}
+                          active={sortKey === col.key}
+                          direction={sortKey === col.key ? sortDir : null}
+                          onSort={() => handleSort(col.key)}
+                          className={col.className}
+                        >
+                          {col.header}
+                        </SortableTableHead>
+                      ) : (
+                        <TableHead key={col.key} className={col.className}>
+                          {col.header}
+                        </TableHead>
+                      )
+                    )}
+                  </tr>
+                </TableHeader>
+                <TableBody>
+                  {virtualWindow.padTop > 0 && (
+                    <tr aria-hidden="true">
+                      <td
+                        colSpan={columns.length}
+                        style={{ height: virtualWindow.padTop, padding: 0, border: 0 }}
+                      />
+                    </tr>
                   )}
-                </tr>
-              </TableHeader>
-              <TableBody>
-                {visibleRows.map((row) => (
-                  <TableRow key={getRowKey(row)}>
-                    {columns.map((col) => (
-                      <TableCell key={col.key} className={col.className}>
-                        {col.render(row)}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                  {virtualWindow.slice.map((row) => (
+                    <TableRow key={getRowKey(row)}>
+                      {columns.map((col) => (
+                        <TableCell key={col.key} className={col.className}>
+                          {col.render(row)}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                  {virtualWindow.padBottom > 0 && (
+                    <tr aria-hidden="true">
+                      <td
+                        colSpan={columns.length}
+                        style={{ height: virtualWindow.padBottom, padding: 0, border: 0 }}
+                      />
+                    </tr>
+                  )}
+                </TableBody>
+              </table>
+            </div>
           </div>
 
-          {/* Pagination Footer (renders automatically when total > 25 or multi-page) */}
-          {pageSize > 0 && totalCount > 25 && (
+          {/* Pagination & Virtualization Footer */}
+          {totalCount > 25 && (
             <div className="flex flex-col gap-2.5 rounded-card border border-border-paper bg-white px-4 py-2.5 text-xs sm:flex-row sm:items-center sm:justify-between">
               <div className="font-semibold text-ink-muted tabular-nums">
                 {lang === 'ar'
-                  ? `عرض ${rangeStart}–${rangeEnd} من أصل ${totalCount}`
-                  : `Showing ${rangeStart}–${rangeEnd} of ${totalCount}`}
+                  ? `عرض ${rangeStart}–${rangeEnd} من أصل ${totalCount}${useVirtualRows ? ' (تمرير افتراضي)' : ''}`
+                  : `Showing ${rangeStart}–${rangeEnd} of ${totalCount}${useVirtualRows ? ' (Virtualized)' : ''}`}
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -555,7 +617,10 @@ export function DataTable<T>({
                   <select
                     id={pageSizeId}
                     value={pageSize}
-                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setTableScrollTop(0);
+                    }}
                     className="min-h-[44px] h-11 rounded-input border border-border-paper bg-paper px-2.5 text-base sm:text-xs font-bold text-ink"
                   >
                     {[25, 30, 50, 100].map((n) => (
@@ -563,34 +628,41 @@ export function DataTable<T>({
                         {n}
                       </option>
                     ))}
+                    <option value={0}>
+                      {lang === 'ar'
+                        ? `الكل (${totalCount}) — افتراضي`
+                        : `All (${totalCount}) — Virtualized`}
+                    </option>
                   </select>
                 </label>
 
-                <div className="inline-flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="calm"
-                    size="icon"
-                    disabled={safePage <= 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    aria-label={lang === 'ar' ? 'الصفحة السابقة' : 'Previous page'}
-                  >
-                    <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
-                  </Button>
-                  <span className="min-w-[64px] text-center font-bold tabular-nums text-red-900">
-                    {safePage} / {totalPages}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="calm"
-                    size="icon"
-                    disabled={safePage >= totalPages}
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    aria-label={lang === 'ar' ? 'الصفحة التالية' : 'Next page'}
-                  >
-                    <ChevronRight className="h-4 w-4 rtl:rotate-180" />
-                  </Button>
-                </div>
+                {pageSize > 0 && (
+                  <div className="inline-flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="calm"
+                      size="icon"
+                      disabled={safePage <= 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      aria-label={lang === 'ar' ? 'الصفحة السابقة' : 'Previous page'}
+                    >
+                      <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+                    </Button>
+                    <span className="min-w-[64px] text-center font-bold tabular-nums text-red-900">
+                      {safePage} / {totalPages}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="calm"
+                      size="icon"
+                      disabled={safePage >= totalPages}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      aria-label={lang === 'ar' ? 'الصفحة التالية' : 'Next page'}
+                    >
+                      <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           )}

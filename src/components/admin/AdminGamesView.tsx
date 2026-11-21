@@ -4,19 +4,25 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
   Crown,
   GitBranch,
+  Hash,
   MonitorPlay,
   Pencil,
   Plus,
   Tablet,
   Trash2,
+  Wand2,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { realtime } from '@/lib/realtime';
+import { detectScheduleConflicts, type ScheduleConflict } from '@/lib/engine';
 import {
-  gameRepo,
+  matchRepo,
   playerRepo,
   roundRepo,
   segmentRepo,
@@ -24,15 +30,16 @@ import {
   userRepo,
 } from '@/lib/repos';
 import type {
-  Game,
-  GameStatus,
+  Match,
+  MatchStatus,
+  MatchType,
   Player,
   Round,
   Segment,
   Settings,
   User,
 } from '@/lib/schemas';
-import { localizeText, normalizeSearchText } from '@/lib/utils';
+import { formatNumber, localizeText, normalizeSearchText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/dialog';
@@ -46,7 +53,6 @@ import {
   AdminStatChipStrip,
 } from './AdminPageHeader';
 import { formatAdminTimeShort, getGameStatusMeta } from './adminFormatters';
-
 import type { MatchEditorPayload } from './GameEditorDialog';
 
 const GameEditorDialog = dynamic(
@@ -54,12 +60,12 @@ const GameEditorDialog = dynamic(
   { ssr: false }
 );
 
-export function AdminGamesView() {
+export function AdminMatchesView() {
   const { user } = useAuth();
   const { lang } = useI18n();
   const { toast } = useToast();
 
-  const [games, setGames] = useState<Game[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
   const [rounds, setRounds] = useState<Round[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -68,13 +74,18 @@ export function AdminGamesView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [typeFilter, setTypeFilter] = useState<'all' | MatchType | 'bye'>('all');
   const [roundFilter, setRoundFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | GameStatus>('all');
-  const [scorerFilter, setScorerFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | MatchStatus>('all');
+  const [judgeFilter, setJudgeFilter] = useState('all');
+  const [tableFilter, setTableFilter] = useState('all');
+  const [conflictsOnly, setConflictsOnly] = useState(false);
+  const [jumpGroupInput, setJumpGroupInput] = useState('');
 
   const [editorOpen, setEditorOpen] = useState(false);
-  const [editingGame, setEditingGame] = useState<Game | null>(null);
-  const [busyGameId, setBusyGameId] = useState<string | null>(null);
+  const [editingMatch, setEditingMatch] = useState<Match | null>(null);
+  const [busyMatchId, setBusyMatchId] = useState<string | null>(null);
+  const [scheduling, setScheduling] = useState(false);
 
   const mountedRef = useRef(true);
   const loadSeqRef = useRef(0);
@@ -88,9 +99,9 @@ export function AdminGamesView() {
   const loadData = useCallback(async () => {
     const seq = ++loadSeqRef.current;
     try {
-      const [allGames, allRounds, allPlayers, allUsers, allSegments, appSettings] =
+      const [allMatches, allRounds, allPlayers, allUsers, allSegments, appSettings] =
         await Promise.all([
-          gameRepo.list(),
+          matchRepo.list(),
           roundRepo.list(),
           playerRepo.list({ includeHost: true }),
           userRepo.list(),
@@ -99,7 +110,7 @@ export function AdminGamesView() {
         ]);
 
       if (!mountedRef.current || seq !== loadSeqRef.current) return;
-      setGames(allGames);
+      setMatches(allMatches);
       setRounds(allRounds);
       setPlayers(allPlayers);
       setUsers(allUsers);
@@ -109,7 +120,7 @@ export function AdminGamesView() {
     } catch {
       if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setError(
-        lang === 'ar' ? 'تعذر تحميل قائمة المباريات.' : 'Failed to load games.'
+        lang === 'ar' ? 'تعذر تحميل قائمة المباريات.' : 'Failed to load matches.'
       );
     } finally {
       if (mountedRef.current && seq === loadSeqRef.current) setLoading(false);
@@ -117,16 +128,18 @@ export function AdminGamesView() {
   }, [lang]);
 
   useEffect(() => {
-    loadData();
+    void loadData();
     const unsub = realtime.subscribe('*', (msg) => {
       if (
         msg.event === 'bracket.updated' ||
+        msg.event === 'tournament.generated' ||
         msg.event === 'game.started' ||
         msg.event === 'game.finished' ||
         msg.event === 'user.updated' ||
+        msg.event === 'settings.updated' ||
         msg.event === 'data.reset'
       ) {
-        loadData();
+        void loadData();
       }
     });
     return unsub;
@@ -140,99 +153,138 @@ export function AdminGamesView() {
     [users]
   );
 
-  const filteredGames = useMemo(() => {
-    return games.filter((g) => {
-      if (roundFilter !== 'all' && g.roundId !== roundFilter) return false;
-      if (statusFilter !== 'all' && g.status !== statusFilter) return false;
-      if (scorerFilter !== 'all' && g.scorerUserId !== scorerFilter) return false;
+  // Detect all player/table/judge schedule conflicts across the entire tournament
+  const conflictsByMatch = useMemo(() => {
+    const map = new Map<string, ScheduleConflict[]>();
+    if (!settings) return map;
+    const allConflicts = detectScheduleConflicts(matches, settings.tournament);
+    for (const c of allConflicts) {
+      const list = map.get(c.matchId);
+      if (list) list.push(c);
+      else map.set(c.matchId, [c]);
+    }
+    return map;
+  }, [matches, settings]);
+
+  const totalConflictingMatches = conflictsByMatch.size;
+
+  const filteredMatches = useMemo(() => {
+    const jumpGroupNum = parseInt(jumpGroupInput.replace(/[^\d]/g, ''), 10);
+    return matches.filter((m) => {
+      const isBye = m.participants.some((p) => p.isBye);
+      if (typeFilter === 'bye' && !isBye) return false;
+      if (typeFilter !== 'all' && typeFilter !== 'bye' && m.type !== typeFilter) {
+        return false;
+      }
+      if (roundFilter !== 'all' && m.roundId !== roundFilter) return false;
+      if (statusFilter !== 'all' && m.status !== statusFilter) return false;
+      if (judgeFilter !== 'all' && m.judgeUserId !== judgeFilter) return false;
+      if (tableFilter !== 'all' && String(m.tableNumber) !== tableFilter) return false;
+      if (conflictsOnly && !conflictsByMatch.has(m.id)) return false;
+      if (Number.isFinite(jumpGroupNum) && jumpGroupNum > 0) {
+        if (m.groupId !== `group-${jumpGroupNum}` && m.slot !== jumpGroupNum) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [games, roundFilter, statusFilter, scorerFilter]);
+  }, [
+    matches,
+    typeFilter,
+    roundFilter,
+    statusFilter,
+    judgeFilter,
+    tableFilter,
+    conflictsOnly,
+    conflictsByMatch,
+    jumpGroupInput,
+  ]);
 
-  const handleQuickAssignScorer = async (game: Game, scorerUserId: string) => {
-    if (!user || busyGameId === game.id) return;
-    setBusyGameId(game.id);
+  const handleAutoSchedule = async () => {
+    if (!user) return;
+    setScheduling(true);
     try {
-      await gameRepo.update(game.id, { scorerUserId }, user.id);
+      const res = await matchRepo.autoSchedule(user.id, { onlyScheduled: true });
+      await loadData();
+      toast({
+        variant: 'positive',
+        title:
+          lang === 'ar'
+            ? `تمت الجدولة التلقائية لـ ${res.rescheduledCount} مباراة`
+            : `Auto-scheduled ${res.rescheduledCount} upcoming match(es)`,
+        description:
+          lang === 'ar'
+            ? `تعارضات متبقية: ${res.remainingConflicts} · لم يتم تعديل المباريات المباشرة أو المنتهية.`
+            : `Remaining conflicts: ${res.remainingConflicts}. Live & finished matches untouched.`,
+      });
+    } catch (err) {
+      toast({
+        variant: 'negative',
+        title: lang === 'ar' ? 'فشل الجدولة التلقائية' : 'Auto-schedule failed',
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      if (mountedRef.current) setScheduling(false);
+    }
+  };
+
+  const handleQuickAssignJudge = async (match: Match, judgeUserId: string) => {
+    if (!user || busyMatchId === match.id) return;
+    setBusyMatchId(match.id);
+    try {
+      await matchRepo.update(match.id, { judgeUserId, scorerUserId: judgeUserId }, user.id);
       toast({
         variant: 'info',
-        title: lang === 'ar' ? 'تم تعيين الحكم' : 'Scorer assigned',
-        description: localizeText(lang, game.tableName, game.tableNameAr),
+        title: lang === 'ar' ? 'تم تعيين الحكم' : 'Judge assigned',
+        description: localizeText(lang, match.tableName, match.tableNameAr),
       });
       await loadData();
     } catch (err) {
       toast({
         variant: 'negative',
-        title: lang === 'ar' ? 'تعذر تعيين الحكم' : 'Could not assign scorer',
+        title: lang === 'ar' ? 'تعذر تعيين الحكم' : 'Could not assign judge',
         description: err instanceof Error ? err.message : undefined,
       });
     } finally {
-      if (mountedRef.current) setBusyGameId(null);
+      if (mountedRef.current) setBusyMatchId(null);
     }
   };
 
-  const handleMarkAsFinal = async (game: Game) => {
-    if (!user || busyGameId === game.id) return;
-    setBusyGameId(game.id);
-    try {
-      await gameRepo.update(game.id, { isFinal: !game.isFinal }, user.id);
-      toast({
-        variant: 'gold',
-        title: !game.isFinal
-          ? lang === 'ar'
-            ? 'تم تعيين المباراة كـ النهائي الكبير (مع مروان سري)'
-            : 'Marked as Grand Final (+ Marwan Serry)'
-          : lang === 'ar'
-            ? 'تم إلغاء علامة النهائي'
-            : 'Removed Grand Final flag',
-      });
-      await loadData();
-    } catch (err) {
-      toast({
-        variant: 'negative',
-        title: lang === 'ar' ? 'فشل التحديث' : 'Update failed',
-        description: err instanceof Error ? err.message : undefined,
-      });
-    } finally {
-      if (mountedRef.current) setBusyGameId(null);
-    }
-  };
-
-  const handleSaveGame = async (
+  const handleSaveMatch = async (
     payload: MatchEditorPayload,
     existingId?: string
   ) => {
     if (!user) return;
     if (existingId) {
-      await gameRepo.update(existingId, payload, user.id);
+      await matchRepo.update(existingId, payload, user.id);
       toast({
         variant: 'positive',
-        title: lang === 'ar' ? 'تم حفظ تعديلات المباراة' : 'Game session updated',
+        title: lang === 'ar' ? 'تم حفظ تعديلات المباراة' : 'Match updated',
       });
     } else {
-      await gameRepo.create(payload, user.id);
+      await matchRepo.create(payload, user.id);
       toast({
         variant: 'positive',
-        title: lang === 'ar' ? 'تم إنشاء المباراة' : 'New game created',
+        title: lang === 'ar' ? 'تم إنشاء المباراة' : 'New match created',
       });
     }
     await loadData();
   };
 
-  const handleDeleteGame = async (game: Game) => {
+  const handleDeleteMatch = async (match: Match) => {
     if (!user) return;
     try {
-      await gameRepo.remove(game.id, user.id);
+      await matchRepo.remove(match.id, user.id);
       toast({
         variant: 'info',
-        title: lang === 'ar' ? 'تم حذف المباراة' : 'Game removed',
-        description: localizeText(lang, game.tableName, game.tableNameAr),
+        title: lang === 'ar' ? 'تم حذف المباراة' : 'Match removed',
+        description: localizeText(lang, match.tableName, match.tableNameAr),
       });
       await loadData();
     } catch (err) {
       toast({
         variant: 'negative',
-        title: lang === 'ar' ? 'تعذر حذف المباراة' : 'Failed to remove game',
+        title: lang === 'ar' ? 'تعذر حذف المباراة' : 'Failed to remove match',
         description: err instanceof Error ? err.message : undefined,
       });
     }
@@ -241,246 +293,263 @@ export function AdminGamesView() {
   const statItems = useMemo(
     () => [
       {
-        id: 'total-games',
-        value: games.length,
-        label: lang === 'ar' ? 'إجمالي المباريات' : 'Total Games',
+        id: 'total-matches',
+        value: matches.length,
+        label: lang === 'ar' ? 'إجمالي المباريات' : 'Total Matches',
         detail: `${rounds.length} ${lang === 'ar' ? 'جولات' : 'rounds'}`,
         tone: 'red' as const,
         useArabicIndicDigits: useArabicIndic,
       },
       {
-        id: 'live-games',
-        value: games.filter((g) => g.status === 'live').length,
+        id: 'live-matches',
+        value: matches.filter((m) => m.status === 'live' || m.status === 'needsTieBreak').length,
         label: lang === 'ar' ? 'مباشر الآن' : 'Live Now',
         detail: lang === 'ar' ? 'قيد اللعب حالياً' : 'Active on stage',
         tone: 'live' as const,
         useArabicIndicDigits: useArabicIndic,
       },
       {
-        id: 'scheduled-games',
-        value: games.filter((g) => g.status === 'scheduled').length,
+        id: 'scheduled-matches',
+        value: matches.filter((m) => m.status === 'scheduled').length,
         label: lang === 'ar' ? 'مجدولة قادمة' : 'Scheduled',
-        detail: lang === 'ar' ? 'بانتظار بدء الجلسة' : 'Ready for start',
+        detail: `${settings?.tournament.tablesCount ?? 12} ${lang === 'ar' ? 'طاولات' : 'tables'}`,
         tone: 'blue' as const,
         useArabicIndicDigits: useArabicIndic,
       },
       {
-        id: 'done-games',
-        value: games.filter((g) => g.status === 'finished').length,
+        id: 'done-matches',
+        value: matches.filter((m) => m.status === 'finished').length,
         label: lang === 'ar' ? 'منتهية ومعتمدة' : 'Finished',
-        detail: lang === 'ar' ? 'تم اعتماد النتائج' : 'Winners finalized',
+        detail:
+          totalConflictingMatches === 0
+            ? lang === 'ar'
+              ? '0 تعارض جدول'
+              : '0 schedule conflicts'
+            : lang === 'ar'
+              ? `${totalConflictingMatches} تعارض!`
+              : `${totalConflictingMatches} conflicts!`,
         tone: 'gold' as const,
         useArabicIndicDigits: useArabicIndic,
       },
     ],
-    [games, rounds.length, lang, useArabicIndic]
+    [matches, rounds.length, settings, totalConflictingMatches, lang, useArabicIndic]
   );
 
-  const columns = useMemo<DataTableColumn<Game>[]>(
+  const tableOptions = useMemo(() => {
+    const count = Math.max(
+      settings?.tournament.tablesCount ?? 12,
+      ...matches.map((m) => m.tableNumber)
+    );
+    return Array.from({ length: Math.min(64, count) }, (_, i) => i + 1);
+  }, [settings, matches]);
+
+  const columns = useMemo<DataTableColumn<Match>[]>(
     () => [
       {
-        key: 'table',
-        header: lang === 'ar' ? 'الطاولة والمباراة' : 'Table & Session',
+        key: 'match',
+        header: lang === 'ar' ? 'المباراة والنوع' : 'Match & Stage',
         sortable: true,
-        sortAccessor: (g) => g.tableName.toLowerCase(),
+        sortAccessor: (m) => `${m.round}-${String(m.slot).padStart(4, '0')}`,
         mobileRole: 'title',
-        render: (g) => {
-          const round = roundMap.get(g.roundId);
+        render: (m) => {
+          const round = roundMap.get(m.roundId);
+          const conflicts = conflictsByMatch.get(m.id);
+          const isBye = m.participants.some((p) => p.isBye);
           return (
-            <div className="min-w-0 space-y-0.5">
-              <div className="flex items-center gap-1.5 font-bold text-red-900">
-                {g.isFinal && (
-                  <Crown className="h-4 w-4 shrink-0 text-gold-600" />
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-1.5 font-bold text-red-900">
+                {m.isFinal && (
+                  <Crown className="h-4 w-4 shrink-0 text-gold-600" aria-hidden="true" />
                 )}
                 <span className="truncate">
-                  {localizeText(lang, g.tableName, g.tableNameAr)}
+                  {localizeText(lang, m.tableName, m.tableNameAr)}
                 </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
-                <span>
-                  {round ? localizeText(lang, round.name.en, round.name.ar) : g.roundId}
-                </span>
-                {g.isFinal && (
-                  <Badge variant="gold" className="text-[10px] px-2 py-0">
-                    {lang === 'ar' ? 'النهائي مع مروان سري' : 'FINAL vs Marwan'}
+                {isBye && <Badge variant="gold">BYE</Badge>}
+                {m.isGroupTieBreak && (
+                  <Badge variant="gold">
+                    {lang === 'ar' ? 'فاصلة' : 'TIE-BREAK'}
                   </Badge>
                 )}
               </div>
+              <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
+                <span>
+                  {round
+                    ? localizeText(lang, round.name.en, round.name.ar)
+                    : m.roundId}
+                </span>
+                <span>·</span>
+                <span className="font-bold text-red-800">
+                  {lang === 'ar'
+                    ? `طاولة #${formatNumber(m.tableNumber, { useArabicIndicDigits: useArabicIndic })}`
+                    : `Table #${formatNumber(m.tableNumber, { useArabicIndicDigits: useArabicIndic })}`}
+                </span>
+              </div>
+              {conflicts && conflicts.length > 0 && (
+                <div className="inline-flex items-center gap-1 rounded-pill bg-red-100 px-2 py-0.5 text-[11px] font-bold text-negative">
+                  <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  <span className="truncate max-w-[260px]">
+                    {lang === 'ar' ? conflicts[0].messageAr : conflicts[0].messageEn}
+                  </span>
+                </div>
+              )}
             </div>
           );
         },
       },
       {
-        key: 'status',
-        header: lang === 'ar' ? 'الحالة' : 'Status',
-        sortable: true,
-        sortAccessor: (g) => g.status,
-        mobileRole: 'badge',
-        render: (g) =>
-          g.status === 'live' ? (
-            <LiveBadge size="sm" surface="paper" />
-          ) : (
-            <Badge variant={getGameStatusMeta(g.status, lang).variant}>
-              {getGameStatusMeta(g.status, lang).label}
-            </Badge>
-          ),
-      },
-      {
-        key: 'players',
-        header: lang === 'ar' ? 'المتسابقون' : 'Seated Players',
-        render: (g) => (
-          <div className="flex flex-wrap gap-1 max-w-[240px]">
-            {g.playerIds.map((pid, idx) => {
-              const p = playerMap.get(pid);
+        key: 'participants',
+        header: lang === 'ar' ? 'المشاركون' : 'Participants',
+        render: (m) => (
+          <div className="flex flex-wrap gap-1">
+            {m.participants.map((part, idx) => {
+              if (part.isBye) {
+                return (
+                  <Badge key={`bye-${idx}`} variant="gold">
+                    BYE
+                  </Badge>
+                );
+              }
+              const p = part.playerId ? playerMap.get(part.playerId) : null;
+              const isWin =
+                m.status === 'finished' &&
+                (m.result?.winnerId ?? m.winnerPlayerId) === part.playerId;
+              const label = p
+                ? localizeText(lang, p.fullName, p.fullNameAr)
+                : lang === 'ar'
+                  ? part.placeholderLabelAr ?? 'قريباً'
+                  : part.placeholderLabelEn ?? 'TBD';
               return (
-                <span
-                  key={`${g.id}-${idx}`}
-                  className={
-                    p?.isHost
-                      ? 'rounded-pill border border-outline bg-gold-400 px-2 py-0.5 text-[11px] font-extrabold text-red-900'
-                      : 'rounded-pill border border-border-paper bg-paper px-2 py-0.5 text-[11px] font-semibold text-ink'
-                  }
+                <Badge
+                  key={part.playerId ?? `tbd-${idx}`}
+                  variant={part.guest || isWin ? 'gold' : p ? 'muted' : 'info'}
+                  className="max-w-[160px] truncate"
                 >
-                  {p
-                    ? localizeText(lang, p.fullName, p.fullNameAr)
-                    : 'TBD'}
-                </span>
+                  {label}
+                </Badge>
               );
             })}
           </div>
         ),
       },
       {
-        key: 'scorer',
-        header: lang === 'ar' ? 'حكم الطاولة' : 'Scorer',
-        render: (g) => (
+        key: 'scheduledAt',
+        header: lang === 'ar' ? 'الموعد' : 'Time Slot',
+        sortable: true,
+        sortAccessor: (m) => Date.parse(m.scheduledAt) || 0,
+        render: (m) => (
+          <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-ink">
+            {formatAdminTimeShort(m.scheduledAt, lang, useArabicIndic)}
+          </span>
+        ),
+      },
+      {
+        key: 'judge',
+        header: lang === 'ar' ? 'الحكم' : 'Judge',
+        render: (m) => (
           <select
-            aria-label={`${lang === 'ar' ? 'تعيين حكم لـ' : 'Assign scorer for'} ${g.tableName}`}
-            value={g.scorerUserId}
-            onChange={(e) => handleQuickAssignScorer(g, e.target.value)}
-            className="min-h-[44px] rounded-input border border-border-paper bg-white px-2.5 py-1 text-base sm:text-xs font-bold text-ink focus:border-blue-500 focus:outline-none"
+            aria-label={
+              lang === 'ar'
+                ? `تغيير حكم ${m.tableNameAr || m.tableName}`
+                : `Assign judge for ${m.tableName}`
+            }
+            value={m.judgeUserId}
+            disabled={busyMatchId === m.id}
+            onChange={(e) => handleQuickAssignJudge(m, e.target.value)}
+            className="min-h-[44px] h-11 rounded-input border border-border-paper bg-paper px-2.5 text-base sm:text-xs font-bold text-ink focus:border-blue-500 focus:outline-none"
           >
-            {scorers.map((u) => (
-              <option key={u.id} value={u.id}>
-                {localizeText(lang, u.name, u.nameAr)}
+            {scorers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {localizeText(lang, s.name, s.nameAr)}
               </option>
             ))}
           </select>
         ),
       },
       {
-        key: 'time',
-        header: lang === 'ar' ? 'الموعد' : 'Scheduled',
+        key: 'status',
+        header: lang === 'ar' ? 'الحالة' : 'Status',
         sortable: true,
-        sortAccessor: (g) => new Date(g.scheduledAt).getTime(),
-        render: (g) => (
-          <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-ink-muted">
-            {formatAdminTimeShort(g.scheduledAt, lang, useArabicIndic)}
-          </span>
-        ),
+        sortAccessor: (m) => m.status,
+        mobileRole: 'badge',
+        render: (m) => {
+          if (m.status === 'live') return <LiveBadge size="sm" surface="paper" />;
+          const meta = getGameStatusMeta(m.status, lang);
+          return <Badge variant={meta.variant}>{meta.label}</Badge>;
+        },
       },
       {
         key: 'actions',
         header: lang === 'ar' ? 'إجراءات' : 'Actions',
-        render: (g) => (
-          <div className="flex items-center gap-1.5">
-            <Button
-              asChild
-              variant="calm"
-              size="icon"
-              title={lang === 'ar' ? 'لوحة الحكم' : 'Open Scorer Console'}
-            >
-              <Link
-                href={`/scorer/${g.id}`}
-                aria-label={lang === 'ar' ? 'فتح لوحة الحكم' : 'Open Scorer Console'}
-              >
-                <Tablet className="h-4 w-4 text-red-600" />
-              </Link>
-            </Button>
-            <Button
-              asChild
-              variant="calm"
-              size="icon"
-              title={lang === 'ar' ? 'شاشة العرض' : 'Open Big Screen'}
-            >
-              <Link
-                href={`/screen/${g.id}`}
-                aria-label={lang === 'ar' ? 'فتح شاشة العرض' : 'Open Big Screen'}
-              >
-                <MonitorPlay className="h-4 w-4 text-blue-600" />
-              </Link>
-            </Button>
+        render: (m) => (
+          <div className="flex flex-wrap items-center gap-1.5">
             <Button
               type="button"
               variant="calm"
-              size="icon"
-              onClick={() => handleMarkAsFinal(g)}
-              title={
-                g.isFinal
-                  ? lang === 'ar'
-                    ? 'إلغاء تعيين النهائي'
-                    : 'Unmark Final'
-                  : lang === 'ar'
-                    ? 'تعيين كـ النهائي مع مروان سري'
-                    : 'Mark as Final vs Marwan'
-              }
-              aria-label={lang === 'ar' ? 'تبديل حالة النهائي' : 'Toggle Grand Final'}
-            >
-              <Crown
-                className={
-                  g.isFinal ? 'h-4 w-4 text-gold-600 fill-gold-400' : 'h-4 w-4 text-ink-muted'
-                }
-              />
-            </Button>
-            <Button
-              type="button"
-              variant="calm"
-              size="icon"
+              size="sm"
               onClick={() => {
-                setEditingGame(g);
+                setEditingMatch(m);
                 setEditorOpen(true);
               }}
-              aria-label={lang === 'ar' ? 'تعديل المباراة' : 'Edit game'}
+              aria-label={lang === 'ar' ? `تعديل ${m.tableNameAr}` : `Edit ${m.tableName}`}
+              className="gap-1"
             >
-              <Pencil className="h-4 w-4" />
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
             </Button>
-            <ConfirmDialog
-              destructive
-              title={lang === 'ar' ? 'حذف المباراة؟' : 'Remove Game Session?'}
-              description={
-                lang === 'ar'
-                  ? `سيتم حذف "${g.tableNameAr || g.tableName}" من جدول البطولة.`
-                  : `Remove "${g.tableName}" from the tournament schedule?`
-              }
-              confirmLabel={lang === 'ar' ? 'حذف' : 'Remove'}
-              cancelLabel={lang === 'ar' ? 'إلغاء' : 'Cancel'}
-              onConfirm={() => handleDeleteGame(g)}
-              trigger={
-                <Button
-                  type="button"
-                  variant="calm"
-                  size="icon"
-                  aria-label={lang === 'ar' ? 'حذف المباراة' : 'Delete game'}
-                >
-                  <Trash2 className="h-4 w-4 text-negative" />
-                </Button>
-              }
-            />
+            <Button asChild variant="calm" size="sm">
+              <Link href={`/scorer/${m.id}`} className="gap-1">
+                <Tablet className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>{lang === 'ar' ? 'التحكيم' : 'Score'}</span>
+              </Link>
+            </Button>
+            <Button asChild variant="calm" size="sm">
+              <Link href={`/screen/${m.id}`} className="gap-1">
+                <MonitorPlay className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>{lang === 'ar' ? 'الشاشة' : 'Screen'}</span>
+              </Link>
+            </Button>
+            {m.status === 'scheduled' && (
+              <ConfirmDialog
+                title={lang === 'ar' ? 'حذف المباراة؟' : 'Remove match?'}
+                description={localizeText(lang, m.tableName, m.tableNameAr)}
+                confirmLabel={lang === 'ar' ? 'حذف' : 'Remove'}
+                cancelLabel={lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                destructive
+                onConfirm={() => handleDeleteMatch(m)}
+                trigger={
+                  <Button
+                    type="button"
+                    variant="calm"
+                    size="icon"
+                    aria-label={lang === 'ar' ? 'حذف المباراة' : 'Delete match'}
+                  >
+                    <Trash2 className="h-4 w-4 text-negative" aria-hidden="true" />
+                  </Button>
+                }
+              />
+            )}
           </div>
         ),
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lang, roundMap, playerMap, scorers, useArabicIndic]
+    [
+      lang,
+      roundMap,
+      conflictsByMatch,
+      playerMap,
+      useArabicIndic,
+      scorers,
+      busyMatchId,
+    ]
   );
 
   if (loading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-16 w-full" />
-        <div className="rounded-card border border-border-paper bg-white overflow-hidden">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <TableRowSkeleton key={i} columns={5} />
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, idx) => (
+            <TableRowSkeleton key={idx} columns={5} />
           ))}
         </div>
       </div>
@@ -490,33 +559,51 @@ export function AdminGamesView() {
   return (
     <div className="space-y-6">
       <AdminPageHeader
-        title={lang === 'ar' ? 'المباريات وجلسات اللعب' : 'Games & Sessions'}
+        title={lang === 'ar' ? 'المباريات والجدولة التلقائية' : 'Matches & Auto-Schedule'}
         description={
           lang === 'ar'
-            ? 'إدارة جميع الطاولات، تعيين الحكام والمواعيد، اختيار فقرات كل جلسة، وتعيين النهائي الكبير ضد مروان سري.'
-            : 'Manage every table session, assign scorers and call times, customize segment lineups, and mark the Grand Final vs. Marwan Serry.'
+            ? 'إدارة جميع مباريات المجموعات والإقصائيات والنهائي الكبير مع جدولة تلقائية خالية من التعارضات وتجاوزات يدوية وتحذيرات فورية.'
+            : 'Manage all group, knockout, and Grand Final matches across studio tables with conflict-free auto-scheduling, manual overrides, and live conflict warnings.'
         }
         actions={
-          <>
-            <Button asChild variant="secondary" size="sm">
-              <Link href="/admin/bracket">
-                <GitBranch className="h-4 w-4" />
-                <span>{lang === 'ar' ? 'مصمم الشجرة' : 'Bracket Builder'}</span>
-              </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={scheduling}
+              onClick={handleAutoSchedule}
+              className="gap-2"
+            >
+              <Wand2 className="h-4 w-4" aria-hidden="true" />
+              <span>
+                {scheduling
+                  ? lang === 'ar'
+                    ? 'جاري الجدولة...'
+                    : 'Scheduling...'
+                  : lang === 'ar'
+                    ? 'جدولة القادمة تلقائياً'
+                    : 'Auto-Schedule Upcoming'}
+              </span>
             </Button>
             <Button
               type="button"
               variant="red"
-              size="sm"
               onClick={() => {
-                setEditingGame(null);
+                setEditingMatch(null);
                 setEditorOpen(true);
               }}
+              className="gap-2"
             >
-              <Plus className="h-4 w-4" />
-              <span>{lang === 'ar' ? 'إنشاء مباراة' : 'New Game'}</span>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              <span>{lang === 'ar' ? 'مباراة جديدة' : 'New Match'}</span>
             </Button>
-          </>
+            <Button asChild variant="calm" size="sm">
+              <Link href="/admin/bracket" className="gap-1.5">
+                <GitBranch className="h-4 w-4" aria-hidden="true" />
+                <span>{lang === 'ar' ? 'الشجرة' : 'Bracket'}</span>
+              </Link>
+            </Button>
+          </div>
         }
       />
 
@@ -524,37 +611,116 @@ export function AdminGamesView() {
 
       <AdminStatChipStrip items={statItems} />
 
+      {/* Conflict Health Status Strip */}
+      <div
+        className={
+          totalConflictingMatches > 0
+            ? 'flex flex-wrap items-center justify-between gap-3 rounded-card border-2 border-gold-500 bg-gold-200/35 px-4 py-3'
+            : 'flex flex-wrap items-center justify-between gap-3 rounded-card border border-positive/40 bg-positive-soft px-4 py-3'
+        }
+      >
+        <div className="flex items-center gap-2 text-sm font-bold text-red-900">
+          {totalConflictingMatches > 0 ? (
+            <>
+              <AlertTriangle className="h-4 w-4 shrink-0 text-red-700" aria-hidden="true" />
+              <span>
+                {lang === 'ar'
+                  ? `تم رصد تعارضات في ${totalConflictingMatches} مباراة (لاعب أو طاولة أو حكم محجوز مرتين في نفس الفترة).`
+                  : `Detected schedule conflicts across ${totalConflictingMatches} match(es) (double-booked player, table, or judge).`}
+              </span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-positive-ink" aria-hidden="true" />
+              <span className="text-positive-ink">
+                {lang === 'ar'
+                  ? `الجدول خالٍ تماماً من التعارضات عبر ${settings?.tournament.tablesCount ?? 12} طاولة (${settings?.tournament.slotMinutes ?? 30} دقيقة لكل فترة).`
+                  : `Zero schedule conflicts across ${settings?.tournament.tablesCount ?? 12} tables (${settings?.tournament.slotMinutes ?? 30}-min slots).`}
+              </span>
+            </>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {totalConflictingMatches > 0 && (
+            <>
+              <Button
+                type="button"
+                variant={conflictsOnly ? 'red' : 'calm'}
+                size="sm"
+                onClick={() => setConflictsOnly((v) => !v)}
+              >
+                {conflictsOnly
+                  ? lang === 'ar'
+                    ? 'عرض كل المباريات'
+                    : 'Show All Matches'
+                  : lang === 'ar'
+                    ? `عرض التعارضات فقط (${totalConflictingMatches})`
+                    : `Filter Conflicts (${totalConflictingMatches})`}
+              </Button>
+              <Button
+                type="button"
+                variant="red"
+                size="sm"
+                disabled={scheduling}
+                onClick={handleAutoSchedule}
+                className="gap-1.5"
+              >
+                <CalendarClock className="h-4 w-4" aria-hidden="true" />
+                <span>{lang === 'ar' ? 'إصلاح تلقائي' : 'Resolve via Auto-Schedule'}</span>
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Virtualized / Paginated Matches DataTable */}
       <DataTable
-        data={filteredGames}
+        data={filteredMatches}
         columns={columns}
-        getRowKey={(g) => g.id}
+        getRowKey={(m) => m.id}
+        virtualized
+        defaultPageSize={30}
         filterLayout="bar"
         searchPlaceholder={
           lang === 'ar'
-            ? 'ابحث باسم الطاولة أو اللاعبين...'
-            : 'Search tables or seated players...'
+            ? 'ابحث باسم المباراة، اللاعب، رقم المجموعة، أو الطاولة...'
+            : 'Search match title, player name, group #, table #...'
         }
-        searchFilter={(g, q) =>
-          normalizeSearchText(g.tableName).includes(q) ||
-          normalizeSearchText(g.tableNameAr).includes(q) ||
-          g.playerIds.some((pid) => {
-            const p = playerMap.get(pid);
-            return (
-              normalizeSearchText(p?.fullName).includes(q) ||
-              normalizeSearchText(p?.fullNameAr).includes(q) ||
-              normalizeSearchText(p?.nickname).includes(q) ||
-              normalizeSearchText(p?.nicknameAr).includes(q)
-            );
-          })
-        }
-        filterLabel={lang === 'ar' ? 'تصفية المباريات' : 'Filter Games'}
+        searchFilter={(m, q) => {
+          const pNames = m.participants
+            .map((p) => {
+              const pl = p.playerId ? playerMap.get(p.playerId) : null;
+              return pl
+                ? `${pl.fullName} ${pl.fullNameAr} ${pl.nickname}`
+                : p.placeholderLabelEn ?? '';
+            })
+            .join(' ');
+          const hay = normalizeSearchText(
+            `${m.id} ${m.tableName} ${m.tableNameAr} table ${m.tableNumber} #${m.tableNumber} slot ${m.slot} ${m.groupId ?? ''} ${pNames}`
+          );
+          return hay.includes(q);
+        }}
         filterSlot={
           <>
             <select
-              aria-label={lang === 'ar' ? 'الجولة' : 'Round'}
+              aria-label={lang === 'ar' ? 'تصفية حسب النوع' : 'Filter by stage type'}
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as 'all' | MatchType | 'bye')}
+              className="min-h-[44px] h-11 w-full rounded-input border border-border-paper bg-paper px-3 text-base sm:text-xs font-bold text-ink"
+            >
+              <option value="all">{lang === 'ar' ? 'كل المراحل' : 'All Stages'}</option>
+              <option value="group">{lang === 'ar' ? 'دور المجموعات (1 ضد 1)' : 'Group Stage (1v1)'}</option>
+              <option value="knockout">{lang === 'ar' ? 'الإقصائيات (1 ضد 1)' : 'Knockouts (1v1)'}</option>
+              <option value="final">{lang === 'ar' ? 'النهائي الكبير (3 لاعبين)' : 'Grand Final (1v1v1)'}</option>
+              <option value="bye">{lang === 'ar' ? 'مقاعد التأهل التلقائي (BYE)' : 'BYE Auto-Advance'}</option>
+            </select>
+
+            <select
+              aria-label={lang === 'ar' ? 'تصفية حسب الجولة' : 'Filter by round'}
               value={roundFilter}
               onChange={(e) => setRoundFilter(e.target.value)}
-              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base sm:text-sm font-semibold text-ink focus:border-blue-500 focus:outline-none"
+              className="min-h-[44px] h-11 w-full rounded-input border border-border-paper bg-paper px-3 text-base sm:text-xs font-bold text-ink"
             >
               <option value="all">{lang === 'ar' ? 'كل الجولات' : 'All Rounds'}</option>
               {rounds.map((r) => (
@@ -563,49 +729,88 @@ export function AdminGamesView() {
                 </option>
               ))}
             </select>
+
             <select
-              aria-label={lang === 'ar' ? 'الحالة' : 'Status'}
+              aria-label={lang === 'ar' ? 'تصفية حسب الحالة' : 'Filter by status'}
               value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(e.target.value as 'all' | GameStatus)
-              }
-              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base sm:text-sm font-semibold text-ink focus:border-blue-500 focus:outline-none"
+              onChange={(e) => setStatusFilter(e.target.value as 'all' | MatchStatus)}
+              className="min-h-[44px] h-11 w-full rounded-input border border-border-paper bg-paper px-3 text-base sm:text-xs font-bold text-ink"
             >
               <option value="all">{lang === 'ar' ? 'كل الحالات' : 'All Statuses'}</option>
               <option value="live">{lang === 'ar' ? 'مباشر' : 'Live'}</option>
+              <option value="needsTieBreak">{lang === 'ar' ? 'يحتاج جولة حسم' : 'Needs Tie-Break'}</option>
               <option value="scheduled">{lang === 'ar' ? 'مجدولة' : 'Scheduled'}</option>
               <option value="finished">{lang === 'ar' ? 'منتهية' : 'Finished'}</option>
+              <option value="needsReview">{lang === 'ar' ? 'مراجعة إدارية' : 'Needs Review'}</option>
+              <option value="void">{lang === 'ar' ? 'ملغاة' : 'Void'}</option>
             </select>
+
             <select
-              aria-label={lang === 'ar' ? 'الحكم' : 'Scorer'}
-              value={scorerFilter}
-              onChange={(e) => setScorerFilter(e.target.value)}
-              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base sm:text-sm font-semibold text-ink focus:border-blue-500 focus:outline-none"
+              aria-label={lang === 'ar' ? 'تصفية حسب الطاولة' : 'Filter by table'}
+              value={tableFilter}
+              onChange={(e) => setTableFilter(e.target.value)}
+              className="min-h-[44px] h-11 w-full rounded-input border border-border-paper bg-paper px-3 text-base sm:text-xs font-bold text-ink"
             >
-              <option value="all">{lang === 'ar' ? 'كل الحكام' : 'All Scorers'}</option>
-              {scorers.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {localizeText(lang, u.name, u.nameAr)}
+              <option value="all">{lang === 'ar' ? 'كل الطاولات' : 'All Tables'}</option>
+              {tableOptions.map((n) => (
+                <option key={n} value={String(n)}>
+                  {lang === 'ar' ? `طاولة #${n}` : `Table #${n}`}
                 </option>
               ))}
             </select>
+
+            <select
+              aria-label={lang === 'ar' ? 'تصفية حسب الحكم' : 'Filter by judge'}
+              value={judgeFilter}
+              onChange={(e) => setJudgeFilter(e.target.value)}
+              className="min-h-[44px] h-11 w-full rounded-input border border-border-paper bg-paper px-3 text-base sm:text-xs font-bold text-ink lg:col-span-2"
+            >
+              <option value="all">{lang === 'ar' ? 'كل الحكام' : 'All Judges'}</option>
+              {scorers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {localizeText(lang, s.name, s.nameAr)}
+                </option>
+              ))}
+            </select>
+
+            <div className="relative w-full lg:col-span-2">
+              <Hash
+                className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
+                aria-hidden="true"
+              />
+              <input
+                type="number"
+                min={1}
+                value={jumpGroupInput}
+                onChange={(e) => setJumpGroupInput(e.target.value)}
+                placeholder={
+                  lang === 'ar'
+                    ? 'انتقال برقم المجموعة أو الخانة (1..240)'
+                    : 'Jump to Group or Slot # (1..240)'
+                }
+                aria-label={lang === 'ar' ? 'تصفية برقم المجموعة أو الخانة' : 'Filter by Group or Slot #'}
+                className="min-h-[44px] h-11 w-full rounded-input border border-border-paper bg-paper ps-9 pe-3 text-base sm:text-xs font-bold tabular-nums text-ink placeholder:text-ink-faint focus:border-blue-500 focus:outline-none"
+              />
+            </div>
           </>
         }
       />
 
-      {editorOpen && (
-        <GameEditorDialog
-          open={editorOpen}
-          onOpenChange={setEditorOpen}
-          game={editingGame}
-          rounds={rounds}
-          players={players}
-          scorers={scorers}
-          segments={segments}
-          defaultPlayersPerGame={settings?.bracketConfig.playersPerGame ?? 3}
-          onSave={handleSaveGame}
-        />
-      )}
+      <GameEditorDialog
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        game={editingMatch}
+        rounds={rounds}
+        players={players}
+        scorers={scorers}
+        segments={segments}
+        allMatches={matches}
+        tournamentSettings={settings?.tournament}
+        onSave={handleSaveMatch}
+      />
     </div>
   );
 }
+
+/** Compatibility export alias */
+export { AdminMatchesView as AdminGamesView };

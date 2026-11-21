@@ -520,10 +520,10 @@ export function AdminDashboardView() {
               </h2>
               {isSuperAdmin && (
                 <Link
-                  href="/admin/games"
+                  href="/admin/matches"
                   className="inline-flex min-h-[44px] items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800"
                 >
-                  <span>{lang === 'ar' ? 'كل المباريات' : 'All games'}</span>
+                  <span>{lang === 'ar' ? 'كل المباريات' : 'All matches'}</span>
                   <ArrowUpRight className="h-3.5 w-3.5 rtl:-scale-x-100" />
                 </Link>
               )}

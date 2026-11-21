@@ -170,7 +170,7 @@ Descriptions: short and original (write them yourself). **Do not copy text from 
 ## 8. Screens and routes
 
 **Public**
-`/` pitch and landing · `/final` final night showcase · `/bracket` · `/leaderboard` · `/schedule` · `/rules` · `/segments` · `/sponsors`
+`/` pitch and landing · `/final` final night showcase · `/groups` · `/bracket` · `/leaderboard` · `/schedule` · `/rules` · `/segments` · `/sponsors`
 
 **Auth (mock)**
 `/login` with demo account picker per role
@@ -185,7 +185,7 @@ Descriptions: short and original (write them yourself). **Do not copy text from 
 `/screen/[gameId]` (live game for venue/stream) · `/screen/leaderboard`
 
 **Admin**
-`/admin` dashboard · `/admin/players` · `/admin/managers` · `/admin/bracket` · `/admin/games` · `/admin/segments` · `/admin/results` (results feed) · `/admin/audit` · `/admin/consistency` (Consistency check & Repair by recomputation) · `/admin/check-in` · `/admin/content` · `/admin/sponsors` · `/admin/settings`
+`/admin` dashboard · `/admin/players` · `/admin/managers` · `/admin/groups` (Group draw, manual moves, standings) · `/admin/bracket` · `/admin/matches` (redirect from `/admin/games`) · `/admin/segments` · `/admin/results` (results feed) · `/admin/audit` · `/admin/consistency` (Consistency check & Repair by recomputation) · `/admin/check-in` · `/admin/content` · `/admin/sponsors` · `/admin/settings`
 
 ### Scorer console requirements (the heart of the product — aligned with §15.2)
 - Adapts to **2 players** (all group & knockout 1v1 matches) or **3 participants** (the Final with two finalists + Marwan Serry).

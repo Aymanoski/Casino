@@ -8,12 +8,14 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  Hash,
   MonitorPlay,
   Radio,
   Search,
   Trophy,
   X,
 } from 'lucide-react';
+import { VirtualList, type VirtualListHandle } from '@/components/ui/virtual-list';
 import { useI18n } from '@/lib/i18n';
 import {
   gameRepo,
@@ -61,11 +63,14 @@ export function LeaderboardLiveView() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const deferredSearch = useDeferredValue(searchQuery);
   const [pageIndex, setPageIndex] = useState<number>(0);
+  const [virtualMode, setVirtualMode] = useState<boolean>(false);
+  const [jumpRankInput, setJumpRankInput] = useState<string>('');
   const [liveAnnouncement, setLiveAnnouncement] = useState<string>('');
   const [rtStatus, setRtStatus] = useState<RealtimeConnectionStatus>('connected');
   const [rankShifts, setRankShifts] = useState<Record<string, number>>({});
   const [recentDeltas, setRecentDeltas] = useState<Record<string, number>>({});
 
+  const virtualListRef = useRef<VirtualListHandle | null>(null);
   const loadSeqRef = useRef(0);
   const prevRanksRef = useRef<Map<string, number>>(new Map());
   const prevScoresRef = useRef<Map<string, number>>(new Map());
@@ -573,18 +578,74 @@ export function LeaderboardLiveView() {
             {liveAnnouncement}
           </div>
 
-          {/* Count + Live List */}
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm font-bold text-ink-muted">
+          {/* Count + Jump to Rank + Virtualized/Paginated Switch */}
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm font-bold text-ink-muted">
             <span role="status" aria-live="polite" aria-atomic="true">
-              {lang === 'ar'
-                ? `عرض ${formatNumber(pagedEntries.length, { useArabicIndicDigits: useArabicIndic })} من ${formatNumber(filteredEntries.length, { useArabicIndicDigits: useArabicIndic })} متسابق`
-                : `Showing ${formatNumber(pagedEntries.length, { useArabicIndicDigits: useArabicIndic })} of ${formatNumber(filteredEntries.length, { useArabicIndicDigits: useArabicIndic })} contestants`}
+              {virtualMode
+                ? lang === 'ar'
+                  ? `عرض الكل (${formatNumber(filteredEntries.length, { useArabicIndicDigits: useArabicIndic })} متسابق — تمرير افتراضي)`
+                  : `Showing all ${formatNumber(filteredEntries.length, { useArabicIndicDigits: useArabicIndic })} contestants (Virtualized)`
+                : lang === 'ar'
+                  ? `عرض ${formatNumber(pagedEntries.length, { useArabicIndicDigits: useArabicIndic })} من ${formatNumber(filteredEntries.length, { useArabicIndicDigits: useArabicIndic })} متسابق`
+                  : `Showing ${formatNumber(pagedEntries.length, { useArabicIndicDigits: useArabicIndic })} of ${formatNumber(filteredEntries.length, { useArabicIndicDigits: useArabicIndic })} contestants`}
             </span>
-            <span>
-              {lang === 'ar'
-                ? 'اضغط على أي لاعب لتتبع مساره في شجرة البطولة'
-                : 'Select any player to trace their path on the bracket'}
-            </span>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const r = parseInt(jumpRankInput.replace(/[^\d]/g, ''), 10);
+                  if (!Number.isFinite(r) || r < 1) return;
+                  const idx = filteredEntries.findIndex((entry) => entry.rank === r);
+                  const targetIdx = idx !== -1 ? idx : Math.min(filteredEntries.length - 1, r - 1);
+                  if (targetIdx < 0) return;
+                  if (virtualMode) {
+                    virtualListRef.current?.scrollToIndex(targetIdx, 'smooth');
+                  } else {
+                    setPageIndex(Math.floor(targetIdx / LEADERBOARD_PAGE_SIZE));
+                  }
+                }}
+                className="flex items-center gap-1.5"
+              >
+                <div className="relative w-32">
+                  <Hash
+                    className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted"
+                    aria-hidden="true"
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.max(1, filteredEntries.length)}
+                    value={jumpRankInput}
+                    onChange={(e) => setJumpRankInput(e.target.value)}
+                    placeholder={lang === 'ar' ? 'مركز #...' : 'Rank #...'}
+                    aria-label={lang === 'ar' ? 'انتقال إلى رقم المركز' : 'Jump to rank number'}
+                    className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white ps-7 pe-2 text-base sm:text-xs font-bold tabular-nums text-ink focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                <Button type="submit" variant="calm" size="sm">
+                  {lang === 'ar' ? 'انتقال' : 'Jump'}
+                </Button>
+              </form>
+
+              {filteredEntries.length > LEADERBOARD_PAGE_SIZE && (
+                <Button
+                  type="button"
+                  variant={virtualMode ? 'red' : 'calm'}
+                  size="sm"
+                  aria-pressed={virtualMode}
+                  onClick={() => setVirtualMode((v) => !v)}
+                >
+                  {virtualMode
+                    ? lang === 'ar'
+                      ? 'وضع الصفحات (30)'
+                      : 'Paged (30)'
+                    : lang === 'ar'
+                      ? `عرض الكل (${filteredEntries.length}) افتراضي`
+                      : `Virtual Scroll All (${filteredEntries.length})`}
+                </Button>
+              )}
+            </div>
           </div>
 
           {filteredEntries.length === 0 ? (
@@ -611,6 +672,42 @@ export function LeaderboardLiveView() {
                   {lang === 'ar' ? 'إعادة ضبط الفلاتر' : 'Reset Filters'}
                 </Button>
               }
+            />
+          ) : virtualMode ? (
+            <VirtualList
+              ref={virtualListRef}
+              items={filteredEntries}
+              rowHeight={94}
+              height={640}
+              gap={10}
+              ariaLabel={lang === 'ar' ? 'لوحة الصدارة الافتراضية' : 'Virtualized leaderboard'}
+              getKey={(entry) => entry.player.id}
+              renderItem={(entry) => {
+                const statusMeta = getPlayerStatusMeta(entry.player.status, lang);
+                const shift = rankShifts[entry.player.id] ?? 0;
+                const delta = recentDeltas[entry.player.id] ?? null;
+                return (
+                  <Link
+                    href={`/bracket?player=${encodeURIComponent(entry.player.id)}`}
+                    className="block rounded-card focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
+                  >
+                    <ScoreboardRow
+                      rank={entry.rank}
+                      name={localizeText(lang, entry.player.fullName, entry.player.fullNameAr)}
+                      nickname={localizeText(lang, entry.player.nickname, entry.player.nicknameAr)}
+                      avatarSeed={entry.player.avatarSeed}
+                      score={entry.totalPoints}
+                      recentDelta={delta}
+                      gamesPlayed={entry.gamesPlayed}
+                      wins={entry.wins}
+                      statusLabel={statusMeta.label}
+                      isHighlighted={entry.rank <= 3 || shift !== 0}
+                      useArabicIndicDigits={useArabicIndic}
+                      appearance="calm"
+                    />
+                  </Link>
+                );
+              }}
             />
           ) : (
             <>

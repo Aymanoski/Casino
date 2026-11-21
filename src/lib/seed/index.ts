@@ -31,6 +31,39 @@ export const SEED_VERSION = 3;
 
 export type SeedPresetSize = 12 | 48 | 720;
 
+export const SEED_PRESETS: Record<SeedPresetSize, CreateSeedOptions> = {
+  12: {
+    totalPlayers: 12,
+    groupSize: 3,
+    advancePerGroup: 1,
+    pointsPerGroupWin: 3,
+    tablesCount: 4,
+    slotMinutes: 30,
+    includeFinalWithMarwan: true,
+    includeDemoProgress: true,
+  },
+  48: {
+    totalPlayers: 48,
+    groupSize: 3,
+    advancePerGroup: 2,
+    pointsPerGroupWin: 3,
+    tablesCount: 6,
+    slotMinutes: 30,
+    includeFinalWithMarwan: true,
+    includeDemoProgress: true,
+  },
+  720: {
+    totalPlayers: 720,
+    groupSize: 3,
+    advancePerGroup: 1,
+    pointsPerGroupWin: 3,
+    tablesCount: 12,
+    slotMinutes: 30,
+    includeFinalWithMarwan: true,
+    includeDemoProgress: true,
+  },
+};
+
 export interface CreateSeedOptions {
   totalPlayers?: number;
   groupSize?: number;
@@ -1063,6 +1096,16 @@ export function createSeedSnapshot(options: CreateSeedOptions = {}): DatabaseSna
 
   // 5. Populate realistic mid-tournament demo story via pure append-only events!
   if (includeDemoProgress && groups.length >= 2) {
+    // Pre-index scheduled group matches in O(M) for instant 720-player seed generation
+    const matchesByGroupId = new Map<string, Match[]>();
+    for (const m of scheduledTournamentMatches) {
+      if (m.groupId) {
+        const list = matchesByGroupId.get(m.groupId);
+        if (list) list.push(m);
+        else matchesByGroupId.set(m.groupId, [m]);
+      }
+    }
+
     const completeGroupCount =
       groups.length >= 20 ? 12 : Math.max(1, Math.floor(groups.length / 2));
     const liveGroupCount = Math.min(3, Math.max(1, groups.length - completeGroupCount));
@@ -1098,9 +1141,7 @@ export function createSeedSnapshot(options: CreateSeedOptions = {}): DatabaseSna
     // Complete groups 1..completeGroupCount (including a 3-way cycle in Group 4 and a walkover in Group 6!)
     for (let gIdx = 0; gIdx < completeGroupCount; gIdx++) {
       const group = groups[gIdx];
-      const gMatches = scheduledTournamentMatches.filter(
-        (m) => m.groupId === group.id
-      );
+      const gMatches = matchesByGroupId.get(group.id) ?? [];
 
       // Check-in players of completed groups
       for (const pid of group.playerIds) {
@@ -1222,9 +1263,7 @@ export function createSeedSnapshot(options: CreateSeedOptions = {}): DatabaseSna
     for (let offset = 0; offset < liveGroupCount; offset++) {
       const group = groups[completeGroupCount + offset];
       if (!group) break;
-      const gMatches = scheduledTournamentMatches.filter(
-        (m) => m.groupId === group.id
-      );
+      const gMatches = matchesByGroupId.get(group.id) ?? [];
       if (gMatches.length === 0) continue;
 
       for (const pid of group.playerIds) {
@@ -1371,4 +1410,17 @@ export function createSeedSnapshot(options: CreateSeedOptions = {}): DatabaseSna
     contentItems,
     settings,
   };
+}
+
+/**
+ * Non-blocking async wrapper for seed generation so preset switches (12 / 48 / 720)
+ * paint loading states smoothly without freezing the browser UI.
+ */
+export async function createSeedSnapshotAsync(
+  options: CreateSeedOptions = {}
+): Promise<DatabaseSnapshot> {
+  if (typeof window !== 'undefined') {
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+  }
+  return createSeedSnapshot(options);
 }

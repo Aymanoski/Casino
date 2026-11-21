@@ -5,132 +5,63 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {
   ArrowRight,
-  Calendar,
   Crown,
-  GripVertical,
+  Hash,
+  Layers,
+  MonitorPlay,
   Pencil,
+  ShieldAlert,
   Sparkles,
-  Users,
+  Tablet,
   Wand2,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { realtime } from '@/lib/realtime';
 import {
-  gameRepo,
+  computeTournamentBlueprint,
+  resolveByes,
+  validateTournamentSettings,
+  type QualifierSlot,
+  type TournamentProgressSummary,
+} from '@/lib/engine';
+import {
+  groupRepo,
+  matchRepo,
   playerRepo,
   roundRepo,
   scoreRepo,
   segmentRepo,
   settingsRepo,
   userRepo,
-  type BracketRoundSpec,
 } from '@/lib/repos';
-import type { Game, Player, Round, Segment, Settings, User } from '@/lib/schemas';
+import type {
+  Match,
+  Player,
+  Round,
+  Segment,
+  Settings,
+  TournamentSettings,
+  User,
+} from '@/lib/schemas';
 import { cn, formatNumber, localizeText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
+import { PlayerCombobox } from '@/components/ui/player-combobox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
-import {
-  BracketNode,
-  BracketTrack,
-  type BracketPlayerSlot,
-} from '@/components/brand/BracketNode';
-import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
+import { KnockoutCanvas } from '@/components/brand/KnockoutCanvas';
 import { AdminErrorBanner, AdminPageHeader } from './AdminPageHeader';
-import { getRoundStatusMeta } from './adminFormatters';
+import { DEMO_SEED_PRESETS } from './AdminSettingsView';
+import type { MatchEditorPayload } from './GameEditorDialog';
 
 const GameEditorDialog = dynamic(
   () => import('./GameEditorDialog').then((m) => ({ default: m.GameEditorDialog })),
   { ssr: false }
 );
-
-function computeFlexibleRounds(
-  totalPlayers: number,
-  playersPerGame: number,
-  defaultAdvance: number,
-  semiAdvance: number,
-  includeFinalWithMarwan: boolean
-): BracketRoundSpec[] {
-  const safeSize = Math.max(2, Math.min(6, playersPerGame));
-  const safeAdv = Math.max(1, Math.min(safeSize - 1, defaultAdvance));
-  const specs: BracketRoundSpec[] = [];
-
-  let pool = Math.max(safeSize, totalPlayers);
-  let roundNum = 1;
-
-  while (pool > safeSize && roundNum <= 5) {
-    const gamesCount = Math.ceil(pool / safeSize);
-    const nextPool = gamesCount * safeAdv;
-
-    // When this round already outputs exactly 2 finalists for the Marwan Serry Grand Final,
-    // label it as the Semi-Final and proceed straight to the Grand Final (no orphan TBD seat).
-    if (includeFinalWithMarwan && nextPool === 2) {
-      specs.push({
-        nameEn: 'Semi-Final — The Golden Qualifier',
-        nameAr: 'نصف النهائي — تصفية المقعدين',
-        gamesCount,
-        advancePerGame: safeAdv,
-      });
-      pool = nextPool;
-      break;
-    }
-
-    specs.push({
-      nameEn:
-        roundNum === 1
-          ? 'Round 1 — Opening Tables'
-          : `Round ${roundNum} — Knockout Tables`,
-      nameAr:
-        roundNum === 1
-          ? 'الدور الأول — طاولات التصفيات'
-          : `الدور ${roundNum} — الإقصائيات`,
-      gamesCount,
-      advancePerGame: safeAdv,
-    });
-    if (nextPool >= pool) break;
-    pool = nextPool;
-    roundNum++;
-  }
-
-  // Penultimate Semi-Final table when running a Final vs Marwan (unless pool already reduced to 2)
-  if (includeFinalWithMarwan) {
-    if (pool > 2) {
-      const semiGamesCount = Math.max(1, Math.ceil(pool / safeSize));
-      const resolvedSemiAdv =
-        semiGamesCount === 1
-          ? Math.max(1, Math.min(Math.max(1, pool - 1), semiAdvance))
-          : 1;
-      specs.push({
-        nameEn: 'Semi-Final — The Golden Qualifier',
-        nameAr: 'نصف النهائي — تصفية المقعدين',
-        gamesCount: semiGamesCount,
-        advancePerGame: resolvedSemiAdv,
-      });
-    }
-    specs.push({
-      nameEn: 'The Grand Final — vs. Marwan Serry',
-      nameAr: 'النهائي الكبير — في مواجهة مروان سري',
-      gamesCount: 1,
-      advancePerGame: 1,
-      isFinal: true,
-    });
-  } else {
-    specs.push({
-      nameEn: 'Championship Final',
-      nameAr: 'المباراة النهائية',
-      gamesCount: 1,
-      advancePerGame: 1,
-      isFinal: false,
-    });
-  }
-
-  return specs;
-}
 
 export function AdminBracketView() {
   const { user } = useAuth();
@@ -138,40 +69,40 @@ export function AdminBracketView() {
   const { toast } = useToast();
 
   const [rounds, setRounds] = useState<Round[]>([]);
-  const [games, setGames] = useState<Game[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [segments, setSegments] = useState<Segment[]>([]);
+  const [qualifiers, setQualifiers] = useState<QualifierSlot[]>([]);
+  const [progress, setProgress] = useState<TournamentProgressSummary | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [totalsByGame, setTotalsByGame] = useState<
-    Record<string, Record<string, number>>
-  >({});
+  const [totalsByMatch, setTotalsByMatch] = useState<Map<string, Record<string, number>>>(
+    () => new Map()
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Builder controls
-  const [totalPlayers, setTotalPlayers] = useState(27);
-  const [playersPerGame, setPlayersPerGame] = useState(3);
-  const [advancePerGame, setAdvancePerGame] = useState(1);
-  const [semiAdvanceCount, setSemiAdvanceCount] = useState(2);
+  // Builder draft settings
+  const [totalPlayers, setTotalPlayers] = useState(720);
+  const [groupSize, setGroupSize] = useState(3);
+  const [advancePerGroup, setAdvancePerGroup] = useState(1);
+  const [pointsPerGroupWin, setPointsPerGroupWin] = useState(3);
+  const [tablesCount, setTablesCount] = useState(12);
+  const [slotMinutes, setSlotMinutes] = useState(30);
   const [includeFinalWithMarwan, setIncludeFinalWithMarwan] = useState(true);
   const [generating, setGenerating] = useState(false);
 
-  // Drag & Drop player assignment state
-  const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null);
-  const [selectedPoolPlayerId, setSelectedPoolPlayerId] = useState<string | null>(null);
-  const [seedingRoundId, setSeedingRoundId] = useState<string>('');
-  const [busySeatKey, setBusySeatKey] = useState<string | null>(null);
+  // Canvas navigation helpers
+  const [highlightedPlayerId, setHighlightedPlayerId] = useState('');
+  const [jumpSlotInput, setJumpSlotInput] = useState('');
+  const [focusedMatchId, setFocusedMatchId] = useState<string | null>(null);
 
-  // Quick game edit dialog
-  const [editingGame, setEditingGame] = useState<Game | null>(null);
+  // Match editor dialog
+  const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
 
   const mountedRef = useRef(true);
   const loadSeqRef = useRef(0);
-  const playersPerGameId = React.useId();
-  const advancePerGameId = React.useId();
-  const semiAdvanceId = React.useId();
 
   useEffect(() => {
     mountedRef.current = true;
@@ -180,135 +111,154 @@ export function AdminBracketView() {
     };
   }, []);
 
-  // Clear interrupted drag/selection state on window blur, pointercancel, or Escape
-  useEffect(() => {
-    const clearGesture = () => setDraggingPlayerId(null);
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setDraggingPlayerId(null);
-        setSelectedPoolPlayerId(null);
-      }
-    };
-    window.addEventListener('blur', clearGesture);
-    window.addEventListener('pointercancel', clearGesture);
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('blur', clearGesture);
-      window.removeEventListener('pointercancel', clearGesture);
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, []);
-
-  const loadData = useCallback(async (syncBuilderDefaults = false) => {
-    const seq = ++loadSeqRef.current;
-    try {
-      const [allRounds, allGames, allPlayers, allUsers, allSegments, appSettings] =
-        await Promise.all([
+  const loadData = useCallback(
+    async (syncDefaults = false) => {
+      const seq = ++loadSeqRef.current;
+      try {
+        const [
+          allRounds,
+          allMatches,
+          allPlayers,
+          allUsers,
+          allSegments,
+          allQualifiers,
+          prog,
+          appSettings,
+        ] = await Promise.all([
           roundRepo.list(),
-          gameRepo.list(),
+          matchRepo.list(),
           playerRepo.list({ includeHost: true }),
           userRepo.list(),
           segmentRepo.list(),
+          groupRepo.listQualifiers(),
+          groupRepo.getTournamentProgress(),
           settingsRepo.get(),
         ]);
 
-      const totalsMap = await scoreRepo.getTotalsForMatches(
-        allGames.map((g) => g.id)
-      );
+        const koActiveIds = allMatches
+          .filter((m) => m.type !== 'group' && m.status !== 'scheduled')
+          .map((m) => m.id);
+        const totalsObj =
+          koActiveIds.length > 0 ? await scoreRepo.getTotalsForMatches(koActiveIds) : {};
+        const totalsMap = new Map<string, Record<string, number>>(
+          Object.entries(totalsObj)
+        );
 
-      if (!mountedRef.current || seq !== loadSeqRef.current) return;
-      setRounds(allRounds);
-      setGames(allGames);
-      setPlayers(allPlayers);
-      setUsers(allUsers);
-      setSegments(allSegments);
-      setSettings(appSettings);
-      if (syncBuilderDefaults) {
-        setTotalPlayers(appSettings.bracketConfig.totalPlayers);
-        setPlayersPerGame(appSettings.bracketConfig.playersPerGame);
-        setAdvancePerGame(1);
-        setSemiAdvanceCount(appSettings.bracketConfig.semiAdvanceCount);
-        setIncludeFinalWithMarwan(allGames.some((g) => g.isFinal));
+        if (!mountedRef.current || seq !== loadSeqRef.current) return;
+        setRounds(allRounds);
+        setMatches(allMatches);
+        setPlayers(allPlayers);
+        setUsers(allUsers);
+        setSegments(allSegments);
+        setQualifiers(allQualifiers);
+        setProgress(prog);
+        setSettings(appSettings);
+        setTotalsByMatch(totalsMap);
+
+        if (syncDefaults) {
+          setTotalPlayers(appSettings.tournament.totalPlayers);
+          setGroupSize(appSettings.tournament.groupSize);
+          setAdvancePerGroup(appSettings.tournament.advancePerGroup);
+          setPointsPerGroupWin(appSettings.tournament.pointsPerGroupWin);
+          setTablesCount(appSettings.tournament.tablesCount);
+          setSlotMinutes(appSettings.tournament.slotMinutes);
+          setIncludeFinalWithMarwan(appSettings.tournament.includeFinalWithMarwan);
+        }
+        setError(null);
+      } catch {
+        if (!mountedRef.current || seq !== loadSeqRef.current) return;
+        setError(
+          lang === 'ar'
+            ? 'تعذر تحميل شجرة الإقصائيات.'
+            : 'Failed to load knockout bracket.'
+        );
+      } finally {
+        if (mountedRef.current && seq === loadSeqRef.current) setLoading(false);
       }
-      setTotalsByGame(totalsMap);
-      setSeedingRoundId((prev) =>
-        prev && allRounds.some((r) => r.id === prev)
-          ? prev
-          : allRounds[0]?.id ?? ''
-      );
-      setError(null);
-    } catch {
-      if (!mountedRef.current || seq !== loadSeqRef.current) return;
-      setError(
-        lang === 'ar'
-          ? 'تعذر تحميل شجرة البطولة.'
-          : 'Failed to load tournament bracket.'
-      );
-    } finally {
-      if (mountedRef.current && seq === loadSeqRef.current) setLoading(false);
-    }
-  }, [lang]);
+    },
+    [lang]
+  );
 
   useEffect(() => {
-    loadData(true);
+    void loadData(true);
     const unsub = realtime.subscribe('*', (msg) => {
-      if (msg.event === 'data.reset') {
-        loadData(true);
+      if (msg.event === 'data.reset' || msg.event === 'tournament.generated') {
+        void loadData(true);
         return;
       }
       if (
         msg.event === 'bracket.updated' ||
-        msg.event === 'player.updated' ||
         msg.event === 'score.changed' ||
         msg.event === 'game.started' ||
-        msg.event === 'game.finished'
+        msg.event === 'game.finished' ||
+        msg.event === 'settings.updated'
       ) {
-        loadData(false);
+        void loadData(false);
       }
     });
     return unsub;
   }, [loadData]);
 
-  const useArabicIndic = settings?.useArabicIndicDigits ?? false;
+  const useArabicIndicDigits = settings?.useArabicIndicDigits ?? false;
+  const useArabicIndic = useArabicIndicDigits;
   const playerMap = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
-  const nonHostPlayers = useMemo(() => players.filter((p) => !p.isHost), [players]);
   const scorers = useMemo(
     () => users.filter((u) => u.role === 'scorer' || u.role === 'superAdmin'),
     [users]
   );
+  const koMatches = useMemo(
+    () => matches.filter((m) => m.type === 'knockout' || m.type === 'final'),
+    [matches]
+  );
 
-  const plannedRounds = useMemo(
-    () =>
-      computeFlexibleRounds(
-        totalPlayers,
-        playersPerGame,
-        advancePerGame,
-        semiAdvanceCount,
-        includeFinalWithMarwan
-      ),
+  const draftSettings = useMemo<TournamentSettings>(
+    () => ({
+      totalPlayers,
+      groupSize,
+      advancePerGroup,
+      pointsPerGroupWin,
+      tablesCount,
+      slotMinutes,
+      includeFinalWithMarwan,
+    }),
     [
       totalPlayers,
-      playersPerGame,
-      advancePerGame,
-      semiAdvanceCount,
+      groupSize,
+      advancePerGroup,
+      pointsPerGroupWin,
+      tablesCount,
+      slotMinutes,
       includeFinalWithMarwan,
     ]
   );
 
-  const totalPlannedGames = useMemo(
-    () => plannedRounds.reduce((sum, r) => sum + r.gamesCount, 0),
-    [plannedRounds]
+  const validation = useMemo(
+    () => validateTournamentSettings(draftSettings),
+    [draftSettings]
   );
 
-  const handleGenerateBracket = async () => {
-    if (!user) return;
+  const blueprint = useMemo(
+    () => computeTournamentBlueprint(draftSettings, scorers.length || 4),
+    [draftSettings, scorers.length]
+  );
+
+  const currentByeAllocation = useMemo(() => {
+    if (!settings) return null;
+    return resolveByes(qualifiers, settings.tournament);
+  }, [qualifiers, settings]);
+
+  const handleGenerateTournament = async () => {
+    if (!user || !validation.valid) return;
     setGenerating(true);
     try {
-      const res = await gameRepo.generateBracket(
+      const res = await matchRepo.generateBracket(
         {
           totalPlayers,
-          playersPerGame,
-          rounds: plannedRounds,
+          groupSize,
+          advancePerGroup,
+          pointsPerGroupWin,
+          tablesCount,
+          slotMinutes,
           includeFinalWithMarwan,
         },
         user.id
@@ -317,156 +267,90 @@ export function AdminBracketView() {
         variant: 'positive',
         title:
           lang === 'ar'
-            ? 'تم توليد شجرة البطولة بنجاح'
-            : 'Bracket generated successfully',
+            ? 'تم توليد المجموعات وشجرة الإقصاء بنجاح'
+            : 'Tournament bracket generated',
         description:
           lang === 'ar'
-            ? `${res.rounds.length} جولات و ${res.games.length} طاولات جاهزة للتعيين.`
-            : `${res.rounds.length} rounds and ${res.games.length} tables created and logged.`,
+            ? `${res.rounds.length} جولات و${res.matches.length} مباراة مجدولة بدون تعارض.`
+            : `${res.rounds.length} rounds and ${res.matches.length} matches auto-scheduled conflict-free.`,
       });
-      await loadData();
+      await loadData(true);
     } catch (err) {
       toast({
         variant: 'negative',
-        title: lang === 'ar' ? 'تعذر توليد الشجرة' : 'Bracket generation failed',
+        title: lang === 'ar' ? 'تعذر توليد الشجرة' : 'Generation failed',
         description: err instanceof Error ? err.message : undefined,
       });
     } finally {
-      setGenerating(false);
+      if (mountedRef.current) setGenerating(false);
     }
   };
 
-  const handleAssignPlayerToSeat = async (
-    targetGame: Game,
-    seatIdx: number,
-    playerId: string
+  const handleLoadQuickPreset = async (
+    preset: (typeof DEMO_SEED_PRESETS)[number]
   ) => {
-    const key = `${targetGame.id}-${seatIdx}`;
-    if (!user || busySeatKey === key) return;
-    if (targetGame.isFinal && targetGame.playerIds[seatIdx] === 'player-marwan') {
+    if (!user) return;
+    setGenerating(true);
+    try {
+      await settingsRepo.resetDemoData(user.id, preset.options);
+      await loadData(true);
+      toast({
+        variant: 'positive',
+        title:
+          lang === 'ar'
+            ? `تم تحميل نموذج ${preset.size} لاعب`
+            : `Loaded ${preset.size}-player demo preset`,
+      });
+    } catch (err) {
+      toast({
+        variant: 'negative',
+        title: lang === 'ar' ? 'تعذر التحميل' : 'Preset failed',
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      if (mountedRef.current) setGenerating(false);
+    }
+  };
+
+  const handleJumpToSlot = (e: React.FormEvent) => {
+    e.preventDefault();
+    const num = parseInt(jumpSlotInput.replace(/[^\d]/g, ''), 10);
+    if (!Number.isFinite(num) || num < 1) return;
+    const match =
+      koMatches.find((m) => m.slot === num) ??
+      koMatches.find((m) => m.id.includes(`-${num}`));
+    if (!match) {
+      toast({
+        variant: 'negative',
+        title:
+          lang === 'ar'
+            ? `لا توجد مباراة إقصائية بالرقم #${num}`
+            : `No knockout match at slot #${num}`,
+      });
       return;
     }
-
-    setBusySeatKey(key);
-    const nextPlayerIds = [...targetGame.playerIds];
-    nextPlayerIds[seatIdx] = playerId;
-    try {
-      await gameRepo.update(targetGame.id, { playerIds: nextPlayerIds }, user.id);
-      const p = playerMap.get(playerId);
-      toast({
-        variant: 'info',
-        title: lang === 'ar' ? 'تم تعيين المقعد' : 'Seat updated',
-        description: `${p ? localizeText(lang, p.fullName, p.fullNameAr) : playerId} → ${localizeText(lang, targetGame.tableName, targetGame.tableNameAr)}`,
-      });
-      setSelectedPoolPlayerId(null);
-      setDraggingPlayerId(null);
-      await loadData();
-    } catch (err) {
-      toast({
-        variant: 'negative',
-        title: lang === 'ar' ? 'تعذر تحديث المقعد' : 'Could not assign player',
-        description: err instanceof Error ? err.message : undefined,
-      });
-    } finally {
-      if (mountedRef.current) setBusySeatKey(null);
-    }
+    setFocusedMatchId(match.id);
+    window.setTimeout(() => setFocusedMatchId(null), 4000);
   };
 
-  const handleUpdateRoundAdvance = async (round: Round, nextAdv: number) => {
-    if (!user) return;
-    try {
-      await roundRepo.update(round.id, { advancePerGame: nextAdv }, user.id);
-      await loadData();
-    } catch (err) {
-      toast({
-        variant: 'negative',
-        title: lang === 'ar' ? 'تعذر تحديث الجولة' : 'Failed to update round',
-        description: err instanceof Error ? err.message : undefined,
-      });
-    }
-  };
-
-  const handleSaveGameFromModal = async (
-    payload: {
-      roundId: string;
-      tableNumber?: number;
-      tableName: string;
-      tableNameAr: string;
-      scheduledAt: string;
-      judgeUserId: string;
-      scorerUserId: string;
-      playerIds: string[];
-      segmentIds: string[];
-      isFinal: boolean;
-    },
+  const handleSaveMatch = async (
+    payload: MatchEditorPayload,
     existingId?: string
   ) => {
-    if (!user) return;
-    if (existingId) {
-      await gameRepo.update(existingId, payload, user.id);
-      toast({
-        variant: 'positive',
-        title: lang === 'ar' ? 'تم تحديث المباراة' : 'Game session updated',
-      });
-    } else {
-      await gameRepo.create(payload, user.id);
-      toast({
-        variant: 'positive',
-        title: lang === 'ar' ? 'تم إنشاء المباراة' : 'Game session created',
-      });
-    }
-    await loadData();
-  };
-
-  const seedingRoundGames = useMemo(
-    () =>
-      games
-        .filter((g) => g.roundId === seedingRoundId)
-        .sort((a, b) => (a.podOrder ?? 99) - (b.podOrder ?? 99)),
-    [games, seedingRoundId]
-  );
-
-  const seatedInSelectedRound = useMemo(() => {
-    const ids = new Set<string>();
-    seedingRoundGames.forEach((g) => g.playerIds.forEach((pid) => ids.add(pid)));
-    return ids;
-  }, [seedingRoundGames]);
-
-  const toBracketSlots = (game: Game): BracketPlayerSlot[] => {
-    const totals = totalsByGame[game.id] ?? {};
-    return game.playerIds.map((pid, idx) => {
-      const p = playerMap.get(pid);
-      if (!p) {
-        return {
-          id: `${game.id}-slot-${idx}`,
-          name:
-            lang === 'ar'
-              ? `متأهل مقعد ${idx + 1} (TBD)`
-              : `Qualifier Seat ${idx + 1} (TBD)`,
-          isPlaceholder: true,
-        };
-      }
-      return {
-        id: p.id,
-        name: localizeText(lang, p.fullName, p.fullNameAr),
-        nickname: localizeText(lang, p.nickname, p.nicknameAr),
-        avatarSeed: p.avatarSeed,
-        score:
-          game.status === 'live' || game.status === 'finished'
-            ? totals[p.id] ?? 0
-            : undefined,
-        isWinner: game.winnerPlayerId === p.id,
-        isAdvancing: game.advancingPlayerIds?.includes(p.id),
-        isHost: p.isHost,
-      };
+    if (!user || !existingId) return;
+    await matchRepo.update(existingId, payload, user.id);
+    toast({
+      variant: 'positive',
+      title: lang === 'ar' ? 'تم تحديث المباراة' : 'Match updated',
     });
+    await loadData(false);
   };
 
   if (loading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-16 w-full" />
-        <Skeleton shape="card" className="h-56 w-full" />
+        <Skeleton shape="card" className="h-52 w-full" />
         <Skeleton shape="card" className="h-96 w-full" />
       </div>
     );
@@ -477,271 +361,220 @@ export function AdminBracketView() {
       <AdminPageHeader
         title={
           lang === 'ar'
-            ? 'مصمم شجرة البطولة والتصفيات'
-            : 'Flexible Bracket Builder'
+            ? 'منشئ البطولة وشجرة الإقصائيات التفاعلية'
+            : 'Tournament Builder & Knockout Bracket'
         }
         description={
           lang === 'ar'
-            ? 'اضبط عدد اللاعبين وحجم كل طاولة وعدد المتأهلين لكل جولة، ثم ولّد الجولات تلقائياً واسحب اللاعبين لتوزيع المقاعد.'
-            : 'Configure total players, table size, and per-round advancement, auto-generate rounds and tables, drag-assign players, and inspect the live bracket preview.'
+            ? 'توليد تلقائي لـ دور المجموعات (1 ضد 1) وشجرة الإقصاء (مجموعة 1 ضد 2، 3 ضد 4...) مع توزيع مقاعد BYE لأفضل المتصدرين والنهائي الكبير ضد مروان سري.'
+            : 'Configure and generate Group Stage + Single-Elimination 1v1 Knockouts (Group 1 vs 2, 3 vs 4…, best-qualifier BYEs) culminating in the 1v1v1 Grand Final vs. Marwan Serry.'
         }
         actions={
-          <Button asChild variant="secondary" size="sm">
-            <Link href="/admin/games">
-              <Calendar className="h-4 w-4" />
-              <span>
-                {lang === 'ar' ? 'جدول المباريات والحكام' : 'Games & Scorers'}
-              </span>
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="calm" size="sm">
+              <Link href="/admin/groups" className="gap-1.5">
+                <Layers className="h-4 w-4" aria-hidden="true" />
+                <span>{lang === 'ar' ? 'المجموعات والقرعة' : 'Groups & Draw'}</span>
+              </Link>
+            </Button>
+            <Button asChild variant="calm" size="sm">
+              <Link href="/admin/matches" className="gap-1.5">
+                <Tablet className="h-4 w-4" aria-hidden="true" />
+                <span>{lang === 'ar' ? 'جدول المباريات' : 'All Matches'}</span>
+              </Link>
+            </Button>
+          </div>
         }
       />
 
       {error && <AdminErrorBanner message={error} onRetry={() => loadData(false)} />}
 
-      {/* 1. Flexible Bracket Generator */}
-      <section
-        aria-labelledby="bracket-gen-heading"
-        className="rounded-card border border-border-paper bg-white p-5 shadow-soft space-y-5"
-      >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2
-              id="bracket-gen-heading"
-              className="font-display text-xl text-red-900"
-            >
+      {/* Tournament Generator & Quick Scale Presets */}
+      <section className="rounded-card border border-border-paper bg-white p-5 shadow-soft space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-paper pb-3">
+          <div className="flex items-center gap-2">
+            <Wand2 className="h-5 w-5 text-red-600" aria-hidden="true" />
+            <h2 className="font-display text-xl text-red-900">
               {lang === 'ar'
-                ? 'مولّد التصفيات المرن'
-                : 'Auto-Generate Rounds & Tables'}
+                ? 'مولّد هيكل البطولة ومعاينة الشجرة'
+                : 'Tournament Structure Generator'}
             </h2>
-            <p className="text-xs text-ink-muted">
-              {lang === 'ar'
-                ? 'النظام الافتراضي: ٢٧ لاعباً ← ٩ طاولات (٣/طاولة) ← ٣ طاولات ← نصف نهائي (يتأهل ٢) ← النهائي مع مروان سري.'
-                : 'Default demo: 27 players → 9 tables (3/game) → 3 tables → Semi-Final (top 2) → Final vs. Marwan Serry.'}
-            </p>
           </div>
 
-          <div className="flex flex-wrap gap-1.5">
-            {[
-              { label: '9P (3×3)', p: 9, sz: 3, adv: 1, semi: 2 },
-              { label: '18P (6×3)', p: 18, sz: 3, adv: 1, semi: 2 },
-              { label: '27P (Default)', p: 27, sz: 3, adv: 1, semi: 2 },
-              { label: '36P (9×4)', p: 36, sz: 4, adv: 1, semi: 2 },
-            ].map((preset) => (
-              <button
-                key={preset.label}
-                type="button"
-                onClick={() => {
-                  setTotalPlayers(preset.p);
-                  setPlayersPerGame(preset.sz);
-                  setAdvancePerGame(preset.adv);
-                  setSemiAdvanceCount(preset.semi);
-                }}
-                className="min-h-[44px] rounded-pill border border-border-paper bg-paper px-3.5 text-xs font-bold text-ink hover:border-red-600 hover:bg-paper-2 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
-              >
-                {preset.label}
-              </button>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-bold text-ink-muted">
+              {lang === 'ar' ? 'نماذج سريعة:' : 'Demo presets:'}
+            </span>
+            {DEMO_SEED_PRESETS.map((preset) => (
+              <ConfirmDialog
+                key={preset.size}
+                title={
+                  lang === 'ar'
+                    ? `تحميل نموذج ${preset.size} لاعب التجريبي؟`
+                    : `Load ${preset.size}-Player Demo Story?`
+                }
+                description={lang === 'ar' ? preset.descAr : preset.descEn}
+                confirmLabel={lang === 'ar' ? 'تحميل' : 'Load Preset'}
+                cancelLabel={lang === 'ar' ? 'إلغاء' : 'Cancel'}
+                destructive
+                onConfirm={() => handleLoadQuickPreset(preset)}
+                trigger={
+                  <Button
+                    type="button"
+                    variant={
+                      settings?.tournament.totalPlayers === preset.size
+                        ? 'secondary'
+                        : 'calm'
+                    }
+                    size="sm"
+                    disabled={generating}
+                  >
+                    {preset.size}P
+                  </Button>
+                }
+              />
             ))}
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-12">
-          <div className="lg:col-span-2">
-            <Input
-              label={lang === 'ar' ? 'عدد اللاعبين' : 'Total Players'}
-              type="number"
-              min={4}
-              max={81}
-              value={totalPlayers}
-              onChange={(e) =>
-                setTotalPlayers(Math.max(4, Math.min(81, Number(e.target.value) || 9)))
-              }
-            />
-          </div>
-          <div className="space-y-1.5 lg:col-span-3">
-            <label
-              htmlFor={playersPerGameId}
-              className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
-            >
-              {lang === 'ar' ? 'حجم الطاولة' : 'Players / Game'}
-            </label>
-            <select
-              id={playersPerGameId}
-              value={playersPerGame}
-              onChange={(e) => {
-                const sz = Number(e.target.value);
-                setPlayersPerGame(sz);
-                if (advancePerGame >= sz) setAdvancePerGame(1);
-              }}
-              className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
-            >
-              {[2, 3, 4].map((n) => (
-                <option key={n} value={n}>
-                  {n} {lang === 'ar' ? 'لكل طاولة' : '/ table'}
-                  {n === 3 ? (lang === 'ar' ? ' (افتراضي)' : ' (Default)') : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-1.5 lg:col-span-2">
-            <label
-              htmlFor={advancePerGameId}
-              className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
-            >
-              {lang === 'ar' ? 'المتأهلون / طاولة' : 'Advance / Game'}
-            </label>
-            <select
-              id={advancePerGameId}
-              value={advancePerGame}
-              onChange={(e) => setAdvancePerGame(Number(e.target.value))}
-              className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
-            >
-              {Array.from({ length: Math.max(1, playersPerGame - 1) }, (_, i) => i + 1).map(
-                (n) => (
-                  <option key={n} value={n}>
-                    {lang === 'ar' ? `أفضل ${n}` : `Top ${n}`}
-                  </option>
-                )
-              )}
-            </select>
-          </div>
-
-          <div className="space-y-1.5 lg:col-span-3">
-            <label
-              htmlFor={semiAdvanceId}
-              className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
-            >
-              {lang === 'ar' ? 'متأهلو نصف النهائي' : 'Semi-Final Advance'}
-            </label>
-            <select
-              id={semiAdvanceId}
-              value={semiAdvanceCount}
-              onChange={(e) => setSemiAdvanceCount(Number(e.target.value))}
-              disabled={!includeFinalWithMarwan}
-              className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25 disabled:opacity-50"
-            >
-              <option value={2}>
-                {lang === 'ar' ? 'أفضل ٢ (مع مروان سري)' : 'Top 2 (+ Marwan)'}
-              </option>
-              <option value={1}>
-                {lang === 'ar' ? 'أفضل ١' : 'Top 1'}
-              </option>
-            </select>
-          </div>
-
-          <label className="flex min-h-[44px] cursor-pointer items-center justify-between gap-2 rounded-input border-2 border-border-paper bg-paper px-3 py-2 self-end lg:col-span-2">
-            <span className="flex items-center gap-1.5 text-xs font-bold text-red-900">
-              <Crown className="h-4 w-4 text-gold-600 shrink-0" />
-              <span>
-                {lang === 'ar' ? 'نهائي مروان سري' : 'Marwan Final'}
-              </span>
-            </span>
-            <input
-              type="checkbox"
-              checked={includeFinalWithMarwan}
-              onChange={(e) => setIncludeFinalWithMarwan(e.target.checked)}
-              className="h-5 w-5 accent-red-600"
-            />
-          </label>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <Input
+            label={lang === 'ar' ? 'اللاعبون' : 'Total Players'}
+            type="number"
+            min={4}
+            max={2000}
+            value={totalPlayers}
+            onChange={(e) => setTotalPlayers(parseInt(e.target.value || '0', 10))}
+          />
+          <Input
+            label={lang === 'ar' ? 'حجم المجموعة' : 'Group Size'}
+            type="number"
+            min={2}
+            max={8}
+            value={groupSize}
+            onChange={(e) => setGroupSize(parseInt(e.target.value || '0', 10))}
+          />
+          <Input
+            label={lang === 'ar' ? 'متأهلون/مجموعة' : 'Advance / Group'}
+            type="number"
+            min={1}
+            max={Math.max(1, groupSize - 1)}
+            value={advancePerGroup}
+            onChange={(e) => setAdvancePerGroup(parseInt(e.target.value || '0', 10))}
+          />
+          <Input
+            label={lang === 'ar' ? 'نقاط الفوز' : 'Win Points'}
+            type="number"
+            min={1}
+            max={10}
+            value={pointsPerGroupWin}
+            onChange={(e) => setPointsPerGroupWin(parseInt(e.target.value || '0', 10))}
+          />
+          <Input
+            label={lang === 'ar' ? 'الطاولات' : 'Tables'}
+            type="number"
+            min={1}
+            max={64}
+            value={tablesCount}
+            onChange={(e) => setTablesCount(parseInt(e.target.value || '0', 10))}
+          />
+          <Input
+            label={lang === 'ar' ? 'مدة الفترة (د)' : 'Slot (Min)'}
+            type="number"
+            min={5}
+            max={180}
+            value={slotMinutes}
+            onChange={(e) => setSlotMinutes(parseInt(e.target.value || '0', 10))}
+          />
         </div>
 
-        {/* Live Advancement Math Pipeline Preview */}
-        <div className="rounded-input border border-border-paper bg-paper p-4 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
-              {lang === 'ar'
-                ? 'معاينة هيكل الجولات قبل التوليد'
-                : 'Live Bracket Topology Preview'}
-            </span>
-            <Badge variant="white">
-              {formatNumber(plannedRounds.length, { useArabicIndicDigits: useArabicIndic })}{' '}
-              {lang === 'ar' ? 'جولات' : 'rounds'} ·{' '}
-              {formatNumber(totalPlannedGames, { useArabicIndicDigits: useArabicIndic })}{' '}
-              {lang === 'ar' ? 'مباراة' : 'games'}
+        {!validation.valid && (
+          <div
+            role="alert"
+            className="rounded-input border border-negative bg-red-100/70 px-3 py-2 text-xs font-bold text-negative"
+          >
+            {lang === 'ar'
+              ? validation.errors[0].messageAr
+              : validation.errors[0].messageEn}
+          </div>
+        )}
+
+        {/* Live Blueprint Strip */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border-paper bg-paper p-3.5">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <Badge variant="red">
+              {formatNumber(blueprint.groupsCount, { useArabicIndicDigits })}{' '}
+              {lang === 'ar' ? 'مجموعة' : 'Groups'}
             </Badge>
+            <ArrowRight className="h-3.5 w-3.5 text-ink-muted rtl:rotate-180" aria-hidden="true" />
+            <Badge variant="info">
+              {formatNumber(blueprint.qualifiersCount, { useArabicIndicDigits })}{' '}
+              {lang === 'ar' ? 'متأهل' : 'Qualifiers'}
+            </Badge>
+            <ArrowRight className="h-3.5 w-3.5 text-ink-muted rtl:rotate-180" aria-hidden="true" />
+            <Badge variant="gold">
+              {formatNumber(blueprint.bracketSize, { useArabicIndicDigits })}-
+              {lang === 'ar' ? 'مقعد' : 'Slot KO'}
+              {blueprint.byesCount > 0
+                ? ` (${blueprint.byesCount} BYE)`
+                : ''}
+            </Badge>
+            {includeFinalWithMarwan && (
+              <>
+                <ArrowRight className="h-3.5 w-3.5 text-ink-muted rtl:rotate-180" aria-hidden="true" />
+                <Badge variant="gold" className="gap-1">
+                  <Crown className="h-3 w-3" aria-hidden="true" />
+                  <span>{lang === 'ar' ? 'النهائي ضد مروان' : 'Final vs. Marwan'}</span>
+                </Badge>
+              </>
+            )}
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-pill border border-border-paper bg-white px-3 py-1 text-xs font-extrabold text-ink">
-              <Users className="inline h-3.5 w-3.5 me-1 text-red-600" />
-              {formatNumber(totalPlayers, { useArabicIndicDigits: useArabicIndic })}{' '}
-              {lang === 'ar' ? 'لاعب' : 'Players'}
-            </span>
-            {plannedRounds.map((spec, idx) => (
-              <React.Fragment key={`${spec.nameEn}-${idx}`}>
-                <ArrowRight className="h-4 w-4 text-ink-muted rtl:rotate-180 shrink-0" />
-                <span
-                  className={cn(
-                    'rounded-pill border px-3 py-1 text-xs font-bold',
-                    spec.isFinal
-                      ? 'border-outline bg-gold-400 text-red-900 shadow-sticker-sm'
-                      : 'border-border-paper bg-white text-ink'
-                  )}
-                >
-                  {spec.isFinal ? (
-                    <>
-                      <Crown className="inline h-3.5 w-3.5 me-1" />
-                      {lang === 'ar'
-                        ? 'النهائي (٢ + مروان سري)'
-                        : 'Final (2 + Marwan Serry)'}
-                    </>
-                  ) : (
-                    <>
-                      {localizeText(lang, spec.nameEn.split('—')[0], spec.nameAr.split('—')[0])}:{' '}
-                      {formatNumber(spec.gamesCount, { useArabicIndicDigits: useArabicIndic })}×
-                      {formatNumber(playersPerGame, { useArabicIndicDigits: useArabicIndic })} (
-                      {lang === 'ar' ? 'يتأهل' : 'adv'}{' '}
-                      {formatNumber(spec.advancePerGame, { useArabicIndicDigits: useArabicIndic })})
-                    </>
-                  )}
-                </span>
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-ink-muted">
-            {totalPlayers > nonHostPlayers.length
-              ? lang === 'ar'
-                ? `ملاحظة: لديك حالياً ${nonHostPlayers.length} لاعباً في القائمة؛ المقاعد الزائدة ستُنشأ كمقاعد مبدئية (TBD).`
-                : `Note: Roster currently has ${nonHostPlayers.length} players; extra seats will be created as open TBD slots.`
-              : lang === 'ar'
-                ? 'سيتم توزيع اللاعبين تلقائياً حسب التصنيف (Seed) وتعيين الحكام بالتناوب.'
-                : 'Seeded players will be assigned across Round 1 tables and scorers distributed round-robin.'}
-          </p>
 
           <ConfirmDialog
-            destructive
             title={
-              lang === 'ar'
-                ? 'إعادة توليد شجرة البطولة؟'
-                : 'Auto-Generate New Bracket?'
+              progress?.started
+                ? lang === 'ar'
+                  ? 'معاينة التأثير: إعادة بناء البطولة بعد بدئها؟'
+                  : 'Impact Preview: Rebuild Active Tournament?'
+                : lang === 'ar'
+                  ? 'توليد هيكل البطولة الجديد؟'
+                  : 'Generate New Tournament Bracket?'
             }
             description={
-              lang === 'ar'
-                ? `سيتم استبدال الجولات والمباريات الحالية بـ ${plannedRounds.length} جولات و ${totalPlannedGames} مباراة جديدة مع الاحتفاظ بسجل المراجعة وبيانات التجربة.`
-                : `This replaces current tournament rounds and games with ${plannedRounds.length} rounds and ${totalPlannedGames} newly generated tables. Recorded in the audit log.`
+              progress?.started
+                ? lang === 'ar'
+                  ? `البطولة قيد التشغيل حالياً (${progress.liveCount} مباراة مباشرة، ${progress.finishedCount} منتهية، ${progress.eventsCount} حدث). إعادة التوليد ستبني ${blueprint.groupsCount} مجموعة و${blueprint.totalMatchesCount} مباراة جديدة من الصفر.`
+                  : `Tournament is in progress (${progress.liveCount} live, ${progress.finishedCount} finished, ${progress.eventsCount} events). Rebuilding generates ${blueprint.groupsCount} groups and ${blueprint.totalMatchesCount} fresh matches.`
+                : lang === 'ar'
+                  ? `سيتم إنشاء ${blueprint.groupsCount} مجموعة، ${blueprint.groupMatchesCount} مباراة مجموعات، شجرة إقصاء من ${blueprint.bracketSize} مقعد (${blueprint.byesCount} BYE)، والجدولة التلقائية بدون تعارض.`
+                  : `Creates ${blueprint.groupsCount} groups, ${blueprint.groupMatchesCount} 1v1 group matches, a ${blueprint.bracketSize}-slot knockout tree (${blueprint.byesCount} BYEs), and a conflict-free schedule.`
             }
             confirmLabel={
-              generating
-                ? lang === 'ar'
-                  ? 'جارٍ التوليد...'
-                  : 'Generating...'
-                : lang === 'ar'
-                  ? 'توليد الجولات والمباريات'
-                  : 'Generate Rounds & Games'
+              lang === 'ar' ? 'تأكيد وتوليد البطولة' : 'Confirm & Generate'
             }
             cancelLabel={lang === 'ar' ? 'إلغاء' : 'Cancel'}
-            onConfirm={handleGenerateBracket}
+            destructive={Boolean(progress?.started)}
+            onConfirm={handleGenerateTournament}
             trigger={
-              <Button type="button" variant="red" size="md" disabled={generating}>
-                <Wand2 className="h-4 w-4" />
+              <Button
+                type="button"
+                variant="red"
+                disabled={generating || !validation.valid}
+                className="gap-2"
+              >
+                {progress?.started ? (
+                  <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <Sparkles className="h-4 w-4" aria-hidden="true" />
+                )}
                 <span>
-                  {lang === 'ar'
-                    ? 'توليد الجولات والمباريات تلقائياً'
-                    : 'Auto-Generate Rounds & Games'}
+                  {generating
+                    ? lang === 'ar'
+                      ? 'جاري التوليد...'
+                      : 'Generating...'
+                    : lang === 'ar'
+                      ? `توليد (${blueprint.totalMatchesCount} مباراة)`
+                      : `Generate (${blueprint.totalMatchesCount} Matches)`}
                 </span>
               </Button>
             }
@@ -749,382 +582,150 @@ export function AdminBracketView() {
         </div>
       </section>
 
-      {/* 2. Interactive Visual Bracket Preview */}
-      <section
-        aria-labelledby="bracket-preview-heading"
-        className="rounded-card border border-border-paper bg-white p-5 shadow-soft space-y-4"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2
-              id="bracket-preview-heading"
-              className="font-display text-xl text-red-900"
-            >
+      {/* BYE Allocation Status Banner (when qualifier count is not a power of two) */}
+      {currentByeAllocation && currentByeAllocation.byesCount > 0 && (
+        <section className="rounded-card border border-gold-500/60 bg-gold-200/25 p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <div className="font-display text-base text-red-900">
               {lang === 'ar'
-                ? 'المعاينة البصرية لشجرة البطولة'
-                : 'Visual Bracket Preview'}
-            </h2>
+                ? `توزيع مقاعد التأهل التلقائي (BYE): ${formatNumber(currentByeAllocation.byesCount, { useArabicIndicDigits })} مقعد`
+                : `BYE Allocation: ${formatNumber(currentByeAllocation.byesCount, { useArabicIndicDigits })} Best Group Winners`}
+            </div>
             <p className="text-xs text-ink-muted">
-              {lang === 'ar'
-                ? 'اضغط على أي مباراة لتعديل الطاولة أو الحكم أو التوقيت أو تعيين النهائي.'
-                : 'Click any game node to edit its table name, scorer, schedule time, players, or Final status.'}
+              {currentByeAllocation.allGroupsComplete
+                ? lang === 'ar'
+                  ? 'اكتملت جميع المجموعات — تم منح مقاعد BYE لأفضل المتصدرين وتأهيلهم تلقائياً للدور التالي.'
+                  : 'All groups complete — BYE recipients locked by group points, points diff, and fewer cards, automatically advanced into Round 2.'
+                : lang === 'ar'
+                  ? `${currentByeAllocation.qualifierCount} متأهل يحتاجون شجرة من ${currentByeAllocation.bracketSize} مقعد. تُمنح مقاعد الـ BYE تلقائياً لأفضل ${currentByeAllocation.byesCount} متصدرين بمجرد اكتمال المجموعات.`
+                  : `${currentByeAllocation.qualifierCount} qualifiers fit a ${currentByeAllocation.bracketSize}-slot bracket. Top ${currentByeAllocation.byesCount} group winners automatically claim BYE nodes once all groups complete.`}
             </p>
           </div>
           <Badge variant="gold">
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>
-              {games.length} {lang === 'ar' ? 'طاولات نشطة' : 'Total Tables'}
-            </span>
+            {currentByeAllocation.allGroupsComplete
+              ? lang === 'ar'
+                ? 'BYE معتمد'
+                : 'BYES LOCKED'
+              : lang === 'ar'
+                ? 'بانتظار اكتمال المجموعات'
+                : 'PENDING GROUP COMPLETION'}
           </Badge>
-        </div>
+        </section>
+      )}
 
-        {rounds.length === 0 ? (
-          <EmptyState
-            compact
-            title={lang === 'ar' ? 'لا توجد جولات بعد' : 'No rounds generated yet'}
-            description={
+      {/* Search Player Path + Jump to Match # Controls */}
+      <div className="flex flex-col gap-3 rounded-card border border-border-paper bg-white p-4 shadow-soft md:flex-row md:items-center md:justify-between">
+        <div className="flex-1 max-w-md">
+          <PlayerCombobox
+            players={players}
+            value={highlightedPlayerId}
+            onChange={setHighlightedPlayerId}
+            includeGuest
+            useArabicIndicDigits={useArabicIndic}
+            emptyOptionLabel={
+              lang === 'ar' ? 'إلغاء تتبّع المسار' : 'Clear player path highlight'
+            }
+            placeholder={
               lang === 'ar'
-                ? 'استخدم مولّد التصفيات أعلاه لإنشاء الجولات والطاولات.'
-                : 'Use the flexible bracket generator above to auto-create rounds and tables.'
+                ? 'تتبّع مسار لاعب داخل الشجرة (بحث في 720)...'
+                : 'Highlight player path across bracket (search 720)...'
             }
           />
-        ) : (
-          <BracketTrack
-            title={
-              lang === 'ar'
-                ? 'اسحب أفقياً أو استخدم أزرار التكبير'
-                : 'Pan horizontally or zoom to inspect rounds'
-            }
-          >
-            <div className="flex items-start gap-6 min-w-max px-1 pb-2">
-              {rounds.map((round, roundIdx) => {
-                const roundGames = games
-                  .filter((g) => g.roundId === round.id)
-                  .sort((a, b) => (a.podOrder ?? 99) - (b.podOrder ?? 99));
-                const rMeta = getRoundStatusMeta(round.status, lang);
-
-                return (
-                  <div
-                    key={round.id}
-                    className="w-[290px] sm:w-[310px] shrink-0 space-y-3"
-                  >
-                    {/* Round Column Header with inline advancePerGame edit */}
-                    <div className="rounded-input border border-border-paper bg-white p-3 shadow-sm space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate font-display text-base text-red-900">
-                          {localizeText(lang, round.name.en, round.name.ar)}
-                        </span>
-                        <Badge variant={rMeta.variant}>{rMeta.label}</Badge>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 text-xs text-ink-muted">
-                        <span>
-                          {formatNumber(roundGames.length, {
-                            useArabicIndicDigits: useArabicIndic,
-                          })}{' '}
-                          {lang === 'ar'
-                            ? roundGames.length === 1
-                              ? 'مباراة'
-                              : 'مباريات'
-                            : roundGames.length === 1
-                              ? 'game'
-                              : 'games'}
-                        </span>
-                        <label className="inline-flex items-center gap-1.5 font-bold text-ink">
-                          <span>{lang === 'ar' ? 'يتأهل:' : 'Advance:'}</span>
-                          <select
-                            aria-label={`${lang === 'ar' ? 'عدد المتأهلين في' : 'Advance count for'} ${round.name.en}`}
-                            value={round.advancePerGame}
-                            onChange={(e) =>
-                              handleUpdateRoundAdvance(round, Number(e.target.value))
-                            }
-                            className="min-h-[44px] h-11 rounded-input border border-border-paper bg-paper px-2.5 text-base sm:text-xs font-bold text-red-900 focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
-                          >
-                            {[1, 2, 3].map((v) => (
-                              <option key={v} value={v}>
-                                {v}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Games Column */}
-                    <div
-                      className={cn(
-                        'flex flex-col gap-4',
-                        roundIdx === 1 && 'pt-6',
-                        roundIdx >= 2 && 'pt-14'
-                      )}
-                    >
-                      {roundGames.map((game) => (
-                        <div key={game.id} className="relative">
-                          <BracketNode
-                            tableName={localizeText(lang, game.tableName, game.tableNameAr)}
-                            roundLabel={`${formatNumber(game.playerIds.length, { useArabicIndicDigits: useArabicIndic })}P · ${
-                              users.find((u) => u.id === game.scorerUserId)?.name ?? 'Scorer'
-                            }`}
-                            status={game.status}
-                            isFinal={game.isFinal}
-                            players={toBracketSlots(game)}
-                            useArabicIndicDigits={useArabicIndic}
-                            onSelect={() => {
-                              setEditingGame(game);
-                              setEditorOpen(true);
-                            }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </BracketTrack>
-        )}
-      </section>
-
-      {/* 3. Drag & Drop / Tap-to-Assign Player Seeding Board */}
-      <section
-        aria-labelledby="drag-assign-heading"
-        className="rounded-card border border-border-paper bg-white p-5 shadow-soft space-y-4"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2
-              id="drag-assign-heading"
-              className="font-display text-xl text-red-900"
-            >
-              {lang === 'ar'
-                ? 'سحب وتوزيع اللاعبين على المقاعد'
-                : 'Drag or Click to Assign Players to Seats'}
-            </h2>
-            <p className="text-xs text-ink-muted">
-              {lang === 'ar'
-                ? 'اسحب أي لاعب من القائمة وأفلته على أي مقعد في الطاولة، أو انقر عليه ثم انقر على المقعد (مناسب للموبايل ولوحة المفاتيح).'
-                : 'Drag a player card onto any seat slot below—or tap a player then tap a seat for touch & keyboard assignment.'}
-            </p>
-          </div>
-
-          <select
-            aria-label={lang === 'ar' ? 'اختر الجولة للتوزيع' : 'Select round for seeding'}
-            value={seedingRoundId}
-            onChange={(e) => setSeedingRoundId(e.target.value)}
-            className="min-h-[44px] h-11 rounded-input border-2 border-border-paper bg-white px-3 text-base sm:text-sm font-bold text-ink focus:border-blue-500 focus:outline-none"
-          >
-            {rounds.map((r) => (
-              <option key={r.id} value={r.id}>
-                {localizeText(lang, r.name.en, r.name.ar)}
-              </option>
-            ))}
-          </select>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-12 items-start">
-          {/* Draggable Player Roster Pool */}
-          <div className="lg:col-span-4 rounded-input border border-border-paper bg-paper p-3.5 space-y-2.5 max-h-[520px] overflow-y-auto">
-            <div className="flex items-center justify-between text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
-              <span>{lang === 'ar' ? 'قائمة المتسابقين' : 'Player Pool'}</span>
-              <span>
-                {seatedInSelectedRound.size}/{nonHostPlayers.length}{' '}
-                {lang === 'ar' ? 'موزّع' : 'seated'}
-              </span>
-            </div>
-
-            <div className="space-y-1.5">
-              {nonHostPlayers.map((p) => {
-                const isSeated = seatedInSelectedRound.has(p.id);
-                const isPicked = selectedPoolPlayerId === p.id;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    draggable
-                    onDragStart={(e) => {
-                      setDraggingPlayerId(p.id);
-                      e.dataTransfer.setData('text/plain', p.id);
-                      e.dataTransfer.effectAllowed = 'move';
-                    }}
-                    onDragEnd={() => setDraggingPlayerId(null)}
-                    onClick={() =>
-                      setSelectedPoolPlayerId((prev) =>
-                        prev === p.id ? null : p.id
-                      )
-                    }
-                    className={cn(
-                      'flex min-h-[44px] w-full items-center justify-between gap-2 rounded-input border px-2.5 py-2 text-start text-xs transition-all cursor-grab active:cursor-grabbing',
-                      isPicked
-                        ? 'border-blue-600 bg-blue-100 ring-2 ring-blue-500 text-blue-800'
-                        : isSeated
-                          ? 'border-border-paper bg-white/75 text-ink-muted'
-                          : 'border-outline/30 bg-white text-ink shadow-sm hover:border-red-600'
-                    )}
-                  >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <GripVertical className="h-4 w-4 shrink-0 text-ink-faint" />
-                      <PlayerAvatar
-                        name={localizeText(lang, p.fullName, p.fullNameAr)}
-                        avatarSeed={p.avatarSeed}
-                        size="xs"
-                      />
-                      <div className="min-w-0">
-                        <div className="truncate font-bold">
-                          #{p.seed} {localizeText(lang, p.fullName, p.fullNameAr)}
-                        </div>
-                        <div className="truncate text-[11px] opacity-80">
-                          “{localizeText(lang, p.nickname, p.nicknameAr)}”
-                        </div>
-                      </div>
-                    </div>
-                    {isSeated && (
-                      <Badge variant="muted" className="text-[10px] px-2 py-0.5 shrink-0">
-                        {lang === 'ar' ? 'موزّع' : 'Seated'}
-                      </Badge>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+        <form onSubmit={handleJumpToSlot} className="flex items-center gap-2">
+          <div className="relative w-44">
+            <Hash
+              className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
+              aria-hidden="true"
+            />
+            <input
+              type="number"
+              min={1}
+              value={jumpSlotInput}
+              onChange={(e) => setJumpSlotInput(e.target.value)}
+              placeholder={lang === 'ar' ? 'رقم مباراة إقصاء...' : 'KO Match / Slot #'}
+              aria-label={lang === 'ar' ? 'انتقال إلى رقم مباراة إقصائية' : 'Jump to knockout match number'}
+              className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-paper ps-8 pe-3 text-base sm:text-sm font-bold tabular-nums text-ink focus:border-blue-500 focus:outline-none"
+            />
           </div>
+          <Button type="submit" variant="secondary" size="sm">
+            {lang === 'ar' ? 'انتقال' : 'Jump'}
+          </Button>
+        </form>
+      </div>
 
-          {/* Target Tables & Drop Seats */}
-          <div className="lg:col-span-8 grid gap-3 sm:grid-cols-2">
-            {seedingRoundGames.map((game) => (
-              <div
-                key={game.id}
-                className={cn(
-                  'rounded-input border p-3.5 space-y-2.5 bg-paper/70',
-                  game.isFinal
-                    ? 'border-outline bg-gold-200/35'
-                    : 'border-border-paper'
-                )}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 font-bold text-sm text-red-900">
-                      {game.isFinal && (
-                        <Crown className="h-4 w-4 shrink-0 text-gold-600" />
-                      )}
-                      <span className="truncate">
-                        {localizeText(lang, game.tableName, game.tableNameAr)}
-                      </span>
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="calm"
-                    size="icon"
-                    onClick={() => {
-                      setEditingGame(game);
-                      setEditorOpen(true);
-                    }}
-                    aria-label={lang === 'ar' ? 'تعديل المباراة' : 'Edit game'}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-
-                <div className="space-y-1.5">
-                  {game.playerIds.map((pid, sIdx) => {
-                    const p = playerMap.get(pid);
-                    const isMarwan = p?.isHost;
-                    const canReceiveTap = Boolean(selectedPoolPlayerId) && !isMarwan;
-
-                    return (
-                      <div
-                        key={`${game.id}-drop-${sIdx}`}
-                        role={!isMarwan ? 'button' : undefined}
-                        tabIndex={!isMarwan ? 0 : undefined}
-                        aria-disabled={isMarwan ? true : undefined}
-                        aria-label={
-                          isMarwan
-                            ? lang === 'ar'
-                              ? 'المقعد الذهبي: مروان سري'
-                              : 'Golden Seat: Marwan Serry'
-                            : canReceiveTap
-                              ? lang === 'ar'
-                                ? `تعيين اللاعب المختار في المقعد ${sIdx + 1}`
-                                : `Assign selected player to seat ${sIdx + 1} in ${game.tableName}`
-                              : lang === 'ar'
-                                ? `المقعد ${sIdx + 1}: ${p ? p.fullNameAr : 'فارغ'}`
-                                : `Seat ${sIdx + 1}: ${p ? p.fullName : 'Open TBD'}`
-                        }
-                        onDragOver={(e) => {
-                          if (!isMarwan) e.preventDefault();
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          if (isMarwan) return;
-                          const droppedId =
-                            e.dataTransfer.getData('text/plain') || draggingPlayerId;
-                          if (droppedId) {
-                            handleAssignPlayerToSeat(game, sIdx, droppedId);
-                          }
-                        }}
-                        onClick={() => {
-                          if (canReceiveTap && selectedPoolPlayerId) {
-                            handleAssignPlayerToSeat(game, sIdx, selectedPoolPlayerId);
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (
-                            (e.key === 'Enter' || e.key === ' ') &&
-                            canReceiveTap &&
-                            selectedPoolPlayerId
-                          ) {
-                            e.preventDefault();
-                            handleAssignPlayerToSeat(game, sIdx, selectedPoolPlayerId);
-                          }
-                        }}
-                        className={cn(
-                          'flex min-h-[44px] items-center justify-between gap-2 rounded-input border-2 px-3 py-1.5 text-xs transition-all focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
-                          isMarwan
-                            ? 'border-outline bg-gold-gradient font-extrabold text-red-900'
-                            : canReceiveTap || draggingPlayerId
-                              ? 'border-dashed border-blue-600 bg-blue-100/60 cursor-pointer hover:bg-blue-100'
-                              : 'border-border-paper bg-white'
-                        )}
-                      >
-                        <div className="min-w-0 truncate">
-                          <span className="font-bold text-ink-muted me-1.5">
-                            {isMarwan ? '♛' : `S${sIdx + 1}:`}
-                          </span>
-                          <span className={cn(p ? 'font-bold text-ink' : 'italic text-ink-muted')}>
-                            {p
-                              ? localizeText(lang, p.fullName, p.fullNameAr)
-                              : lang === 'ar'
-                                ? 'اسحب لاعباً هنا (TBD)'
-                                : 'Drop player here (TBD)'}
-                          </span>
-                        </div>
-                        {canReceiveTap && (
-                          <span className="shrink-0 text-[11px] font-extrabold text-blue-800">
-                            {lang === 'ar' ? 'تعيين' : 'Assign'}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {editorOpen && (
-        <GameEditorDialog
-          open={editorOpen}
-          onOpenChange={setEditorOpen}
-          game={editingGame}
+      {/* Interactive Zoomable & Pannable Knockout Tree */}
+      {koMatches.length === 0 ? (
+        <EmptyState
+          title={lang === 'ar' ? 'لم يتم توليد شجرة إقصائيات بعد' : 'No knockout bracket generated yet'}
+          description={
+            lang === 'ar'
+              ? 'استخدم مولّد البطولة أعلاه لإنشاء المجموعات والأدوار الإقصائية.'
+              : 'Use the tournament generator above to build groups and knockout rounds.'
+          }
+        />
+      ) : (
+        <KnockoutCanvas
           rounds={rounds}
-          players={players}
-          scorers={scorers}
-          segments={segments}
-          defaultPlayersPerGame={playersPerGame}
-          onSave={handleSaveGameFromModal}
+          matches={matches}
+          playerMap={playerMap}
+          totalsByMatch={totalsByMatch}
+          highlightedPlayerId={highlightedPlayerId}
+          focusedMatchId={focusedMatchId}
+          useArabicIndicDigits={useArabicIndic}
+          onSelectMatch={(match) => {
+            setEditingMatch(match);
+            setEditorOpen(true);
+          }}
         />
       )}
+
+      {/* Quick Action Bar for Selected / Final Match */}
+      {editingMatch && !editorOpen && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border-paper bg-white p-3.5 shadow-soft">
+          <div className="text-sm font-bold text-red-900">
+            {localizeText(lang, editingMatch.tableName, editingMatch.tableNameAr)}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="calm"
+              size="sm"
+              onClick={() => setEditorOpen(true)}
+              className="gap-1"
+            >
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{lang === 'ar' ? 'تعديل' : 'Edit'}</span>
+            </Button>
+            <Button asChild variant="calm" size="sm">
+              <Link href={`/scorer/${editingMatch.id}`} className="gap-1">
+                <Tablet className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>{lang === 'ar' ? 'التحكيم' : 'Score'}</span>
+              </Link>
+            </Button>
+            <Button asChild variant="calm" size="sm">
+              <Link href={`/screen/${editingMatch.id}`} className="gap-1">
+                <MonitorPlay className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>{lang === 'ar' ? 'الشاشة' : 'Screen'}</span>
+              </Link>
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <GameEditorDialog
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        game={editingMatch}
+        rounds={rounds}
+        players={players}
+        scorers={scorers}
+        segments={segments}
+        allMatches={matches}
+        tournamentSettings={settings?.tournament}
+        onSave={handleSaveMatch}
+      />
     </div>
   );
 }

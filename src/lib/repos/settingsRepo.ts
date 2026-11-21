@@ -1,6 +1,7 @@
-import type { Settings } from '@/lib/schemas';
+import type { Settings, TournamentSettings } from '@/lib/schemas';
+import type { SettingsImpactPreview } from '@/lib/engine';
 import type { CreateSeedOptions } from '@/lib/seed';
-import { commands } from '@/lib/commands';
+import { commands, type CascadePolicy } from '@/lib/commands';
 import { storage } from '@/lib/storage';
 
 export const settingsRepo = {
@@ -9,11 +10,32 @@ export const settingsRepo = {
     return db.settings;
   },
 
+  async previewImpact(
+    tournament: Partial<TournamentSettings>
+  ): Promise<SettingsImpactPreview> {
+    return commands.previewSettingsImpact({ tournament });
+  },
+
   async update(
     patch: Partial<Omit<Settings, 'id'>>,
-    actorUserId = 'user-admin'
+    actorUserId = 'user-admin',
+    options?: {
+      confirmCascade?: boolean;
+      cascadePolicy?: CascadePolicy;
+      confirmStructuralRebuild?: boolean;
+      rebuildTournament?: boolean;
+      rescheduleUpcoming?: boolean;
+    }
   ): Promise<Settings> {
-    return commands.updateSettings({ patch, actorUserId });
+    return commands.updateSettings({
+      patch,
+      actorUserId,
+      confirmCascade: options?.confirmCascade,
+      cascadePolicy: options?.cascadePolicy,
+      confirmStructuralRebuild: options?.confirmStructuralRebuild,
+      rebuildTournament: options?.rebuildTournament,
+      rescheduleUpcoming: options?.rescheduleUpcoming,
+    });
   },
 
   async resetDemoData(

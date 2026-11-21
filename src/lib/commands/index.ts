@@ -44,13 +44,19 @@ import {
   autoScheduleMatches,
   checkInvariants,
   computeMatchResult,
+  computeTournamentBlueprint,
+  detectScheduleConflicts,
+  findNextFreeSlotForMatch,
   generateGroupRoundRobinPairs,
   generateGroups,
   generateKnockout,
+  getTournamentProgress,
   previewCascadeImpact,
   propagateWinners,
+  validateTournamentSettings,
   type CascadeImpact,
   type ConsistencyReport,
+  type SettingsImpactPreview,
 } from '@/lib/engine';
 import { feedback } from '@/lib/feedback';
 import {
@@ -64,6 +70,7 @@ import {
   createDemoSeedState,
   deterministicAvatarKey,
   formatFakePhone,
+  generateProceduralPlayers,
   type CreateSeedOptions,
 } from '@/lib/seed';
 import { storage, type StorageDelta } from '@/lib/storage';
@@ -430,6 +437,146 @@ function applyPropagationAndCascade(
   workingDb.matches = propagated.matches;
   workingDb.rounds = propagated.rounds;
   workingDb.players = propagated.players;
+
+  // Automatic Group Deadlock Tie-Break Match creation (AGENTS.md §15.1):
+  // When a group finishes all regular round-robin matches and remains deadlocked across
+  // the qualification cutoff after rules 1–4, automatically spawn a scheduled tie-break match.
+  if (!options?.isDemo) {
+    let spawnedOrPrunedTieBreak = false;
+    for (const gs of propagated.groupStandings.values()) {
+      const existingUnfinishedTb = workingDb.matches.filter(
+        (m) =>
+          !m.isDemo &&
+          m.groupId === gs.groupId &&
+          m.isGroupTieBreak &&
+          m.status !== 'finished' &&
+          m.status !== 'void'
+      );
+
+      if (
+        gs.needsTieBreakMatch &&
+        gs.tiedCutoffPlayerIds.length >= 2 &&
+        existingUnfinishedTb.length === 0
+      ) {
+        const group = workingDb.groups.find((g) => g.id === gs.groupId);
+        if (group) {
+          const tbId = `match-gtb-auto-g${group.number}-${Date.now()}-${++idCounter}`;
+          const tiedPids = [...gs.tiedCutoffPlayerIds];
+          const groupMatches = workingDb.matches.filter(
+            (m) => !m.isDemo && m.groupId === group.id
+          );
+          const latestMs = groupMatches.reduce((max, m) => {
+            const t = Date.parse(m.scheduledAt);
+            return !Number.isNaN(t) && t > max ? t : max;
+          }, Date.parse('2027-03-05T19:00:00.000Z'));
+
+          const draftTb: Match = {
+            id: tbId,
+            type: 'group',
+            groupId: group.id,
+            roundId: group.roundId,
+            round: 1,
+            slot: groupMatches.length + 1,
+            isGroupTieBreak: true,
+            participants: tiedPids.map((pid, idx) => ({
+              slotIndex: idx,
+              playerId: pid,
+              feeder: { kind: 'fixed' as const, playerId: pid },
+            })),
+            playerIds: tiedPids,
+            tableNumber: 1,
+            tableName: `Group ${group.number} · Automatic Tie-Break`,
+            tableNameAr: `المجموعة ${group.number} · مباراة فاصلة تلقائية`,
+            scheduledAt: new Date(
+              latestMs + workingDb.settings.tournament.slotMinutes * 60_000
+            ).toISOString(),
+            judgeUserId:
+              workingDb.users.find((u) => u.role === 'scorer')?.id ?? 'user-scorer-1',
+            scorerUserId:
+              workingDb.users.find((u) => u.role === 'scorer')?.id ?? 'user-scorer-1',
+            segmentIds: ['seg-16'],
+            currentSegmentIndex: 0,
+            status: 'scheduled',
+            result: null,
+            isFinal: false,
+            isDemo: false,
+            replayEpoch: 0,
+            version: 1,
+            timer: { status: 'idle', durationSec: 30, remainingSec: 30 },
+          };
+
+          const freeSlot = findNextFreeSlotForMatch(
+            draftTb,
+            workingDb.matches,
+            workingDb.users,
+            workingDb.settings.tournament
+          );
+          draftTb.tableNumber = freeSlot.tableNumber;
+          draftTb.judgeUserId = freeSlot.judgeUserId;
+          draftTb.scorerUserId = freeSlot.judgeUserId;
+          draftTb.scheduledAt = freeSlot.scheduledAt;
+
+          workingDb.matches.push(draftTb);
+          spawnedOrPrunedTieBreak = true;
+
+          cascadeAuditEntries.push(
+            createAuditRecord({
+              actorUserId,
+              action: 'cascade.groupTieBreakCreated',
+              entityType: 'group',
+              entityId: group.id,
+              summary: `Auto-created tie-break match for deadlocked Group ${group.number} (${tiedPids.length} tied players on cutoff).`,
+              summaryAr: `تم إنشاء مباراة فاصلة تلقائياً للمجموعة ${group.number} بسبب تساوي ${tiedPids.length} لاعبين في جميع معايير الترتيب.`,
+              before: null,
+              after: {
+                matchId: tbId,
+                tiedPlayerIds: tiedPids,
+                tableNumber: draftTb.tableNumber,
+                scheduledAt: draftTb.scheduledAt,
+              },
+              automatic: true,
+            })
+          );
+        }
+      } else if (!gs.needsTieBreakMatch && existingUnfinishedTb.length > 0) {
+        // Prune an auto-spawned tie-break match if a score revert resolved the deadlock before it started
+        for (const autoTb of existingUnfinishedTb) {
+          if (
+            autoTb.id.startsWith('match-gtb-auto-') &&
+            autoTb.status === 'scheduled' &&
+            !workingDb.scoreEvents.some((e) => e.matchId === autoTb.id) &&
+            !workingDb.absenceEvents.some((e) => e.matchId === autoTb.id) &&
+            !workingDb.matchEvents.some((e) => e.matchId === autoTb.id)
+          ) {
+            workingDb.matches = workingDb.matches.filter((m) => m.id !== autoTb.id);
+            spawnedOrPrunedTieBreak = true;
+          }
+        }
+      }
+    }
+
+    if (spawnedOrPrunedTieBreak) {
+      const reProp = propagateWinners(
+        {
+          players: workingDb.players,
+          groups: workingDb.groups,
+          rounds: workingDb.rounds,
+          matches: workingDb.matches,
+          scoreEvents: workingDb.scoreEvents,
+          absenceEvents: workingDb.absenceEvents,
+          buzzEvents: workingDb.buzzEvents,
+          matchEvents: workingDb.matchEvents,
+          checkInEvents: workingDb.checkInEvents,
+          settings: workingDb.settings.tournament,
+        },
+        { flagLiveMismatchesAsNeedsReview: policy === 'markNeedsReview' }
+      );
+      workingDb.matches = reProp.matches;
+      workingDb.rounds = reProp.rounds;
+      workingDb.players = reProp.players;
+      cascadeBroadcasts.push({ event: 'bracket.updated', payload: {} });
+    }
+  }
 
   if (!options?.isDemo) {
     // Log automatic audit entries for auto-updated scheduled downstream matches
@@ -2387,9 +2534,14 @@ export const commands = {
 
   async createGroupTieBreakMatch(input: {
     groupId: string;
-    playerIds: [string, string];
+    playerIds: string[];
     actorUserId: string;
   }): Promise<Match> {
+    if (input.playerIds.length < 2) {
+      throw new CommandValidationError(
+        'A group tie-break match requires at least 2 participants.'
+      );
+    }
     return commitCommand(input.actorUserId, (beforeDb, db) => {
       assertRepoPermission(db, input.actorUserId, 'bracket.manage');
       const group = db.groups.find((g) => g.id === input.groupId);
@@ -2399,7 +2551,7 @@ export const commands = {
       const judgeUserId = scorers[0]?.id ?? 'user-admin';
       const matchId = nextId(`match-gtb-g${group.number}`);
 
-      const newMatch: Match = {
+      const draftMatch: Match = {
         id: matchId,
         type: 'group',
         groupId: group.id,
@@ -2407,10 +2559,11 @@ export const commands = {
         round: 1,
         slot: db.matches.filter((m) => m.groupId === group.id).length + 1,
         isGroupTieBreak: true,
-        participants: [
-          { slotIndex: 0, playerId: input.playerIds[0], feeder: { kind: 'fixed', playerId: input.playerIds[0] } },
-          { slotIndex: 1, playerId: input.playerIds[1], feeder: { kind: 'fixed', playerId: input.playerIds[1] } },
-        ],
+        participants: input.playerIds.map((pid, idx) => ({
+          slotIndex: idx,
+          playerId: pid,
+          feeder: { kind: 'fixed' as const, playerId: pid },
+        })),
         playerIds: [...input.playerIds],
         tableNumber: 1,
         tableName: `Group ${group.number} · Tie-Break Decider`,
@@ -2429,7 +2582,18 @@ export const commands = {
         timer: { status: 'idle', durationSec: 30, remainingSec: 30 },
       };
 
-      db.matches.push(newMatch);
+      const freeSlot = findNextFreeSlotForMatch(
+        draftMatch,
+        db.matches,
+        db.users,
+        db.settings.tournament
+      );
+      draftMatch.tableNumber = freeSlot.tableNumber;
+      draftMatch.judgeUserId = freeSlot.judgeUserId;
+      draftMatch.scorerUserId = freeSlot.judgeUserId;
+      draftMatch.scheduledAt = freeSlot.scheduledAt;
+
+      db.matches.push(draftMatch);
       applyPropagationAndCascade(beforeDb, db, input.actorUserId, {
         confirmCascade: true,
       });
@@ -2529,6 +2693,7 @@ export const commands = {
     actorUserId: string;
     shuffleSeed?: number;
     preserveSeedOrder?: boolean;
+    confirmStructuralRebuild?: boolean;
   }): Promise<{ groups: Group[]; rounds: Round[]; matches: Match[] }> {
     return commitCommand(input.actorUserId, (_beforeDb, db) => {
       assertRepoPermission(db, input.actorUserId, 'bracket.manage');
@@ -2537,6 +2702,41 @@ export const commands = {
         ...db.settings.tournament,
         ...input.tournament,
       };
+
+      const validation = validateTournamentSettings(merged);
+      if (!validation.valid) {
+        throw new CommandValidationError(validation.errors[0].messageEn);
+      }
+
+      const progress = getTournamentProgress(
+        db.matches,
+        db.scoreEvents,
+        db.absenceEvents,
+        db.matchEvents
+      );
+      if (progress.started && input.confirmStructuralRebuild === false) {
+        throw new CommandValidationError(
+          `Tournament has already started (${progress.liveCount} live, ${progress.finishedCount} finished). Explicit Impact Preview confirmation is required.`
+        );
+      }
+
+      // Ensure player roster satisfies merged.totalPlayers (preserve existing players & Marwan;
+      // procedurally top up if scaling up, e.g., 12 -> 48 or 720)
+      const nonGuests = db.players.filter((p) => !p.isGuest && !p.isHost);
+      const guestPlayers = db.players.filter((p) => p.isGuest || p.isHost);
+      if (nonGuests.length < merged.totalPlayers) {
+        const procedural = generateProceduralPlayers(merged.totalPlayers);
+        const existingIds = new Set(db.players.map((p) => p.id));
+        const additions = procedural.filter(
+          (p) => !p.isGuest && !p.isHost && !existingIds.has(p.id)
+        );
+        const needed = merged.totalPlayers - nonGuests.length;
+        db.players = [
+          ...nonGuests,
+          ...additions.slice(0, needed),
+          ...guestPlayers,
+        ];
+      }
 
       const groupRound: Round = {
         id: 'round-groups',
@@ -2689,6 +2889,407 @@ export const commands = {
         ],
       };
     });
+  },
+
+  /**
+   * Re-draws all groups randomly (or in seed order) BEFORE the tournament has started.
+   * Regenerates all group round-robin 1v1 matches & auto-schedules conflict-free.
+   */
+  async redrawGroups(input: {
+    actorUserId: string;
+    shuffleSeed?: number;
+    preserveSeedOrder?: boolean;
+  }): Promise<{ groups: Group[]; matches: Match[] }> {
+    const seed = input.shuffleSeed ?? Math.floor(Date.now() % 1_000_000_007);
+    const res = await this.generateTournament({
+      tournament: {},
+      actorUserId: input.actorUserId,
+      shuffleSeed: seed,
+      preserveSeedOrder: input.preserveSeedOrder,
+      confirmStructuralRebuild: false,
+    });
+    return { groups: res.groups, matches: res.matches };
+  },
+
+  /**
+   * Moves or swaps a player between groups BEFORE the tournament has started.
+   * Regenerates 1v1 round-robin matches for affected groups and reschedules conflict-free.
+   */
+  async movePlayerBetweenGroups(input: {
+    playerId: string;
+    targetGroupId: string;
+    swapWithPlayerId?: string;
+    actorUserId: string;
+  }): Promise<{ groups: Group[]; affectedMatchIds: string[] }> {
+    return commitCommand(input.actorUserId, (beforeDb, db) => {
+      assertRepoPermission(db, input.actorUserId, 'bracket.manage');
+
+      const progress = getTournamentProgress(
+        db.matches,
+        db.scoreEvents,
+        db.absenceEvents,
+        db.matchEvents
+      );
+      if (progress.started) {
+        throw new CommandValidationError(
+          'Manual group moves are locked once the tournament has started.'
+        );
+      }
+
+      const sourceGroupIdx = db.groups.findIndex((g) =>
+        g.playerIds.includes(input.playerId)
+      );
+      const targetGroupIdx = db.groups.findIndex((g) => g.id === input.targetGroupId);
+      if (sourceGroupIdx === -1) {
+        throw new CommandValidationError(`Player "${input.playerId}" is not assigned to any group.`);
+      }
+      if (targetGroupIdx === -1) {
+        throw new CommandValidationError(`Target group "${input.targetGroupId}" not found.`);
+      }
+
+      const sourceGroup = {
+        ...db.groups[sourceGroupIdx],
+        playerIds: [...db.groups[sourceGroupIdx].playerIds],
+      };
+      const targetGroup =
+        sourceGroupIdx === targetGroupIdx
+          ? sourceGroup
+          : {
+              ...db.groups[targetGroupIdx],
+              playerIds: [...db.groups[targetGroupIdx].playerIds],
+            };
+
+      const srcPos = sourceGroup.playerIds.indexOf(input.playerId);
+
+      if (input.swapWithPlayerId) {
+        const tgtPos = targetGroup.playerIds.indexOf(input.swapWithPlayerId);
+        if (tgtPos === -1) {
+          throw new CommandValidationError(
+            `Swap target player "${input.swapWithPlayerId}" is not in Group ${targetGroup.number}.`
+          );
+        }
+        sourceGroup.playerIds[srcPos] = input.swapWithPlayerId;
+        targetGroup.playerIds[tgtPos] = input.playerId;
+      } else {
+        if (sourceGroup.id === targetGroup.id) {
+          throw new CommandValidationError('Select a different target group or a player to swap with.');
+        }
+        if (sourceGroup.playerIds.length <= 2) {
+          throw new CommandValidationError(
+            `Group ${sourceGroup.number} cannot have fewer than 2 players. Swap with a player instead.`
+          );
+        }
+        sourceGroup.playerIds.splice(srcPos, 1);
+        targetGroup.playerIds.push(input.playerId);
+      }
+
+      db.groups[sourceGroupIdx] = sourceGroup;
+      if (targetGroupIdx !== sourceGroupIdx) {
+        db.groups[targetGroupIdx] = targetGroup;
+      }
+
+      // Regenerate round-robin 1v1 matches for affected group(s)
+      const affectedGroupIds = new Set<string>([sourceGroup.id, targetGroup.id]);
+      const affectedGroups = [sourceGroup];
+      if (targetGroup.id !== sourceGroup.id) affectedGroups.push(targetGroup);
+
+      const availableSegs = [...db.segments]
+        .filter((s) => s.id !== 'seg-16')
+        .sort((a, b) => a.order - b.order);
+      const stdSegIds =
+        availableSegs.length >= 6
+          ? availableSegs.slice(0, 6).map((s) => s.id)
+          : availableSegs.map((s) => s.id);
+
+      const preservedMatches = db.matches.filter(
+        (m) => m.isDemo || m.type !== 'group' || !m.groupId || !affectedGroupIds.has(m.groupId)
+      );
+      let maxGroupSlot = preservedMatches
+        .filter((m) => !m.isDemo && m.type === 'group')
+        .reduce((max, m) => Math.max(max, m.slot), 0);
+
+      const rebuiltGroupMatches: Match[] = [];
+      for (const grp of affectedGroups) {
+        const pairs = generateGroupRoundRobinPairs(grp.playerIds);
+        pairs.forEach(([pA, pB], idx) => {
+          rebuiltGroupMatches.push({
+            id: `match-g${grp.number}-m${idx + 1}`,
+            type: 'group',
+            groupId: grp.id,
+            roundId: grp.roundId,
+            round: 1,
+            slot: ++maxGroupSlot,
+            isGroupTieBreak: false,
+            participants: [
+              { slotIndex: 0, playerId: pA, feeder: { kind: 'fixed', playerId: pA } },
+              { slotIndex: 1, playerId: pB, feeder: { kind: 'fixed', playerId: pB } },
+            ],
+            playerIds: [pA, pB],
+            tableNumber: 1,
+            tableName: `Group ${grp.number} · Match ${idx + 1}`,
+            tableNameAr: `المجموعة ${grp.number} · مباراة ${idx + 1}`,
+            scheduledAt: '2027-03-05T19:00:00.000Z',
+            judgeUserId: 'user-scorer-1',
+            scorerUserId: 'user-scorer-1',
+            segmentIds: stdSegIds.length ? stdSegIds : ['seg-1'],
+            currentSegmentIndex: 0,
+            status: 'scheduled',
+            result: null,
+            isFinal: false,
+            isDemo: false,
+            podOrder: maxGroupSlot,
+            replayEpoch: 0,
+            version: 1,
+            timer: { status: 'idle', durationSec: 45, remainingSec: 45 },
+          });
+        });
+      }
+
+      // Re-run conflict-free auto-scheduler across all non-demo matches so no double-bookings arise
+      const demoMatches = preservedMatches.filter((m) => m.isDemo);
+      const nonDemoMatches = [
+        ...preservedMatches.filter((m) => !m.isDemo),
+        ...rebuiltGroupMatches,
+      ];
+      const rescheduled = autoScheduleMatches(
+        nonDemoMatches,
+        db.users,
+        db.settings.tournament
+      );
+      db.matches = [...rescheduled, ...demoMatches];
+
+      applyPropagationAndCascade(beforeDb, db, input.actorUserId, {
+        confirmCascade: true,
+      });
+
+      const movingPlayer = db.players.find((p) => p.id === input.playerId);
+      const swapPlayer = input.swapWithPlayerId
+        ? db.players.find((p) => p.id === input.swapWithPlayerId)
+        : null;
+
+      db.auditEntries.unshift(
+        createAuditRecord({
+          actorUserId: input.actorUserId,
+          action: input.swapWithPlayerId ? 'group.swapPlayers' : 'group.movePlayer',
+          entityType: 'group',
+          entityId: targetGroup.id,
+          summary: swapPlayer
+            ? `Swapped ${movingPlayer?.fullName ?? input.playerId} (Group ${sourceGroup.number}) with ${swapPlayer.fullName} (Group ${targetGroup.number}) and regenerated round-robin matches.`
+            : `Moved ${movingPlayer?.fullName ?? input.playerId} from Group ${sourceGroup.number} to Group ${targetGroup.number} and regenerated round-robin matches.`,
+          summaryAr: swapPlayer
+            ? `تم تبديل ${movingPlayer?.fullNameAr ?? input.playerId} (المجموعة ${sourceGroup.number}) مع ${swapPlayer.fullNameAr} (المجموعة ${targetGroup.number}).`
+            : `تم نقل ${movingPlayer?.fullNameAr ?? input.playerId} من المجموعة ${sourceGroup.number} إلى المجموعة ${targetGroup.number}.`,
+          before: {
+            sourceGroup: beforeDb.groups[sourceGroupIdx]?.playerIds,
+            targetGroup: beforeDb.groups[targetGroupIdx]?.playerIds,
+          },
+          after: {
+            sourceGroup: sourceGroup.playerIds,
+            targetGroup: targetGroup.playerIds,
+          },
+        })
+      );
+
+      return {
+        result: {
+          groups: db.groups,
+          affectedMatchIds: rebuiltGroupMatches.map((m) => m.id),
+        },
+        nextDb: db,
+        broadcasts: [{ event: 'bracket.updated', payload: { groupId: targetGroup.id } }],
+      };
+    });
+  },
+
+  /**
+   * Runs the conflict-free auto-scheduler across upcoming scheduled matches (default)
+   * or all matches, guaranteeing zero player/table/judge double-bookings.
+   */
+  async autoScheduleAll(input: {
+    actorUserId: string;
+    onlyScheduled?: boolean;
+    startIso?: string;
+  }): Promise<{ rescheduledCount: number; remainingConflicts: number }> {
+    return commitCommand(input.actorUserId, (beforeDb, db) => {
+      assertRepoPermission(db, input.actorUserId, 'bracket.manage');
+      const onlyScheduled = input.onlyScheduled ?? true;
+
+      const scheduled = autoScheduleMatches(
+        db.matches,
+        db.users,
+        db.settings.tournament,
+        input.startIso ?? '2027-03-05T19:00:00.000Z',
+        { onlyScheduled }
+      );
+
+      const beforeById = new Map(beforeDb.matches.map((m) => [m.id, m]));
+      let rescheduledCount = 0;
+      db.matches = scheduled.map((m) => {
+        const prev = beforeById.get(m.id);
+        if (
+          prev &&
+          (prev.tableNumber !== m.tableNumber ||
+            prev.scheduledAt !== m.scheduledAt ||
+            prev.judgeUserId !== m.judgeUserId)
+        ) {
+          rescheduledCount++;
+          return { ...m, version: m.version + 1 };
+        }
+        return m;
+      });
+
+      const remainingConflicts = detectScheduleConflicts(
+        db.matches,
+        db.settings.tournament
+      ).length;
+
+      db.auditEntries.unshift(
+        createAuditRecord({
+          actorUserId: input.actorUserId,
+          action: 'schedule.autoAssign',
+          entityType: 'bracket',
+          entityId: 'auto-schedule',
+          summary: `Auto-scheduled ${rescheduledCount} match(es) across ${db.settings.tournament.tablesCount} tables (${db.settings.tournament.slotMinutes} min slots, ${remainingConflicts} conflicts).`,
+          summaryAr: `تمت الجدولة التلقائية لـ ${rescheduledCount} مباراة عبر ${db.settings.tournament.tablesCount} طاولات (${db.settings.tournament.slotMinutes} دقيقة لكل فترة).`,
+          before: { onlyScheduled },
+          after: { rescheduledCount, remainingConflicts },
+        })
+      );
+
+      return {
+        result: { rescheduledCount, remainingConflicts },
+        nextDb: db,
+        broadcasts: [{ event: 'bracket.updated', payload: { rescheduledCount } }],
+      };
+    });
+  },
+
+  /**
+   * Read-only tiered Impact Preview for changing Admin Tournament Settings.
+   */
+  async previewSettingsImpact(input: {
+    tournament: Partial<TournamentSettings>;
+  }): Promise<SettingsImpactPreview> {
+    const db = await storage.readSnapshot();
+    const before = db.settings.tournament;
+    const next: TournamentSettings = { ...before, ...input.tournament };
+    const progress = getTournamentProgress(
+      db.matches,
+      db.scoreEvents,
+      db.absenceEvents,
+      db.matchEvents
+    );
+
+    const structuralChanged =
+      before.totalPlayers !== next.totalPlayers ||
+      before.groupSize !== next.groupSize ||
+      before.advancePerGroup !== next.advancePerGroup ||
+      before.includeFinalWithMarwan !== next.includeFinalWithMarwan;
+
+    const scheduleChanged =
+      before.tablesCount !== next.tablesCount ||
+      before.slotMinutes !== next.slotMinutes;
+
+    const scoringChanged = before.pointsPerGroupWin !== next.pointsPerGroupWin;
+
+    if (!structuralChanged && !scheduleChanged && !scoringChanged) {
+      return {
+        tier: 'none',
+        requiresConfirmation: false,
+        tournamentStarted: progress.started,
+        affectedScheduledCount: 0,
+        affectedActiveOrFinishedCount: 0,
+        affectedGroupsCount: 0,
+        summaryEn: 'No tournament structure or scheduling parameters changed.',
+        summaryAr: 'لم تتغير أي إعدادات لهيكل البطولة أو الجدول.',
+      };
+    }
+
+    if (structuralChanged) {
+      const nextBp = computeTournamentBlueprint(next);
+      const activeOrFinished =
+        progress.liveCount +
+        progress.finishedCount +
+        progress.needsTieBreakCount +
+        progress.needsReviewCount +
+        progress.voidCount;
+
+      return {
+        tier: 'structural',
+        requiresConfirmation: progress.started,
+        tournamentStarted: progress.started,
+        affectedScheduledCount: progress.scheduledCount,
+        affectedActiveOrFinishedCount: activeOrFinished,
+        affectedGroupsCount: db.groups.length,
+        summaryEn: progress.started
+          ? `Structural change (${before.totalPlayers}/${before.groupSize}/${before.advancePerGroup} → ${next.totalPlayers}/${next.groupSize}/${next.advancePerGroup}) will rebuild ${nextBp.groupsCount} groups and ${nextBp.totalMatchesCount} matches, archiving ${activeOrFinished} live/finished match(es) and ${progress.eventsCount} recorded event(s).`
+          : `Will build ${nextBp.groupsCount} groups, ${nextBp.groupMatchesCount} group matches, a ${nextBp.bracketSize}-slot knockout bracket (${nextBp.byesCount} BYEs), and ${nextBp.totalMatchesCount} total matches.`,
+        summaryAr: progress.started
+          ? `هذا التعديل الهيكلي سيعيد بناء ${nextBp.groupsCount} مجموعة و${nextBp.totalMatchesCount} مباراة، وسيؤدي لإعادة تعيين ${activeOrFinished} مباراة جارية/منتهية و${progress.eventsCount} حدث مسجّل.`
+          : `سيتم إنشاء ${nextBp.groupsCount} مجموعة و${nextBp.groupMatchesCount} مباراة مجموعات وشجرة إقصائية من ${nextBp.bracketSize} مقعد (${nextBp.byesCount} تأهل تلقائي).`,
+      };
+    }
+
+    if (scheduleChanged && !scoringChanged) {
+      return {
+        tier: 'schedule',
+        requiresConfirmation: progress.started,
+        tournamentStarted: progress.started,
+        affectedScheduledCount: progress.scheduledCount,
+        affectedActiveOrFinishedCount: 0,
+        affectedGroupsCount: 0,
+        summaryEn: progress.started
+          ? `Schedule update (${next.tablesCount} tables × ${next.slotMinutes} min) will reschedule ${progress.scheduledCount} upcoming match(es) conflict-free while preserving all ${progress.finishedCount + progress.liveCount} live/finished match(es).`
+          : `Schedule update will auto-assign ${progress.scheduledCount} scheduled matches across ${next.tablesCount} tables in ${next.slotMinutes}-minute slots.`,
+        summaryAr: progress.started
+          ? `تحديث الجدول (${next.tablesCount} طاولات × ${next.slotMinutes} دقيقة) سيعيد جدولة ${progress.scheduledCount} مباراة قادمة فقط مع الحفاظ على جميع المباريات الجارية والمنتهية.`
+          : `سيتم توزيع ${progress.scheduledCount} مباراة مجدولة تلقائياً عبر ${next.tablesCount} طاولات بفترات ${next.slotMinutes} دقيقة.`,
+      };
+    }
+
+    // Scoring-only (pointsPerGroupWin) -> run pure cascade impact preview!
+    const cascadeImpact = previewCascadeImpact(
+      {
+        players: db.players,
+        groups: db.groups,
+        rounds: db.rounds,
+        matches: db.matches,
+        scoreEvents: db.scoreEvents,
+        absenceEvents: db.absenceEvents,
+        buzzEvents: db.buzzEvents,
+        matchEvents: db.matchEvents,
+        checkInEvents: db.checkInEvents,
+        settings: before,
+      },
+      {
+        players: db.players,
+        groups: db.groups,
+        rounds: db.rounds,
+        matches: db.matches,
+        scoreEvents: db.scoreEvents,
+        absenceEvents: db.absenceEvents,
+        buzzEvents: db.buzzEvents,
+        matchEvents: db.matchEvents,
+        checkInEvents: db.checkInEvents,
+        settings: next,
+      }
+    );
+
+    return {
+      tier: 'scoring',
+      requiresConfirmation: cascadeImpact.requiresConfirmation || progress.started,
+      tournamentStarted: progress.started,
+      affectedScheduledCount: cascadeImpact.autoUpdatedMatches.length,
+      affectedActiveOrFinishedCount: cascadeImpact.reviewRequiredMatches.length,
+      affectedGroupsCount: db.groups.length,
+      cascadeImpact,
+      summaryEn:
+        cascadeImpact.summaryEn ||
+        `Group win points changed (${before.pointsPerGroupWin} → ${next.pointsPerGroupWin}). Group standings will recompute in place.`,
+      summaryAr:
+        cascadeImpact.summaryAr ||
+        `تغيير نقاط الفوز في المجموعات (${before.pointsPerGroupWin} ← ${next.pointsPerGroupWin}). سيتم إعادة حساب ترتيب المجموعات تلقائياً.`,
+    };
   },
 
   async createMatch(input: {
@@ -4152,13 +4753,46 @@ export const commands = {
   async updateSettings(input: {
     patch: Partial<Omit<Settings, 'id'>>;
     actorUserId: string;
+    confirmCascade?: boolean;
+    cascadePolicy?: CascadePolicy;
+    confirmStructuralRebuild?: boolean;
+    rebuildTournament?: boolean;
+    rescheduleUpcoming?: boolean;
   }): Promise<Settings> {
-    return commitCommand(input.actorUserId, (beforeDb, db) => {
+    const saved = await commitCommand(input.actorUserId, (beforeDb, db) => {
       assertRepoPermission(db, input.actorUserId, 'settings.manage');
       const before = db.settings;
       const nextTournament: TournamentSettings = input.patch.tournament
         ? { ...before.tournament, ...input.patch.tournament }
         : before.tournament;
+
+      const validation = validateTournamentSettings(nextTournament);
+      if (!validation.valid) {
+        throw new CommandValidationError(validation.errors[0].messageEn);
+      }
+
+      const structuralChanged =
+        before.tournament.totalPlayers !== nextTournament.totalPlayers ||
+        before.tournament.groupSize !== nextTournament.groupSize ||
+        before.tournament.advancePerGroup !== nextTournament.advancePerGroup ||
+        before.tournament.includeFinalWithMarwan !== nextTournament.includeFinalWithMarwan;
+
+      const scheduleChanged =
+        before.tournament.tablesCount !== nextTournament.tablesCount ||
+        before.tournament.slotMinutes !== nextTournament.slotMinutes;
+
+      const progress = getTournamentProgress(
+        db.matches,
+        db.scoreEvents,
+        db.absenceEvents,
+        db.matchEvents
+      );
+
+      if (structuralChanged && progress.started && !input.confirmStructuralRebuild) {
+        throw new CommandValidationError(
+          `Tournament already started (${progress.liveCount} live, ${progress.finishedCount} finished). Confirm Impact Preview before applying structural settings.`
+        );
+      }
 
       const updated: Settings = {
         ...before,
@@ -4170,17 +4804,35 @@ export const commands = {
       };
       db.settings = updated;
 
-      // Recompute derived state if pointsPerGroupWin or advancePerGroup changed
+      let cascadeAuditEntries: AuditEntry[] = [];
+      let cascadeBroadcasts: RealtimeBroadcast[] = [];
+
+      // Schedule-only update: conflict-free reschedule of upcoming scheduled matches
+      if (scheduleChanged && (input.rescheduleUpcoming ?? true) && !structuralChanged) {
+        db.matches = autoScheduleMatches(
+          db.matches,
+          db.users,
+          nextTournament,
+          '2027-03-05T19:00:00.000Z',
+          { onlyScheduled: true }
+        );
+      }
+
+      // Scoring-only update (pointsPerGroupWin) or non-rebuild update: recompute via engine cascade
       if (
-        before.tournament.pointsPerGroupWin !== nextTournament.pointsPerGroupWin ||
-        before.tournament.advancePerGroup !== nextTournament.advancePerGroup
+        !structuralChanged &&
+        before.tournament.pointsPerGroupWin !== nextTournament.pointsPerGroupWin
       ) {
-        applyPropagationAndCascade(beforeDb, db, input.actorUserId, {
-          confirmCascade: true,
+        const res = applyPropagationAndCascade(beforeDb, db, input.actorUserId, {
+          confirmCascade: input.confirmCascade ?? false,
+          cascadePolicy: input.cascadePolicy,
         });
+        cascadeAuditEntries = res.cascadeAuditEntries;
+        cascadeBroadcasts = res.cascadeBroadcasts;
       }
 
       db.auditEntries.unshift(
+        ...cascadeAuditEntries,
         createAuditRecord({
           actorUserId: input.actorUserId,
           action: 'settings.update',
@@ -4194,14 +4846,25 @@ export const commands = {
       );
 
       return {
-        result: updated,
+        result: { updated, needsStructuralRebuild: structuralChanged && (input.rebuildTournament ?? true) },
         nextDb: db,
         broadcasts: [
           { event: 'settings.updated', payload: { keys: Object.keys(input.patch) } },
           { event: 'bracket.updated', payload: {} },
+          ...cascadeBroadcasts,
         ],
       };
     });
+
+    if (saved.needsStructuralRebuild) {
+      await this.generateTournament({
+        tournament: saved.updated.tournament,
+        actorUserId: input.actorUserId,
+        confirmStructuralRebuild: true,
+      });
+    }
+
+    return saved.updated;
   },
 
   async resetDemoData(input?: {

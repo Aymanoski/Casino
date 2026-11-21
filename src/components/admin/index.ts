@@ -4,6 +4,7 @@ export * from './AdminCheckInView';
 export * from './AdminContentView';
 export * from './AdminDashboardView';
 export * from './AdminGamesView';
+export * from './AdminGroupsView';
 export * from './AdminManagersView';
 export * from './AdminPageHeader';
 export * from './AdminPlayersView';

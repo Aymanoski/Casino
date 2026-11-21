@@ -74,19 +74,27 @@ export function orderQualifiersIntoPairs(
       continue;
     }
     const gB = byGroup.get(gBNum)!.sort((a, b) => a.groupRank - b.groupRank);
-    const maxRank = Math.max(gA.length, gB.length);
-    for (let r = 0; r < maxRank; r++) {
-      if (gA[r] && gB[r]) {
-        pairs.push([gA[r], gB[r]]);
-      } else if (gA[r]) {
-        leftovers.push(gA[r]);
-      } else if (gB[r]) {
-        leftovers.push(gB[r]);
+    const gBByRank = new Map(gB.map((q) => [q.groupRank, q]));
+    const matchedRanks = new Set<number>();
+
+    for (const qa of gA) {
+      const qb = gBByRank.get(qa.groupRank);
+      if (qb) {
+        pairs.push([qa, qb]);
+        matchedRanks.add(qa.groupRank);
+      } else {
+        leftovers.push(qa);
+      }
+    }
+    for (const qb of gB) {
+      if (!matchedRanks.has(qb.groupRank)) {
+        leftovers.push(qb);
       }
     }
   }
 
-  // Pair any odd-group-count leftovers sequentially
+  // Pair any odd-group-count leftovers matched by rank first, then group number
+  leftovers.sort((a, b) => a.groupRank - b.groupRank || a.groupNumber - b.groupNumber);
   for (let i = 0; i + 1 < leftovers.length; i += 2) {
     pairs.push([leftovers[i], leftovers[i + 1]]);
   }

@@ -12,6 +12,7 @@ import type {
   ComputedGroupStandings,
   ComputedMatchOutcome,
   GroupStandingRow,
+  GroupTieBreakReason,
   QualifierSlot,
 } from './types';
 
@@ -54,7 +55,7 @@ export function generateGroups(
         id: 'group-1',
         number: 1,
         nameEn: 'Group 1',
-        nameAr: 'المجموعة ١',
+        nameAr: 'المجموعة 1',
         roundId,
         playerIds: ordered.map((p) => p.id),
       },
@@ -258,6 +259,8 @@ export function computeGroupStandings(
   const sortedPointValues = Array.from(byGroupPoints.keys()).sort((a, b) => b - a);
 
   const rankedBuckets: MutableRow[][] = [];
+  let appliedReason: GroupTieBreakReason = 'points';
+  let hasThreeWayCycle = false;
 
   for (const pts of sortedPointValues) {
     const bucket = byGroupPoints.get(pts)!;
@@ -271,13 +274,19 @@ export function computeGroupStandings(
       const [a, b] = bucket;
       const winner = h2hWinner.get(h2hKey(a.playerId, b.playerId));
       if (winner === a.playerId) {
+        if (appliedReason === 'points') appliedReason = 'h2h';
         rankedBuckets.push([a], [b]);
         continue;
       }
       if (winner === b.playerId) {
+        if (appliedReason === 'points') appliedReason = 'h2h';
         rankedBuckets.push([b], [a]);
         continue;
       }
+    }
+
+    if (bucket.length >= 3 && pts > 0) {
+      hasThreeWayCycle = true;
     }
 
     // Otherwise (3+ way tie / cycle, or unplayed H2H): apply Rules 3 -> 4 -> 5
@@ -286,6 +295,23 @@ export function computeGroupStandings(
       if (cmp !== 0) return cmp;
       return group.playerIds.indexOf(a.playerId) - group.playerIds.indexOf(b.playerId);
     });
+
+    // Record which tie-break tier separated adjacent rows in this tied bucket
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const curr = sorted[i];
+      if (prev.pointsDiff !== curr.pointsDiff) {
+        if (appliedReason === 'points' || appliedReason === 'h2h') {
+          appliedReason = 'pointsDiff';
+        }
+      } else if (prev.redCards !== curr.redCards || prev.yellowCards !== curr.yellowCards) {
+        if (appliedReason !== 'tieBreakMatch') {
+          appliedReason = 'cards';
+        }
+      } else if ((tieBreakWins.get(prev.playerId) ?? 0) !== (tieBreakWins.get(curr.playerId) ?? 0)) {
+        appliedReason = 'tieBreakMatch';
+      }
+    }
 
     // Sub-group identical ties (where compareRules3to5 === 0) so we detect deadlocks accurately
     let curGroup: MutableRow[] = [sorted[0]];
@@ -322,6 +348,7 @@ export function computeGroupStandings(
 
     if (crossesCutoff && allRegularDone) {
       needsTieBreakMatch = true;
+      appliedReason = 'deadlock';
       for (const r of tiedSlice) {
         tiedCutoffPlayerIds.push(r.playerId);
       }
@@ -333,6 +360,7 @@ export function computeGroupStandings(
         rank: sliceStart,
         qualified: false,
         tiedForCutoff: crossesCutoff && allRegularDone,
+        tieBreakReason: crossesCutoff && allRegularDone ? 'deadlock' : appliedReason,
       });
     }
     currentRank += tiedSlice.length;
@@ -359,6 +387,8 @@ export function computeGroupStandings(
     qualifierPlayerIds,
     needsTieBreakMatch,
     tiedCutoffPlayerIds,
+    tieBreakApplied: appliedReason,
+    hasThreeWayCycle,
   };
 }
 
@@ -373,7 +403,8 @@ export function computeQualifiers(
   absenceEvents: AbsenceEvent[],
   matchEvents: MatchLifecycleEvent[],
   settings: TournamentSettings,
-  precomputedStandings?: Map<string, ComputedGroupStandings>
+  precomputedStandings?: Map<string, ComputedGroupStandings>,
+  precomputedOutcomes?: Map<string, ComputedMatchOutcome>
 ): {
   qualifiers: QualifierSlot[];
   groupStandings: Map<string, ComputedGroupStandings>;
@@ -382,6 +413,16 @@ export function computeQualifiers(
   const standingsMap =
     precomputedStandings ?? new Map<string, ComputedGroupStandings>();
 
+  // Index group matches once in O(M) instead of O(G * M)
+  const matchesByGroup = new Map<string, Match[]>();
+  for (const m of matches) {
+    if (!m.isDemo && m.type === 'group' && m.groupId) {
+      const list = matchesByGroup.get(m.groupId) ?? [];
+      list.push(m);
+      matchesByGroup.set(m.groupId, list);
+    }
+  }
+
   const qualifiers: QualifierSlot[] = [];
 
   for (const group of sortedGroups) {
@@ -389,11 +430,12 @@ export function computeQualifiers(
     if (!gs) {
       gs = computeGroupStandings(
         group,
-        matches,
+        matchesByGroup.get(group.id) ?? [],
         scoreEvents,
         absenceEvents,
         matchEvents,
-        settings
+        settings,
+        precomputedOutcomes
       );
       standingsMap.set(group.id, gs);
     }

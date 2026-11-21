@@ -7,6 +7,7 @@ import {
   Calendar,
   Clock,
   Crown,
+  Hash,
   MapPin,
   Megaphone,
   MonitorPlay,
@@ -17,7 +18,7 @@ import {
 import { useI18n } from '@/lib/i18n';
 import {
   contentRepo,
-  gameRepo,
+  matchRepo,
   playerRepo,
   roundRepo,
   settingsRepo,
@@ -25,8 +26,9 @@ import {
 import { realtime } from '@/lib/realtime';
 import type {
   ContentItem,
-  Game,
-  GameStatus,
+  Match,
+  MatchStatus,
+  MatchType,
   Player,
   Round,
   Settings,
@@ -51,7 +53,7 @@ import { PublicErrorBanner } from './PublicErrorBanner';
 import { PublicPageHero } from './PublicPageHero';
 
 interface ScheduleDataset {
-  games: Game[];
+  games: Match[];
   rounds: Round[];
   players: Player[];
   announcements: ContentItem[];
@@ -60,7 +62,7 @@ interface ScheduleDataset {
 }
 
 type GroupMode = 'day' | 'round';
-type StatusFilter = 'all' | GameStatus;
+type StatusFilter = 'all' | MatchStatus;
 
 const SCHEDULE_PAGE_STEP = 24;
 
@@ -72,6 +74,9 @@ export function ScheduleView() {
   const [error, setError] = useState<string | null>(null);
   const [groupMode, setGroupMode] = useState<GroupMode>('day');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [stageFilter, setStageFilter] = useState<'all' | MatchType>('all');
+  const [tableFilter, setTableFilter] = useState<string>('all');
+  const [jumpGroupOrMatch, setJumpGroupOrMatch] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const deferredSearch = useDeferredValue(searchQuery);
   const [visibleLimit, setVisibleLimit] = useState(SCHEDULE_PAGE_STEP);
@@ -85,7 +90,7 @@ export function ScheduleView() {
       try {
         const [games, rounds, players, announcements, blurbs, settings] =
           await Promise.all([
-            gameRepo.list(),
+            matchRepo.list({ viewerRole: 'visitor' }),
             roundRepo.list(),
             playerRepo.list({ includeHost: true }),
             contentRepo.list({ category: 'announcement' }),
@@ -135,7 +140,7 @@ export function ScheduleView() {
 
   useEffect(() => {
     setVisibleLimit(SCHEDULE_PAGE_STEP);
-  }, [groupMode, statusFilter, deferredSearch]);
+  }, [groupMode, statusFilter, stageFilter, tableFilter, jumpGroupOrMatch, deferredSearch]);
 
   const maps = useMemo(() => {
     if (!data) return null;
@@ -144,27 +149,35 @@ export function ScheduleView() {
     const sortedRounds = [...data.rounds].sort((a, b) => a.order - b.order);
 
     const q = normalizeSearchText(deferredSearch);
+    const jumpNum = parseInt(jumpGroupOrMatch.replace(/[^\d]/g, ''), 10);
     const filteredGames = [...data.games]
       .filter((g) => {
         if (statusFilter !== 'all' && g.status !== statusFilter) return false;
+        if (stageFilter !== 'all' && g.type !== stageFilter) return false;
+        if (tableFilter !== 'all' && String(g.tableNumber) !== tableFilter) return false;
+        if (Number.isFinite(jumpNum) && jumpNum > 0) {
+          if (g.groupId !== `group-${jumpNum}` && g.slot !== jumpNum) return false;
+        }
         if (!q) return true;
         const round = roundMap.get(g.roundId);
-        const playerNames = g.playerIds
-          .map((pid) => {
-            const p = playerMap.get(pid);
+        const playerNames = g.participants
+          .map((part) => {
+            if (part.isBye) return 'BYE';
+            const p = part.playerId ? playerMap.get(part.playerId) : null;
             return p
               ? `${p.fullName} ${p.fullNameAr} ${p.nickname} ${p.nicknameAr}`
-              : pid;
+              : part.placeholderLabelEn ?? '';
           })
           .join(' ');
         const haystack = normalizeSearchText(
-          `${g.tableName} ${g.tableNameAr} ${round?.name.en ?? ''} ${round?.name.ar ?? ''} ${playerNames}`
+          `${g.tableName} ${g.tableNameAr} table ${g.tableNumber} #${g.tableNumber} ${g.groupId ?? ''} ${round?.name.en ?? ''} ${round?.name.ar ?? ''} ${playerNames}`
         );
         return haystack.includes(q);
       })
       .sort(
         (a, b) =>
-          new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
+          new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime() ||
+          a.tableNumber - b.tableNumber
       );
 
     const visibleGames = filteredGames.slice(0, visibleLimit);
@@ -174,7 +187,7 @@ export function ScheduleView() {
       key: string;
       heading: string;
       nightIndex: number;
-      games: Game[];
+      games: Match[];
     }> = [];
     const dayLookup = new Map<string, number>();
 
@@ -209,6 +222,12 @@ export function ScheduleView() {
       finished: data.games.filter((g) => g.status === 'finished').length,
     };
 
+    const maxTables = Math.max(
+      data.settings.tournament.tablesCount,
+      ...data.games.map((g) => g.tableNumber)
+    );
+    const tableNumbers = Array.from({ length: Math.min(64, maxTables) }, (_, i) => i + 1);
+
     return {
       playerMap,
       roundMap,
@@ -217,8 +236,9 @@ export function ScheduleView() {
       dayGroups,
       roundGroups,
       statusCounts,
+      tableNumbers,
     };
-  }, [data, statusFilter, deferredSearch, visibleLimit, lang, useArabicIndic]);
+  }, [data, statusFilter, stageFilter, tableFilter, jumpGroupOrMatch, deferredSearch, visibleLimit, lang, useArabicIndic]);
 
   if (loading) {
     return (
@@ -253,10 +273,12 @@ export function ScheduleView() {
   const primaryAnnouncement = announcements[0] ?? null;
   const primaryBlurb = blurbs[0] ?? null;
 
-  const renderGameCard = (game: Game) => {
+  const renderGameCard = (game: Match) => {
     const round = maps.roundMap.get(game.roundId);
     const isLive = game.status === 'live';
     const isFinished = game.status === 'finished';
+    const isByeMatch = game.participants.some((p) => p.isBye);
+    const winnerId = game.result?.winnerId ?? game.winnerPlayerId;
 
     return (
       <article
@@ -270,7 +292,7 @@ export function ScheduleView() {
               : 'border border-border-paper shadow-soft'
         )}
       >
-        {/* Top Row: Time + Status + Round */}
+        {/* Top Row: Time + Table # + Status */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-paper pb-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-pill border border-border-paper bg-paper px-3 py-1 text-xs font-extrabold text-red-900 tabular-nums">
@@ -282,6 +304,14 @@ export function ScheduleView() {
               </span>
             </span>
 
+            {!isByeMatch && (
+              <Badge variant="muted">
+                {lang === 'ar'
+                  ? `طاولة #${formatNumber(game.tableNumber, { useArabicIndicDigits: useArabicIndic })}`
+                  : `Table #${formatNumber(game.tableNumber, { useArabicIndicDigits: useArabicIndic })}`}
+              </Badge>
+            )}
+
             {round && groupMode === 'day' && (
               <span className="text-xs font-bold text-ink-muted">
                 {localizeText(lang, round.name.en, round.name.ar)}
@@ -290,10 +320,11 @@ export function ScheduleView() {
           </div>
 
           <div className="flex items-center gap-1.5">
+            {isByeMatch && <Badge variant="gold">BYE</Badge>}
             {game.isFinal && (
               <Badge variant="gold">
                 <Crown className="h-3 w-3 shrink-0" aria-hidden="true" />
-                <span>{lang === 'ar' ? 'النهائي' : 'FINAL'}</span>
+                <span>{lang === 'ar' ? 'النهائي 1v1v1' : 'FINAL 1v1v1'}</span>
               </Badge>
             )}
             {isLive ? (
@@ -308,23 +339,46 @@ export function ScheduleView() {
           </div>
         </div>
 
-        {/* Table Name & 3 Players */}
+        {/* Match Title & Participants (2 cols for 1v1, 3 cols for Final) */}
         <div className="min-w-0 space-y-3">
           <h3 className="font-display text-lg sm:text-xl text-red-900 leading-snug break-words">
             {localizeText(lang, game.tableName, game.tableNameAr)}
           </h3>
 
-          <div className="grid gap-2 sm:grid-cols-3">
-            {game.playerIds.map((pid, idx) => {
-              const p = resolvePlayerDisplay(pid, maps.playerMap, lang, idx);
-              const isWinner =
-                isFinished &&
-                (game.winnerPlayerId === pid ||
-                  game.advancingPlayerIds?.includes(pid));
+          <div
+            className={cn(
+              'grid gap-2',
+              game.participants.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'
+            )}
+          >
+            {game.participants.map((part, idx) => {
+              if (part.isBye) {
+                return (
+                  <div
+                    key={`bye-${idx}`}
+                    className="flex items-center justify-center rounded-input border-2 border-dashed border-gold-500/70 bg-gold-200/25 px-2.5 py-2 text-xs font-extrabold text-red-800"
+                  >
+                    {lang === 'ar' ? 'تأهل تلقائي (BYE)' : 'BYE'}
+                  </div>
+                );
+              }
+              const p = part.playerId
+                ? resolvePlayerDisplay(part.playerId, maps.playerMap, lang, idx)
+                : {
+                    id: `tbd-${idx}`,
+                    name:
+                      lang === 'ar'
+                        ? part.placeholderLabelAr ?? `متأهل #${idx + 1}`
+                        : part.placeholderLabelEn ?? `Qualifier #${idx + 1}`,
+                    avatarSeed: `tbd-${idx}`,
+                    isHost: Boolean(part.guest),
+                    isPlaceholder: true,
+                  };
+              const isWinner = isFinished && Boolean(part.playerId) && winnerId === part.playerId;
 
               return (
                 <div
-                  key={`${pid}-${idx}`}
+                  key={`${part.playerId ?? 'tbd'}-${idx}`}
                   className={cn(
                     'flex items-center gap-2 rounded-input border px-2.5 py-2 text-xs',
                     p.isHost
@@ -362,13 +416,20 @@ export function ScheduleView() {
           </div>
         </div>
 
-        {/* Footer Actions */}
+        {/* Footer Actions (Zero upcoming match segment details exposed per §15.3) */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-paper pt-3">
           <span className="text-xs font-semibold text-ink-muted">
-            {formatNumber(game.segmentIds.length, {
-              useArabicIndicDigits: useArabicIndic,
-            })}{' '}
-            {lang === 'ar' ? 'فقرات تحدي' : 'segments'}
+            {game.isFinal
+              ? lang === 'ar'
+                ? 'نهائي 1 ضد 1 ضد 1'
+                : '1v1v1 Grand Final'
+              : game.type === 'group'
+                ? lang === 'ar'
+                  ? 'مباراة مجموعات (1 ضد 1)'
+                  : 'Group 1v1 Match'
+                : lang === 'ar'
+                  ? 'مباراة إقصائية (1 ضد 1)'
+                  : 'Knockout 1v1 Match'}
           </span>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -376,16 +437,26 @@ export function ScheduleView() {
               <Button variant="red" size="sm" asChild>
                 <Link href={`/screen/${game.id}`}>
                   <MonitorPlay className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  <span>
-                    {lang === 'ar' ? 'شاشة العرض' : 'Big Screen'}
-                  </span>
+                  <span>{lang === 'ar' ? 'شاشة العرض' : 'Big Screen'}</span>
                 </Link>
               </Button>
             )}
             <Button variant="calm" size="sm" asChild>
-              <Link href={`/bracket?game=${encodeURIComponent(game.id)}`}>
+              <Link
+                href={
+                  game.type === 'group' && game.groupId
+                    ? `/groups?group=${encodeURIComponent(game.groupId.replace('group-', ''))}`
+                    : `/bracket?match=${encodeURIComponent(game.id)}`
+                }
+              >
                 <span>
-                  {lang === 'ar' ? 'تفاصيل المباراة' : 'Match Details'}
+                  {game.type === 'group'
+                    ? lang === 'ar'
+                      ? 'ترتيب المجموعة'
+                      : 'Group Standings'
+                    : lang === 'ar'
+                      ? 'في الشجرة'
+                      : 'View in Bracket'}
                 </span>
                 <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" />
               </Link>
@@ -575,42 +646,110 @@ export function ScheduleView() {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label
-                htmlFor="schedule-search"
-                className="block text-xs font-bold uppercase text-ink-muted"
-              >
-                {lang === 'ar'
-                  ? 'ابحث بالطاولة أو اسم اللاعب'
-                  : 'Search by table or contestant'}
-              </label>
-              <div className="relative max-w-md">
-                <Search
-                  className="pointer-events-none absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
-                  aria-hidden="true"
-                />
-                <Input
-                  id="schedule-search"
-                  type="search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={
-                    lang === 'ar'
-                      ? 'ابحث عن طاولة أو متسابق...'
-                      : 'Search table name or player...'
-                  }
-                  className="ps-10 pe-12"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    aria-label={lang === 'ar' ? 'مسح البحث' : 'Clear search'}
-                    className="absolute end-0.5 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-pill text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
-                  >
-                    <X className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                )}
+            <div className="grid gap-3 md:grid-cols-12 md:items-end">
+              <div className="md:col-span-5 space-y-1.5">
+                <label
+                  htmlFor="schedule-search"
+                  className="block text-xs font-bold uppercase text-ink-muted"
+                >
+                  {lang === 'ar'
+                    ? 'ابحث بالطاولة أو اسم اللاعب'
+                    : 'Search by match, table, or player'}
+                </label>
+                <div className="relative">
+                  <Search
+                    className="pointer-events-none absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    id="schedule-search"
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={
+                      lang === 'ar'
+                        ? 'ابحث عن متسابق أو طاولة...'
+                        : 'Search player or match...'
+                    }
+                    className="ps-10 pe-12"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      aria-label={lang === 'ar' ? 'مسح البحث' : 'Clear search'}
+                      className="absolute end-0.5 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-pill text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
+                    >
+                      <X className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="md:col-span-3 space-y-1.5">
+                <label
+                  htmlFor="schedule-stage-filter"
+                  className="block text-xs font-bold uppercase text-ink-muted"
+                >
+                  {lang === 'ar' ? 'المرحلة' : 'Stage'}
+                </label>
+                <select
+                  id="schedule-stage-filter"
+                  value={stageFilter}
+                  onChange={(e) => setStageFilter(e.target.value as 'all' | MatchType)}
+                  className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-white px-3 text-base sm:text-sm font-semibold text-ink focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="all">{lang === 'ar' ? 'كل المراحل' : 'All stages'}</option>
+                  <option value="group">{lang === 'ar' ? 'دور المجموعات' : 'Group Stage'}</option>
+                  <option value="knockout">{lang === 'ar' ? 'الإقصائيات' : 'Knockouts'}</option>
+                  <option value="final">{lang === 'ar' ? 'النهائي الكبير' : 'Grand Final'}</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-2 space-y-1.5">
+                <label
+                  htmlFor="schedule-table-filter"
+                  className="block text-xs font-bold uppercase text-ink-muted"
+                >
+                  {lang === 'ar' ? 'الطاولة' : 'Table #'}
+                </label>
+                <select
+                  id="schedule-table-filter"
+                  value={tableFilter}
+                  onChange={(e) => setTableFilter(e.target.value)}
+                  className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-white px-3 text-base sm:text-sm font-semibold text-ink focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="all">{lang === 'ar' ? 'الكل' : 'All'}</option>
+                  {maps.tableNumbers.map((num) => (
+                    <option key={num} value={String(num)}>
+                      {lang === 'ar' ? `طاولة #${num}` : `Table #${num}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-2 space-y-1.5">
+                <label
+                  htmlFor="schedule-jump-num"
+                  className="block text-xs font-bold uppercase text-ink-muted"
+                >
+                  {lang === 'ar' ? 'رقم مجموعة/مباراة' : 'Group / Slot #'}
+                </label>
+                <div className="relative">
+                  <Hash
+                    className="pointer-events-none absolute start-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
+                    aria-hidden="true"
+                  />
+                  <input
+                    id="schedule-jump-num"
+                    type="number"
+                    min={1}
+                    value={jumpGroupOrMatch}
+                    onChange={(e) => setJumpGroupOrMatch(e.target.value)}
+                    placeholder="e.g. 7"
+                    className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-white ps-8 pe-2 text-base sm:text-sm font-bold tabular-nums text-ink focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
               </div>
             </div>
           </div>
