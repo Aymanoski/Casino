@@ -126,8 +126,8 @@ export function AdminDashboardView() {
       const activeGames = allGames.filter(
         (g) => g.status === 'live' || g.status === 'scheduled'
       );
-      const totalsEntries = await Promise.all(
-        activeGames.map(async (g) => [g.id, await scoreRepo.getGameTotals(g.id)] as const)
+      const totalsMap = await scoreRepo.getTotalsForMatches(
+        activeGames.map((g) => g.id)
       );
 
       if (!mountedRef.current || seq !== loadSeqRef.current) return;
@@ -138,7 +138,7 @@ export function AdminDashboardView() {
       setSegments(allSegments);
       setUsers(allUsers);
       setScoreEvents(allScores);
-      setTotalsByGame(Object.fromEntries(totalsEntries));
+      setTotalsByGame(totalsMap);
       setContentCount(allContent.length);
       setSponsorCount(allSponsors.length);
       setSettings(appSettings);

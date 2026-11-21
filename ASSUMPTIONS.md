@@ -278,6 +278,27 @@
 ### 41. Zero-Config Deployment Packaging (Vercel & Netlify)
 - **Decisions:** Added [`vercel.json`](./vercel.json), [`netlify.toml`](./netlify.toml), [`.env.example`](./.env.example), [`README.md`](./README.md), and [`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md). Zero environment variables are required for `v0.1-pitch`, and `next/font/google` self-hosts fonts at build time so the production build runs 100% offline as a pitch fallback.
 
+---
+
+## Change Request 1 — Step 1 of 5: Event-Sourced Engine, Command Pipeline & IndexedDB (2026-11-21)
+
+### 42. Ambiguity Decisions Recorded "to confirm with client" (AGENTS.md §15)
+1. **Group Ranking Rule 3 (`pointsDiff` vs `pointsFor`) — *to confirm with client*:** `AGENTS.md §15.1` states "(3) total match points scored (difference), (4) fewer red cards, then fewer yellow cards". We implement Rule 3 strictly as net match points difference (`pointsFor - pointsAgainst`), proceeding immediately to Rule 4 (fewer red cards, then fewer yellow cards) without letting gross `pointsFor` override disciplinary cards.
+2. **BYE Assignment Timing While Group Stage Is Incomplete — *to confirm with client*:** When qualifier count is not a power of two (e.g., 240 qualifiers → 256 bracket = 16 BYEs), BYE slots are awarded to the best group winners ranked across ALL groups. While groups are still incomplete, BYE nodes display `Best Group Winner #N (TBD) vs BYE` rather than flapping provisionally on partial group results; once all groups finish, `resolveByes()` deterministically locks the exact BYE recipients and propagates them automatically into Knockout Round 2.
+3. **Non-Divisible `totalPlayers % groupSize` Remainder — *to confirm with client*:** If `totalPlayers` is not evenly divisible by `groupSize` and leaves a remainder of `1`, `generateGroups()` merges that player into the last group (forming a group of `groupSize + 1` rather than an unplayable 1-player group). Remainders of `>= 2` form a valid smaller final group.
+4. **Card Undo & Match Replay Epochs (`replayEpoch`) — *to confirm with client*:**
+   - Undoing a Yellow (`−1`) or Red (`−2`) card appends a compensating `kind: 'undo'` event referencing `targetEventId`, restoring BOTH the player's points AND decrementing their active card count.
+   - When a Super Admin confirms the default cascade policy (`invalidateForReplay`) on a downstream live/finished match, the engine increments `match.replayEpoch` and appends an `invalidatedForReplay` lifecycle event instead of deleting historical events, preserving 100% append-only auditability while starting the replayed match cleanly at `0–0`.
+5. **Final Match Absence Behavior & Walkover Points — *to confirm with client*:** Per §15.2, marking a finalist absent in the 1v1v1 Final with Marwan does not auto-end the match; it sets `requiresAdminDecision: true` so the Super Admin can decide via `overrideResult`. In 1v1 group walkovers, the present player receives `pointsPerGroupWin` (3) group points and `0` match-point differential (since no segments were played), while the absent player receives `+1` absence in tournament stats.
+6. **Marwan Serry Guest Isolation — *to confirm with client*:** Marwan (`player-marwan`, `isGuest: true`) is seated exclusively in the Grand Final (excluded from groups, group standings, leaderboard rankings, and tournament player stats), even if Marwan wins the Grand Final match itself.
+7. **Admin Score Edit Reversibility — *to confirm with client*:** Per §15.4 ("a revert appends compensating events, it never deletes"), removed destructive `deleteScoreEvent` from `SessionHistoryDrawer` and implemented `editScoreEvent` as an atomic pair of append-only events (compensating `undo` for the old event + new corrected `ScoreEvent`).
+8. **Player Gate Check-In vs. Derived Tournament Status — *to confirm with client*:** Gate arrival (`registered | checkedIn | absent`) is recorded via append-only `CheckInEvent`s. Once a player begins competing, `computePlayerStatus()` derives `active`, `eliminated`, or `finalist` purely from match participation, group standings, and knockout outcomes; no UI screen or repo may assign tournament status directly.
+
+### 43. Bonus Idea Built in CR1 Step 1
+- **AST-Level Architectural Boundary Guard (`scripts/check-derived-writes.mjs`):** Rather than a fragile regex check, implemented a real TypeScript Compiler API AST linter wired into `npm run lint` that enforces THREE architectural guarantees in under 1 second: (a) zero direct writes to derived fields (`winnerPlayerId`, `winnerId`, `advancingPlayerIds`, `result`, `stats`, entity `status`/`rank`) outside `/lib/engine` and `/lib/commands`, (b) zero UI/storage/realtime/React imports inside pure `/lib/engine`, and (c) zero direct `/lib/storage` or `/lib/seed` imports inside `src/app` or `src/components`.
+- **Single-Pass Batched Totals (`scoreRepo.getTotalsForMatches`) + O(1) Delta Diffing:** Eliminated N+1 per-match score lookups on Admin/Scorer dashboards and optimized `commitCommand` with shallow-array copy + reference-equality delta diffing so single-point commits touch only 3–5 IndexedDB records even with 1,000+ matches and 100,000+ events.
+
+
 
 
 

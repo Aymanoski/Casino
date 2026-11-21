@@ -1,6 +1,7 @@
 # AGENTS.md — Project Context (READ THIS FIRST, EVERY SESSION)
 
 > Also read `DESIGN.md` before building any UI.
+> **Section 15 (Change Request 1, from client feedback after Phase 9) OVERRIDES any earlier section it conflicts with** (sections 3, 4, 6, 8 and 9 especially).
 > If your tool prefers `GEMINI.md` or a rules folder, copy this file there too.
 
 ## 1. What we are building
@@ -46,32 +47,34 @@ Interpretation:
 
 A separate **registration quiz** (20 questions, 10 seconds each, randomized) was mentioned. **It is OUT OF SCOPE for now.** Do not build it. Do not leave dead links for it. A later project will handle it.
 
-## 3. Current direction (decided so far; the product owner can change or add to any of it at any time)
+## 3. Current direction (aligned with Section 15 / Change Request 1)
 
 > This list is the **starting point, not a cage**. The scope is still growing. When the product owner asks for something new or different, do it: update this file and `ASSUMPTIONS.md` to match, then continue. Do not refuse a change because it contradicts this list.
 
-- **Every game has exactly 3 players and 1 scorer.** The winner is whoever has the **highest total points across segments**.
-- **The final = 2 finalists + Marwan Serry** (still a 3-player game).
-- **Bracket is flexible.** The admin sets the number of players, group/game sizes (default 3 per game) and how many advance each round. Default demo: **27 players**: Round 1 = 9 games, winners advance (9) → Round 2 = 3 games, winners advance (3) → Semi = 1 game, **top 2 advance** → Final with Marwan.
-- **Players are added by admins** (create accounts, optionally bulk import from CSV).
-- **Buzzing:** the **scorer taps who buzzed first**. No phone buzzers.
-- **Each game has its own scorer** (several games can run at the same time, each with their own scorer).
-- **Points:** presets per segment (like +10, +5, -5) **plus** free number input, with an optional note and an undo. Full scoring history control (revert any entry, edit delta/note, delete entry, add retroactive adjustment, and reopen finished sessions with full audit logging) is built into the Session History drawer behind centralized role capability lists (`SCORE_HISTORY_MANAGER_ROLES` / `REOPEN_GAME_MANAGER_ROLES`) so the product owner can decide later which manager roles receive access.
+- **Group Stage + Single-Elimination Knockouts + 1v1v1 Grand Final.** All parameters are adjustable in `Settings.tournament` (defaults: `totalPlayers: 720`, `groupSize: 3`, `advancePerGroup: 1`, `pointsPerGroupWin: 3`, `tablesCount: 12`, `slotMinutes: 30`).
+- **Groups:** players are split into numbered groups (`1..N`) of `groupSize` (default 240 groups of 3). Group matches are **1v1 round-robin** (`n(n-1)/2` matches per group). A win gives 3 group points; draws are forbidden (tie-break required → status `needsTieBreak`).
+- **Knockouts:** all **1v1 single-elimination**, seeded automatically by group number (1 vs 2, 3 vs 4, pairing by rank within group pairs when `advancePerGroup > 1`). Non-power-of-two qualifier counts grant visible BYE nodes to the best group winners (ranked by group points, points difference, then fewer cards).
+- **The final = 2 finalists + Marwan Serry** (the only 3-player / 1v1v1 match). Highest total points wins; tie goes to tie-break. Marwan Serry is a special **guest participant** excluded from groups, rankings, standings, and player stats.
+- **Players are added by admins** (create accounts, bulk import CSV, procedural presets for 12 / 48 / 720 players).
+- **Buzzing:** the **judge/scorer taps who buzzed first**. No phone buzzers.
+- **Each match has an assigned table number, time slot, and judge (scorer)** produced by a conflict-free auto-scheduler (no double-booked player, table, or judge) with manual overrides.
+- **Scoring v2:** **+1**, **−1**, **Yellow card (−1)**, and **Red card (−2)** with optional note, Undo, and **Mark absent** (immediate walkover in 1v1; `void` if both absent; admin prompt in Final). Card counts are derived separately from the event log.
+- **Player privacy & avatars:** players never see segments of upcoming or live matches (enforced at repo/permission layer); upcoming match view shows opponent, table number, date/time, round/group, and judge contact card; profiles support photo upload (cropped/compressed <= 300KB) or deterministic 24-avatar 3D library fallback.
 - **Language:** English first, **Arabic toggle with full RTL**.
 - **Public spectator pages** exist: bracket, live leaderboard, schedule, rules, sponsors, the final.
-- **Look:** bold "Casino El Al3ab" game-show theme: red sunburst stages, gold-to-orange outlined lettering, white as a primary surface and text color, and a hint of electric blue where it fits. Playful sticker style with dice, cards and chips, and Ramadan lanterns/crescent as a secondary accent. See `DESIGN.md` (this replaced the earlier midnight-and-gold theme).
+- **Look:** bold "Casino El Al3ab" game-show theme: red sunburst stages, gold-to-orange outlined lettering, white as a primary surface and text color, and a hint of electric blue where it fits. Playful sticker style with dice, cards and chips, and Ramadan lanterns/crescent as a secondary accent. See `DESIGN.md`.
 - **Pitch page** order: final-night showcase hero, then live demo, then sponsor tiers.
 
 ## 4. Roles and permissions
 
 | Role | Can do | Cannot do |
 |---|---|---|
-| Super admin | Everything: players, managers, bracket, segments, settings, audit log, results feed | n/a |
-| Scorer | See assigned games, run a game, tap buzz, add or subtract points, undo own last action, move to next segment | Edit bracket, players, settings, other scorers' games |
-| Check-in staff | See today's games and players, mark players as checked in or absent | Change scores, bracket, settings |
-| Content manager | Edit schedule, announcements, sponsors, rules text, segment descriptions | Change scores, bracket or players |
+| Super admin | Everything: players, avatars, groups/draw, knockouts, managers, segments, settings, overrides, absence reversal, Impact Preview cascades, Consistency check & Repair by recomputation, audit log, results feed, all contacts | n/a |
+| Judge / Scorer | See assigned matches, run a match, tap buzz, apply +1/−1 points and Yellow/Red cards, undo own last action, mark player absent, move segments, view contact info ONLY for players in assigned matches (audited) | Edit bracket, players, settings, other judges' matches, reverse absences, override results, view unassigned player contacts |
+| Check-in staff | See today's matches and players, view player contacts for check-in, record arrival check-in (`registered`, `checkedIn`, `absent`) | Change scores, cards, bracket, settings, or derived tournament status |
+| Content manager | Edit schedule blurbs, announcements, sponsors, rules text, segment descriptions | Change scores, bracket, players, or view contacts |
 
-Players (login) see only their profile, history and upcoming games. Visitors see only public pages.
+Players (login) see only their profile, avatar editor, post-match history, and upcoming match details (including their assigned judge's contact card, with NO upcoming/live segment details). Visitors see only public pages (general "how it works", no upcoming match segments).
 Auth is **mocked** for the prototype: a login screen with demo accounts per role. Structure it so real auth drops in later.
 
 ## 5. Tech stack
@@ -86,37 +89,53 @@ Auth is **mocked** for the prototype: a login screen with demo accounts per role
 - **Fonts:** see `DESIGN.md`
 - **No backend. No database.**
 
-## 6. Data architecture (most important rule)
+## 6. Data architecture (most important rule — aligned with §15.4 & §15.5)
 
-**No component or page may import mock data directly.** All reads and writes go through repository modules in `/lib/repos`:
+**No component or page may import mock data or storage directly, and NOTHING outside `/lib/engine` and `/lib/commands` may write derived fields (`winner`, `rank`, `status`, `result`, `stats`, `advancingPlayerIds`).** Enforced by `scripts/check-derived-writes.mjs` in `npm run lint`.
 
 ```
 /lib/schemas     Zod schemas + inferred TS types (single source of truth)
-/lib/repos       playerRepo, gameRepo, roundRepo, segmentRepo, scoreRepo,
-                 userRepo, auditRepo, sponsorRepo, contentRepo, settingsRepo
-/lib/seed        seed data used to initialise storage on first load
-/lib/storage     storage adapter (localStorage by default)
-/lib/realtime    cross-window sync using BroadcastChannel (+ storage event fallback)
+/lib/engine      Pure deterministic tournament engine (ZERO UI/storage/realtime imports):
+                 computeMatchResult, computeGroupStandings, computeQualifiers,
+                 generateKnockout, resolveByes, propagateWinners, computePlayerStatus,
+                 computeAllPlayerStats, computeLeaderboard, autoScheduleMatches,
+                 previewCascadeImpact, checkInvariants
+/lib/commands    Atomic command pipeline (permission -> validate -> version check ->
+                 append events -> engine recompute -> cascade + Impact Preview ->
+                 audit entries -> checkInvariants -> atomic IDB commit -> broadcast)
+/lib/repos       Thin read & command-delegating repositories:
+                 matchRepo (gameRepo alias), groupRepo, playerRepo, roundRepo,
+                 segmentRepo, scoreRepo, userRepo, auditRepo, sponsorRepo,
+                 contentRepo, settingsRepo, permissions (with player segment redaction)
+/lib/seed        Procedural seed generator (presets for 12, 48, and default 720 players)
+/lib/storage     IndexedDB storage adapter (`idb`, indexed object stores + atomic delta
+                 commits handling 1,000+ matches & 100,000+ events smoothly)
+/lib/realtime    Cross-window sync using BroadcastChannel (+ storage event fallback),
+                 publishing strictly AFTER IndexedDB commit resolves
 ```
 
-- Repos expose async functions (`list`, `get`, `create`, `update`, `remove`, plus domain methods like `applyScore`) so they can later be replaced by real database calls **without touching UI code**.
-- Persist changes to localStorage so the demo feels real across refreshes.
-- Provide a **"Reset demo data"** action in admin settings.
-- Realtime: when the scorer changes a score, any open Big Screen or leaderboard window updates immediately (BroadcastChannel). Structure the realtime layer behind an interface so a hosted realtime service can replace it later for multi-device demos.
+- **Single source of truth:** append-only event log (`ScoreEvent`, `AbsenceEvent`, `BuzzEvent`, `MatchLifecycleEvent`, `CheckInEvent`). Reverts append compensating events; past events are never deleted.
+- **Derived projections:** match winners/results/statuses, group standings, qualifiers, knockout participants, round statuses, player stats/statuses, and leaderboards are derived purely by `/lib/engine` and verified by 9 invariants (`checkInvariants`).
+- **Optimistic concurrency:** `Match.version` increments on every command; stale writes throw `VersionConflictError`.
+- Provide a **"Reset demo data"** action in admin settings and a **"Consistency check"** page (`/admin/consistency`) with **"Repair by recomputation"**.
 
 ### Entities
 
-- `Player`: id, fullName, nickname, avatarSeed, phone, email, status (registered | checkedIn | active | eliminated | finalist), seed, stats (gamesPlayed, wins, totalPoints), createdAt
-- `User`: id, name, email, role (superAdmin | scorer | checkIn | content | player), playerId?, language
-- `Round`: id, name (en, ar), order, advancePerGame, status (upcoming | live | done)
-- `Game` (the "session"): id, roundId, tableName, scheduledAt, status (scheduled | live | finished), scorerUserId, playerIds[3], currentSegmentIndex, segmentIds[], winnerPlayerId?, isFinal, startedAt?, finishedAt?
-- `Segment`: id, nameEn, nameAr, category (music | wordplay | popculture | general | special), descriptionEn, descriptionAr, durationSec?, presetPoints number[] (e.g. [10, 5, -5]), order
-- `ScoreEvent`: id, gameId, segmentId, playerId, delta, note?, kind (preset | custom | undo), byUserId, createdAt (ISO). Every score change creates one. The leaderboard and history are derived from this table.
-- `BuzzEvent`: id, gameId, segmentId, playerId, byUserId, createdAt
-- `AuditEntry`: id, actorUserId, action (e.g. score.add, game.start, player.create, bracket.update, role.change), entityType, entityId, summary, before?, after?, createdAt
+- `Player`: id, fullName, fullNameAr, nickname, nicknameAr, seed, isGuest (true for Marwan Serry), `contact: PlayerContact` (`phone`, `whatsapp`, `email`), `avatar: Avatar` (`photoUrl?`, `avatarKey`), createdAt. Derived projections: `status` (`registered | checkedIn | absent | active | eliminated | finalist`), `stats` (`matchesPlayed`, `wins`, `losses`, `totalPoints`, `groupPoints`, `yellowCards`, `redCards`, `absences`).
+- `User`: id, name, nameAr, email, phone?, whatsapp?, role (`superAdmin | scorer | checkIn | content | player`), playerId?, language
+- `Group`: id, number (1..N), nameEn, nameAr, roundId, playerIds[]
+- `Round`: id, name (en, ar), order, stage (`group | knockout | final`), advancePerGame, derived `status` (`upcoming | live | done`)
+- `Match` (replaces `Game`): id, type (`group | knockout | final`), groupId?, roundId, round, slot, isGroupTieBreak?, participants[] (with `guest`, `isBye`, and `feeder` metadata), tableNumber, tableName, scheduledAt, judgeUserId, segmentIds[], currentSegmentIndex, timer?, replayEpoch, `version`. Derived projections: `status` (`scheduled | live | needsTieBreak | finished | void | needsReview`), `result` (`{ type: normal | walkover | void, winnerId?, reason?, overridden? }`), activeBuzzPlayerId?, startedAt?, finishedAt?, needsReviewReason?.
+- `Segment`: id, nameEn, nameAr, category (`music | wordplay | popculture | general | special`), descriptionEn, descriptionAr, durationSec?, order
+- `ScoreEvent`: id, matchId, segmentId, playerId, delta, note?, `kind` (`point | yellow | red | undo`), byUserId, targetEventId?, replayEpoch, createdAt
+- `AbsenceEvent`: id, matchId, playerId, action (`marked | reversed`), reason?, byUserId, replayEpoch, createdAt
+- `BuzzEvent`: id, matchId, segmentId, playerId, byUserId, cleared?, replayEpoch, createdAt
+- `MatchLifecycleEvent`: id, matchId, type (`started | finished | reopened | tieBreakerOpened | segmentChanged | overrideResult | markedNeedsReview | reviewResolved | invalidatedForReplay`), byUserId, reason?, payload?, replayEpoch, createdAt
+- `CheckInEvent`: id, playerId, status (`registered | checkedIn | absent`), byUserId, createdAt
+- `AuditEntry`: id, actorUserId, action, entityType, entityId, summary, summaryAr?, before?, after?, automatic?, createdAt
 - `Sponsor`: id, name, tier, logoText (no real logos), blurb
 - `ContentItem`: announcements, rules text, schedule blurbs
-- `Settings`: eventName, eventDates (placeholder), venue (placeholder), prizeText (placeholder), language defaults, bracket config
+- `Settings`: eventName, eventDates (placeholder), venue (placeholder), prizeText (placeholder), language defaults, `tournament` (`totalPlayers`, `groupSize`, `advancePerGroup`, `pointsPerGroupWin`, `tablesCount`, `slotMinutes`, `includeFinalWithMarwan`)
 
 ## 7. Segments (draft library, confirm with client)
 
@@ -166,32 +185,36 @@ Descriptions: short and original (write them yourself). **Do not copy text from 
 `/screen/[gameId]` (live game for venue/stream) · `/screen/leaderboard`
 
 **Admin**
-`/admin` dashboard · `/admin/players` · `/admin/managers` · `/admin/bracket` · `/admin/games` · `/admin/segments` · `/admin/results` (results feed) · `/admin/audit` · `/admin/check-in` · `/admin/content` · `/admin/sponsors` · `/admin/settings`
+`/admin` dashboard · `/admin/players` · `/admin/managers` · `/admin/bracket` · `/admin/games` · `/admin/segments` · `/admin/results` (results feed) · `/admin/audit` · `/admin/consistency` (Consistency check & Repair by recomputation) · `/admin/check-in` · `/admin/content` · `/admin/sponsors` · `/admin/settings`
 
-### Scorer console requirements (the heart of the product)
-- Shows the 3 players (name, nickname, avatar, running total), current segment name, segment timer (start/pause/reset), and segment progress (e.g. 4 of 12).
+### Scorer console requirements (the heart of the product — aligned with §15.2)
+- Adapts to **2 players** (all group & knockout 1v1 matches) or **3 participants** (the Final with two finalists + Marwan Serry).
+- Shows each participant (name, nickname, avatar, running total, yellow/red card icons), current segment name, segment timer (start/pause/reset), and segment progress.
 - **Big "Buzzed first" tap target per player.** Tapping records a `BuzzEvent`, highlights that player.
-- **Preset point buttons** (from the segment) for the selected player: one tap applies. **Custom amount** input (positive or negative) with optional note. **Undo last action.**
-- Next / previous segment, finish game (computes winner, handles tie by auto-inserting a Tie-Breaker segment), session history & score-control drawer (full edit/revert/delete/add & reopen controls gated by configurable manager-role permissions), and confirm dialogs for destructive actions.
+- **Scoring controls per player:** **+1**, **−1**, **Yellow card (−1)**, **Red card (−2)** with optional note, plus **Undo** (compensating event, never deletes) and **Mark absent** (with confirm dialog; immediate walkover in 1v1, `void` if both absent, admin prompt in Final).
+- **Contact button beside each player** opening a role-scoped contact dialog (phone/WhatsApp/email/copy) logging `contact.viewed`.
+- Next / previous segment, finish match (draws forbidden → `needsTieBreak` / Tie-Breaker segment), Impact Preview dialog on cascade-affecting edits/reverts/reopens, and optimistic concurrency protection (`Match.version`).
 - Works well on a tablet in landscape and on a phone.
-- Every action writes `ScoreEvent` / `BuzzEvent` + `AuditEntry` and broadcasts in realtime.
+- Every action runs through `/lib/commands` (atomic commit + invariant check + audit entry + post-commit realtime broadcast).
 
 ### Big screen requirements
-- Broadcast-style layout: three player panels with animated score counters, current segment title (EN/AR), timer, and "buzzed first" highlight.
-- Final mode: special styling with Marwan Serry's panel (name only, no photo) and the two finalists.
-- Leaderboard view with animated rank changes.
+- Broadcast-style layout: 2 player panels for standard 1v1 matches, or 3 player panels in Final mode (Marwan Serry centered, name only, no photo, plus the two finalists) with animated score counters, card badges, current segment title (EN/AR), timer, and "buzzed first" highlight.
+- Leaderboard view with animated rank changes (excluding guest participant Marwan Serry).
 
 ### Results feed (admin)
-Chronological (newest first, toggle oldest first) list of every finished game and every score event with **date and time**, filter by game, round, player, scorer. Export to CSV.
+Chronological (newest first, toggle oldest first) list of every finished match and every score/card event ("Yellow card (−1)", "Red card (−2)") with **date and time**, filter by match, round, player, judge. Export to CSV.
 
-### Audit log (super admin)
-Who did what, to what, when, with before/after for edits. Filter and export.
+### Audit log & Consistency check (super admin)
+- Audit log: who did what, to what, when, with before/after diffs, including automatic cascade entries (`automatic: true`). Filter and export.
+- Consistency check (`/admin/consistency`): checks all 9 invariants from §15.4 and provides one-click **Repair by recomputation**.
 
-## 9. Demo seed data
+## 9. Demo seed data (aligned with §15.1 & §15.5)
 
-- 27 players with original fictional names and nicknames (use these, adjust freely): Omar Hassan "The Fox", Youssef Adel "Joe", Mostafa Gamal "Tofa", Karim Nabil "K-Nab", Ahmed Samir "Sammoora", Mahmoud Fathy "Abu Fathy", Ali Tarek "Ali Baba", Hossam Ragab "Hoss", Ibrahim Zaki "Brahim", Khaled Mansour "Khaldoon", Tamer Essam "Timo", Sherif Magdy "Sheriff", Amr Wael "Amoora", Hany Salah "Hanoon", Walid Anwar "Wally", Mina Girgis "Mino", Fady Samy "Fadi", Nour El-Din Hesham "Nouro", Salma Reda "Salsabeel", Mariam Hatem "Mimi", Dina Yasser "Dodo", Farida Ashraf "Fofo", Nada Ehab "Nody", Yasmin Mourad "Yaso", Laila Kamel "Lulu", Rana Sherif "Rouny", Habiba Osama "Bibo". Demo managers: Super Admin "Admin", Scorers "Scorer 1" to "Scorer 4", Check-in "Gate Staff", Content "Content Editor", rounds as in section 3, 9 + 3 + 1 games, plus the final.
-- State the demo story so every screen is populated: Round 1 mostly finished, Round 2 partly finished, one game **live**, others scheduled.
-- A few history events per finished game so the feed and audit log look real.
+- **Procedural seed generator** with presets for **12**, **48**, and **720** players (default **720** players = 240 groups of 3, 720 group matches, 256-slot knockout bracket with 16 BYE nodes + 1v1v1 Grand Final with Marwan Serry = 975 tournament matches + 1 isolated exhibition demo match).
+- The original 27 fictional names/nicknames seed the first 27 entries of the deterministic EN/AR name pool (Omar Hassan "The Fox" through Habiba Osama "Bibo"), followed by procedurally generated Egyptian names, clearly fake contacts (`010-0000-0001`..`010-0000-0720`), and deterministic 24-avatar library keys.
+- Demo managers: Super Admin "Admin", Judges/Scorers "Scorer 1" to "Scorer 4" (with fake judge contact phones), Check-in "Gate Staff", Content "Content Editor", plus sample player login accounts.
+- Demo story: groups drawn and auto-scheduled conflict-free across 12 tables, first 12 groups completed (36 group matches including a 3-way group cycle and an absence walkover), 3 group matches currently **live** with active scores/cards/buzzes, remaining groups scheduled, and the full knockout skeleton generated with TBD placeholders ("Winner of Group 7") and visible BYE nodes.
+- All derived values in the seed are computed through `propagateWinners()` and verified to pass `checkInvariants()` with 0 violations.
 - Placeholder event info: "Ramadan 2027", dates, venue and prize clearly marked as placeholders and editable in settings.
 
 ## 10. Legal and brand safety
@@ -267,3 +290,62 @@ The project may use the **Impeccable** design skill (by Paul Bakaus), installed 
 - **`AGENTS.md` wins on product decisions** (scope, roles, data, phases). Skills never override it.
 - **Phase rule:** Delighters (DESIGN.md section 11) stay in Phase 10. Do not use Impeccable's more extreme "go bigger" commands (such as overdrive) before Phase 10.
 - When Impeccable asks for project design context, use `AGENTS.md` and `DESIGN.md` as the source. Do not invent a different brand direction.
+
+## 15. CHANGE REQUEST 1: client feedback after Phase 9 (Nov 21, 2026)
+
+**This section overrides earlier sections where they conflict.** When implementing, also rewrite the superseded parts of sections 3, 4, 6, 8 and 9 so the whole file is consistent. Where the client's wording was ambiguous, the interpretation below is the default; record each in `ASSUMPTIONS.md` as "to confirm with client".
+
+### 15.1 Tournament structure (replaces the 3-player games and the 27-player ladder)
+
+All numbers are **adjustable in admin settings** (defaults in brackets):
+`totalPlayers` (720), `groupSize` (3), `advancePerGroup` (1), `pointsPerGroupWin` (3), `tablesCount`, `slotMinutes`.
+
+- **Groups:** players are split into groups of `groupSize` (720 players = 240 groups of 3). Default assignment is a random draw, with a re-draw option and manual moves before the tournament starts. Groups are numbered 1..N. Inside a group the players are A, B, C.
+- **Group matches are all 1v1 round-robin:** for a group of 3 that is A vs B, B vs C, A vs C (generalize to n(n-1)/2 matches for other sizes).
+- **A win gives 3 group points** (loss 0). **Draws are not allowed:** if scores are level at the end, the match cannot finish; a tie-break (sudden-death segment) is required. The match status is `needsTieBreak` until resolved.
+- **Group ranking order:** (1) group points, (2) if exactly two are tied, head-to-head, (3) total match points scored (difference), (4) fewer red cards, then fewer yellow cards, (5) an admin-triggered tie-break match, created automatically. A 3-way cycle (everyone has 3 points) is resolved by rule 3 and onward.
+- **Qualification:** the top `advancePerGroup` (1) players of each group go to the knockouts. A group is complete only when all of its matches are finished.
+- **Knockouts are all 1v1, single elimination, seeded automatically by group number:** group 1's qualifier plays group 2's, group 3's plays group 4's, and so on. When `advancePerGroup` > 1, pair by rank within the group pair (1st of group 1 vs 1st of group 2, 2nd vs 2nd, etc.). Later rounds follow bracket order (winner of match 1 vs winner of match 2). Knockout draws are not allowed (tie-break).
+- **Byes:** if the qualifier count is not a power of two (240 qualifiers need a 256 bracket), give byes to the best group winners ranked by group points, then points difference, then fewer cards. Show BYE nodes. Handle odd group counts.
+- **The final is the only non-1v1 match:** the last two finalists plus **Marwan Serry** play one 3-player match (1v1v1). Highest total points wins; a tie goes to a tie-break. Marwan is a special **guest participant**, not one of the 720 players: he is excluded from rankings, standings and player stats.
+- **Scale:** 720 players is about 240 groups, 720 group matches and about 240 knockout matches. The app must stay fast: **virtualized tables, pagination, search and filters, group and match jump-to**, an interactive zoomable bracket, and **storage moved from localStorage to IndexedDB** behind the same repo interface (localStorage cannot hold this much). Seed data is generated procedurally from name pools, with presets for 12, 48 and 720 players.
+- **Scheduling:** every match gets a **table number**, a time slot and an assigned judge (the scorer). An auto-scheduler assigns tables and slots from `tablesCount` and `slotMinutes`, never double-booking a player, a table or a judge, with manual overrides.
+- **Naming:** the "Game" entity becomes **Match** (types: group, knockout, final). Update code and docs consistently.
+
+### 15.2 Scorer console v2 (replaces preset points and custom amounts)
+
+- Panels adapt to the match: **2 players** (all matches), or **3 participants** in the final (two finalists plus Marwan).
+- **Scoring controls per player, nothing else:** a **+1** button, a **−1** button, a **Yellow card** button (backend delta −1) and a **Red card** button (backend delta −2), each with the **optional note** field. **Remove preset values and the custom amount input.** Keep Undo, the buzz tap, the segment timer and next/previous segment as they are.
+- **Cards are counted as cards.** Show each player's yellow count and red count as card icons (not as "−1"s and "−2"s). The counts are derived from the event log by kind.
+- Every card also changes the score (yellow −1, red −2). `ScoreEvent.kind` is `point | yellow | red | undo`, and the log text says "Yellow card (−1)" or "Red card (−2)" everywhere: results feed, audit log, player history, scorer history. Card totals show per match and per tournament in player stats and in the group tie-breaks.
+- **Mark absent:** a "Mark absent" action per player (with a confirmation). In a 1v1 the match **ends immediately as a walkover**, the other player wins and **qualifies automatically** (group: +3 points; knockout: advances). If both are marked absent, the match becomes `void` and needs a super admin decision (choose who advances, or replay). In the final, marking a finalist absent does not auto-end the match: show a prompt and let the super admin decide. Absences are recorded in player stats and the audit log, and can be reversed by the super admin (which triggers the cascade in 15.4).
+- **Contact button beside each player:** a clickable button opening a **dialog with the player's contact info** (name, phone with tap-to-call, a WhatsApp link, email, copy buttons), so the judge can call a late player. Visible only to the assigned scorer, check-in staff and super admin. Log a light `contact.viewed` audit entry.
+
+### 15.3 Player side: privacy, schedule view and avatars
+
+- **Players must NOT see the segments of upcoming or live matches.** Remove any segment names, order, categories or match-specific rules from the player profile, the upcoming match view and the schedule, so players cannot study ahead; it stays a surprise. Enforce this in the **repository and permission layer**, not only the UI: player-role reads cannot return segment data for matches that are not finished. Public pages show only general "how it works" information, and segment details appear only live on the big screen or after the match is finished (history).
+- **Upcoming match view shows:** opponent (name and avatar), date and time, round and group, the **table number** (new), and a **judge contact card** (judge name plus tap-to-call and WhatsApp buttons) for players who cannot find their table or need help.
+- **Avatars:** the profile has a **photo**. Players can upload from the camera or gallery, with square crop, compression (about 300KB maximum) and a file type check. If no photo is provided, use a **preselected 3D-style avatar from a library of at least 24 options**, assigned deterministically by player id and changeable by the player or an admin. Avatars must be original or permissively licensed (record each source and license in `ASSUMPTIONS.md`), never real people or celebrity likenesses. The same avatar component is used everywhere (scoreboards, bracket, big screen, admin). Admins can remove or replace any photo.
+
+### 15.4 Data integrity, automation and orchestration (CRITICAL)
+
+**Reported bug:** an admin reverted entries so the winner had fewer points than second place. The rank tag updated but the "winner" tag stayed on the original winner. **Root cause:** derived values (winner, status, qualification) were stored and not recomputed. The client is rightly worried about orchestration across the whole site, so fix the architecture, not just this symptom.
+
+- **Single source of truth:** the append-only event log (score events, card events, absence events, buzz events, match lifecycle events, admin overrides). **Everything else is derived**: totals, ranks, winner, group standings, qualifiers, bracket participants, player status (active, eliminated, finalist), stats (cards, wins, absences), leaderboards. Never store a derived value that cannot be recomputed from events.
+- **Pure engine in `/lib/engine`** (no UI, no storage): functions such as `computeMatchResult`, `computeGroupStandings`, `computeQualifiers`, `generateKnockout`, `resolveByes`, `propagateWinners`, `computePlayerStatus`. Fully unit tested.
+- **Command pipeline:** every mutation goes through a command (`applyPoint`, `applyCard`, `markAbsent`, `finishMatch`, `reopenMatch`, `revertEvent`, `overrideResult`, `updateSettings`, ...). Each command: check permission, validate, append events, recompute the affected derived state, run the cascade, write audit entries (including automatic ones that explain cascades), commit **atomically (all or nothing)**, then broadcast realtime events **after** the commit. UI code and repos never set winner, rank or status directly.
+- **Cascade rules:** when a result changes (revert, correction, reopen), recompute the match winner (a tie means `needsTieBreak` and no winner), then the group standings, qualifiers and knockout slots. For downstream matches: **not started** means update participants automatically (audited); **live or finished** means never silently rewrite history: mark `needsReview`, show an **Impact Preview** ("this change affects N matches: ...") and require super admin confirmation, then apply the chosen policy (default: invalidate the downstream matches and mark them for replay).
+- **Invariants** checked after every command in development and available in admin as **Consistency check**: one winner per finished match and the winner has the most points; no finished match is tied; finished groups have complete standings; qualifiers equal the top N of the standings; knockout participants match their feeder results; a player is in at most one live match; stored stats equal stats recomputed from events; no orphan events. On violation: fail loudly in development, and repair by recomputation and log it in production.
+- **Concurrency:** version numbers on matches, reject stale writes with a friendly message, and make every open window re-render from derived data after a realtime event.
+- **Reversibility:** a revert appends compensating events, it never deletes. The audit log shows who, when and why, including the automatic cascade entries.
+- **Tests (Vitest):** unit and scenario tests including the reported bug (a revert makes second place lead, the winner tag must move), ties and tie-breaks, walkover, both absent, absent reversed, card accumulation, the 3-way group cycle, byes and odd group counts, other settings (not just 720/3/1), the 1v1v1 final with Marwan, a revert after a downstream match has started, and undo.
+
+### 15.5 Permissions, data model and seed changes
+
+- **Permissions:** scorers see contact info only for players in their assigned matches. Check-in staff see contact info for check-in. Players see only the judge contact for their own upcoming match. Super admin has overrides, the Impact Preview and the Consistency check.
+- **Model changes:** `Settings.tournament` (the adjustable numbers above), `Group`, `Match` (type group | knockout | final; groupId?; round; slot; participants with a `guest` flag for Marwan; status scheduled | live | needsTieBreak | finished | void | needsReview; result {type normal | walkover | void, winnerId?}; tableNumber; scheduledAt; judgeUserId; version), `PlayerContact` (phone, whatsapp, email), `Avatar` (photoUrl or avatarKey), `ScoreEvent.kind` (point | yellow | red | undo), `AbsenceEvent`. Standings, winners and stats are **derived view models**, not stored.
+- **Seed:** generate procedurally (default 720 players with clearly fake contact numbers such as 010-0000-0001). Demo story: groups drawn, a few dozen group matches finished, some groups complete, a few matches live, and the knockout skeleton generated with TBD placeholders ("Winner of Group 7"). The 27-name list in section 9 is now only a source for the first entries of the name pool.
+
+### 15.6 Phase order
+
+Change Request 1 is built before the Delighters (Phase 10). The Delighters work must then use the new 2-player and 3-player match model.

@@ -18,8 +18,14 @@ import {
   Zap,
 } from 'lucide-react';
 import { canManageScoreHistory, useAuth } from '@/lib/auth';
+import {
+  CascadeConfirmationRequiredError,
+  type CascadePolicy,
+} from '@/lib/commands';
+import type { CascadeImpact } from '@/lib/engine';
 import { useI18n } from '@/lib/i18n';
 import { scoreRepo } from '@/lib/repos';
+import { ImpactPreviewDialog } from '@/components/admin/ImpactPreviewDialog';
 import type {
   BuzzEvent,
   Game,
@@ -152,13 +158,14 @@ export function SessionHistoryDrawer({
   const [editSegmentId, setEditSegmentId] = useState<string>('');
   const [editError, setEditError] = useState<string | null>(null);
 
-  // Confirm dialogs for destructive/history actions
-  const [confirmDeleteEvent, setConfirmDeleteEvent] = useState<ScoreEvent | null>(
-    null
-  );
+  // Confirm dialogs for history actions + Cascade Impact Preview
   const [confirmRevertEvent, setConfirmRevertEvent] = useState<ScoreEvent | null>(
     null
   );
+  const [pendingImpact, setPendingImpact] = useState<{
+    impact: CascadeImpact;
+    retry: (policy: CascadePolicy) => Promise<void>;
+  } | null>(null);
 
   // Reset transient editing/pagination state cleanly when drawer closes or game changes
   useEffect(() => {
@@ -238,7 +245,10 @@ export function SessionHistoryDrawer({
     setEditError(null);
   };
 
-  const handleSaveEdit = async (ev: ScoreEvent) => {
+  const handleSaveEdit = async (
+    ev: ScoreEvent,
+    cascadeOpts?: { confirmCascade?: boolean; cascadePolicy?: CascadePolicy }
+  ) => {
     const parsed = parseSignedIntegerInput(editDelta, {
       min: DELTA_MIN,
       max: DELTA_MAX,
@@ -257,88 +267,84 @@ export function SessionHistoryDrawer({
           note: editNote.trim().slice(0, NOTE_MAX_LENGTH) || undefined,
           segmentId: editSegmentId || ev.segmentId,
         },
-        user?.id ?? 'user-admin'
+        user?.id ?? 'user-admin',
+        cascadeOpts
       );
       setEditingId(null);
+      setPendingImpact(null);
       await onChanged();
       toast({
         variant: 'info',
         title:
           lang === 'ar'
-            ? 'تم تعديل حركة النقاط وتسجيلها في المراجعة'
-            : 'Score entry updated & logged to Audit',
+            ? 'تم تعديل حركة النقاط وإعادة حساب النتائج تلقائياً'
+            : 'Score updated, outcomes recomputed & logged to Audit',
       });
-    } catch {
+    } catch (err) {
+      if (err instanceof CascadeConfirmationRequiredError) {
+        setPendingImpact({
+          impact: err.impact,
+          retry: (policy) =>
+            handleSaveEdit(ev, { confirmCascade: true, cascadePolicy: policy }),
+        });
+        return;
+      }
       toast({
         variant: 'negative',
         title: lang === 'ar' ? 'تعذر حفظ التعديل' : 'Could not save edit',
         description:
-          lang === 'ar'
-            ? 'حاول مرة أخرى للتحقق من حفظ التعديل.'
-            : 'Please try saving the score adjustment again.',
+          err instanceof Error
+            ? err.message
+            : lang === 'ar'
+              ? 'حاول مرة أخرى للتحقق من حفظ التعديل.'
+              : 'Please try saving the score adjustment again.',
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const handleConfirmDelete = async () => {
-    if (!confirmDeleteEvent || busy) return;
-    setBusy(true);
-    try {
-      await scoreRepo.deleteScoreEvent(
-        confirmDeleteEvent.id,
-        user?.id ?? 'user-admin'
-      );
-      setConfirmDeleteEvent(null);
-      await onChanged();
-      toast({
-        variant: 'negative',
-        title:
-          lang === 'ar'
-            ? 'تم حذف حركة النقاط وتحديث الإجمالي'
-            : 'Score entry deleted & totals recalculated',
-      });
-    } catch {
-      toast({
-        variant: 'negative',
-        title: lang === 'ar' ? 'تعذر حذف الحركة' : 'Could not delete entry',
-        description:
-          lang === 'ar'
-            ? 'حدث خطأ غير متوقع أثناء الحذف. حاول مجدداً.'
-            : 'An unexpected error occurred while deleting. Please try again.',
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleConfirmRevert = async () => {
-    if (!confirmRevertEvent || busy) return;
+  const handleConfirmRevert = async (
+    cascadeOpts?: { confirmCascade?: boolean; cascadePolicy?: CascadePolicy }
+  ) => {
+    const targetEv = confirmRevertEvent;
+    if (!targetEv || busy) return;
     setBusy(true);
     try {
       await scoreRepo.undoScoreEventById(
         game.id,
-        confirmRevertEvent.id,
-        user?.id ?? 'user-admin'
+        targetEv.id,
+        user?.id ?? 'user-admin',
+        cascadeOpts
       );
       setConfirmRevertEvent(null);
+      setPendingImpact(null);
       await onChanged();
       toast({
         variant: 'info',
         title:
           lang === 'ar'
-            ? 'تم إنشاء حركة تراجع معاكسة'
-            : 'Compensating undo recorded',
+            ? 'تم إنشاء حركة تراجع معاكسة وإعادة حساب النتائج'
+            : 'Compensating undo recorded & outcomes recomputed',
       });
-    } catch {
+    } catch (err) {
+      if (err instanceof CascadeConfirmationRequiredError) {
+        setPendingImpact({
+          impact: err.impact,
+          retry: (policy) =>
+            handleConfirmRevert({ confirmCascade: true, cascadePolicy: policy }),
+        });
+        return;
+      }
       toast({
         variant: 'negative',
         title: lang === 'ar' ? 'تعذر عكس الحركة' : 'Could not revert entry',
         description:
-          lang === 'ar'
-            ? 'حاول مرة أخرى لعكس حركة النقاط.'
-            : 'Please try reverting this score entry again.',
+          err instanceof Error
+            ? err.message
+            : lang === 'ar'
+              ? 'حاول مرة أخرى لعكس حركة النقاط.'
+              : 'Please try reverting this score entry again.',
       });
     } finally {
       setBusy(false);
@@ -1029,32 +1035,21 @@ export function SessionHistoryDrawer({
                                   </span>
                                 </button>
                               )}
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => beginEdit(ev)}
-                                title={lang === 'ar' ? 'تعديل الحركة' : 'Edit entry'}
-                                aria-label={lang === 'ar' ? 'تعديل الحركة' : 'Edit entry'}
-                                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-button border-2 border-border-paper bg-paper px-2.5 text-xs font-bold text-ink transition-colors hover:border-blue-500 hover:bg-blue-100/40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
-                              >
-                                <Edit3 className="h-4 w-4" aria-hidden="true" />
-                                <span className="sm:hidden">
-                                  {lang === 'ar' ? 'تعديل' : 'Edit'}
-                                </span>
-                              </button>
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => setConfirmDeleteEvent(ev)}
-                                title={lang === 'ar' ? 'حذف الحركة' : 'Delete entry'}
-                                aria-label={lang === 'ar' ? 'حذف الحركة' : 'Delete entry'}
-                                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-button border-2 border-negative/40 bg-red-100 px-2.5 text-xs font-bold text-negative transition-colors hover:bg-negative hover:text-white focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
-                              >
-                                <Trash2 className="h-4 w-4" aria-hidden="true" />
-                                <span className="sm:hidden">
-                                  {lang === 'ar' ? 'حذف' : 'Delete'}
-                                </span>
-                              </button>
+                              {!isUndo && !isUndone && (
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => beginEdit(ev)}
+                                  title={lang === 'ar' ? 'تعديل الحركة' : 'Edit entry'}
+                                  aria-label={lang === 'ar' ? 'تعديل الحركة' : 'Edit entry'}
+                                  className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-button border-2 border-border-paper bg-paper px-2.5 text-xs font-bold text-ink transition-colors hover:border-blue-500 hover:bg-blue-100/40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
+                                >
+                                  <Edit3 className="h-4 w-4" aria-hidden="true" />
+                                  <span className="sm:hidden">
+                                    {lang === 'ar' ? 'تعديل' : 'Edit'}
+                                  </span>
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -1089,7 +1084,7 @@ export function SessionHistoryDrawer({
 
       {/* Confirm Revert Single Event */}
       <ConfirmDialog
-        open={Boolean(confirmRevertEvent)}
+        open={Boolean(confirmRevertEvent) && !pendingImpact}
         onOpenChange={(isOpen) => {
           if (!isOpen) setConfirmRevertEvent(null);
         }}
@@ -1097,33 +1092,28 @@ export function SessionHistoryDrawer({
         description={
           confirmRevertEvent
             ? lang === 'ar'
-              ? `سيتم تسجيل حركة تراجع معاكسة بقيمة ${formatSignedDelta(-confirmRevertEvent.delta)} نقطة مع الاحتفاظ بالحركة الأصلية في السجل.`
-              : `This will add a compensating ${formatSignedDelta(-confirmRevertEvent.delta)} pts undo record while preserving the original entry in the audit log.`
+              ? `سيتم تسجيل حركة تراجع معاكسة بقيمة ${formatSignedDelta(-confirmRevertEvent.delta)} نقطة وإعادة حساب الفائز والمراكز تلقائياً.`
+              : `This appends a compensating ${formatSignedDelta(-confirmRevertEvent.delta)} pts undo record (never deletes) and automatically recomputes winners and standings.`
             : ''
         }
         confirmLabel={lang === 'ar' ? 'تأكيد العكس' : 'Confirm Revert'}
         cancelLabel={lang === 'ar' ? 'إلغاء' : 'Cancel'}
-        onConfirm={handleConfirmRevert}
+        onConfirm={() => handleConfirmRevert()}
       />
 
-      {/* Confirm Delete Score Event (Destructive) */}
-      <ConfirmDialog
-        open={Boolean(confirmDeleteEvent)}
+      {/* Downstream Cascade Impact Preview Dialog */}
+      <ImpactPreviewDialog
+        open={Boolean(pendingImpact)}
         onOpenChange={(isOpen) => {
-          if (!isOpen) setConfirmDeleteEvent(null);
+          if (!isOpen) setPendingImpact(null);
         }}
-        destructive
-        title={lang === 'ar' ? 'حذف حركة النقاط نهائياً؟' : 'Delete this score record?'}
-        description={
-          confirmDeleteEvent
-            ? lang === 'ar'
-              ? `سيتم حذف الحركة (${formatSignedDelta(confirmDeleteEvent.delta)} نقطة) وإعادة احتساب مجموع اللاعب فوراً مع تسجيل الحذف في سجل المراجعة.`
-              : `This permanently removes the ${formatSignedDelta(confirmDeleteEvent.delta)} pts entry, recalculates standings immediately, and logs the deletion in the Audit Log.`
-            : ''
-        }
-        confirmLabel={lang === 'ar' ? 'حذف نهائي' : 'Delete Entry'}
-        cancelLabel={lang === 'ar' ? 'إلغاء' : 'Cancel'}
-        onConfirm={handleConfirmDelete}
+        impact={pendingImpact?.impact ?? null}
+        busy={busy}
+        onConfirm={async (policy) => {
+          if (pendingImpact) {
+            await pendingImpact.retry(policy);
+          }
+        }}
       />
     </>
   );

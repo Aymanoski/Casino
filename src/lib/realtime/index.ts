@@ -1,15 +1,10 @@
 /**
  * Realtime Synchronization Layer (/lib/realtime)
  *
- * Prototype default: BrowserRealtimeTransport (BroadcastChannel + window 'storage'
- * fallback with message-ID deduplication) for instant cross-tab / cross-window sync
- * (e.g., Scorer Console -> Big Screen & Live Leaderboard).
- *
- * Production / Multi-Device Swap:
- * All UI and repositories talk strictly to the `realtime` broker (`RealtimeTransport`).
- * Plugging in a hosted WebSocket/Realtime provider (Supabase Realtime, Ably, Pusher,
- * PartyKit, or custom WebSockets) requires implementing `RealtimeTransport` and calling
- * `setRealtimeTransport(adapter)` (or extending `createRealtimeTransport`) — zero UI changes.
+ * BroadcastChannel + window 'storage' fallback with message-ID deduplication.
+ * Every command broadcasts realtime events ONLY AFTER IndexedDB commit succeeds.
+ * On receiving a cross-tab realtime event, listeners automatically invalidate the
+ * local storage read cache before re-reading from IndexedDB.
  */
 
 import type { GameTimerState } from '@/lib/schemas';
@@ -18,10 +13,14 @@ export type RealtimeEventName =
   | 'score.changed'
   | 'buzz.recorded'
   | 'buzz.cleared'
+  | 'absence.recorded'
   | 'segment.changed'
   | 'timer.updated'
   | 'game.started'
   | 'game.finished'
+  | 'match.started'
+  | 'match.finished'
+  | 'match.needsReview'
   | 'final.revealed'
   | 'player.updated'
   | 'user.updated'
@@ -29,31 +28,43 @@ export type RealtimeEventName =
   | 'content.updated'
   | 'sponsor.updated'
   | 'bracket.updated'
+  | 'tournament.generated'
+  | 'consistency.repaired'
   | 'settings.updated'
   | 'data.reset';
 
 export interface RealtimeEventPayloadMap {
   'score.changed': {
     gameId: string;
+    matchId?: string;
     playerId?: string;
     delta?: number;
+    kind?: 'point' | 'yellow' | 'red' | 'undo';
     scoreEventId?: string;
     isUndo?: boolean;
     isEdit?: boolean;
-    isDelete?: boolean;
     reset?: boolean;
   };
   'buzz.recorded': {
     gameId: string;
+    matchId?: string;
     playerId: string;
     segmentId?: string;
     buzzId?: string;
   };
   'buzz.cleared': {
     gameId: string;
+    matchId?: string;
+  };
+  'absence.recorded': {
+    matchId: string;
+    gameId?: string;
+    playerId: string;
+    action: 'marked' | 'reversed';
   };
   'segment.changed': {
     gameId: string;
+    matchId?: string;
     currentSegmentIndex: number;
     segmentId?: string;
     isTieBreaker?: boolean;
@@ -61,19 +72,37 @@ export interface RealtimeEventPayloadMap {
   };
   'timer.updated': {
     gameId: string;
+    matchId?: string;
     timer: GameTimerState;
   };
   'game.started': {
     gameId: string;
+    matchId?: string;
     reopened?: boolean;
   };
   'game.finished': {
     gameId: string;
+    matchId?: string;
     winnerPlayerId?: string;
     advancingPlayerIds?: string[];
   };
+  'match.started': {
+    matchId: string;
+    gameId?: string;
+    reopened?: boolean;
+  };
+  'match.finished': {
+    matchId: string;
+    gameId?: string;
+    winnerId?: string;
+  };
+  'match.needsReview': {
+    matchId: string;
+    reason?: string;
+  };
   'final.revealed': {
     gameId: string;
+    matchId?: string;
     winnerPlayerId?: string;
   };
   'player.updated': {
@@ -93,7 +122,17 @@ export interface RealtimeEventPayloadMap {
   };
   'bracket.updated': {
     gameId?: string;
+    matchId?: string;
     roundId?: string;
+    groupId?: string;
+  };
+  'tournament.generated': {
+    totalPlayers: number;
+    groupsCount: number;
+    matchesCount: number;
+  };
+  'consistency.repaired': {
+    violationsRepaired: number;
   };
   'settings.updated': {
     keys?: string[];
@@ -118,7 +157,6 @@ export interface RealtimeMessage<T = Record<string, unknown>> {
   event: RealtimeEventName;
   payload: T;
   timestamp: string;
-  /** Identifies the publishing transport/tab so receivers can trace origin */
   source?: string;
 }
 
@@ -126,9 +164,6 @@ export type RealtimeListener<T = Record<string, unknown>> = (
   message: RealtimeMessage<T>
 ) => void;
 
-/**
- * Swappable transport contract for local browser sync or hosted multi-device WebSockets.
- */
 export interface RealtimeTransport {
   readonly name: string;
   connect: () => Promise<void> | void;
@@ -145,10 +180,6 @@ export interface RealtimeTransport {
   ) => () => void;
 }
 
-/**
- * Configuration blueprint for plugging in a hosted realtime provider
- * (e.g. Supabase Realtime, Ably, Pusher, PartyKit, or custom WebSocket server).
- */
 export interface HostedRealtimeConfig {
   driver: 'browser' | 'supabase' | 'ably' | 'pusher' | 'websocket';
   endpoint?: string;
@@ -156,10 +187,14 @@ export interface HostedRealtimeConfig {
   channelName?: string;
 }
 
-const DEFAULT_CHANNEL_NAME = 'casino_el_al3ab_realtime_v1';
-const STORAGE_BROADCAST_KEY = 'casino_el_al3ab_rt_ping_v1';
-const MAX_SEEN_IDS = 128;
-const BROADCAST_FALLBACK_DELAY_MS = 60;
+const DEFAULT_CHANNEL_NAME = 'casino_el_al3ab_realtime_v2';
+const STORAGE_BROADCAST_KEY = 'casino_el_al3ab_rt_ping_v2';
+const MAX_SEEN_IDS = 256;
+
+let onCrossTabReceiveHook: (() => void) | null = null;
+export function registerCrossTabCacheInvalidator(fn: () => void): void {
+  onCrossTabReceiveHook = fn;
+}
 
 export class BrowserRealtimeTransport implements RealtimeTransport {
   readonly name = 'browser-broadcast';
@@ -172,7 +207,6 @@ export class BrowserRealtimeTransport implements RealtimeTransport {
   private initialized = false;
   private seenIds: string[] = [];
   private seenIdSet: Set<string> = new Set();
-  private pendingFallbacks: Map<string, number> = new Map();
   private storageHandler: ((ev: StorageEvent) => void) | null = null;
 
   constructor(channelName = DEFAULT_CHANNEL_NAME) {
@@ -197,12 +231,10 @@ export class BrowserRealtimeTransport implements RealtimeTransport {
   }
 
   private deliverCrossTabMessage(message: RealtimeMessage) {
-    const pendingTimer = this.pendingFallbacks.get(message.id);
-    if (pendingTimer !== undefined) {
-      window.clearTimeout(pendingTimer);
-      this.pendingFallbacks.delete(message.id);
-    }
     if (this.markAndCheckDuplicate(message.id)) return;
+    if (onCrossTabReceiveHook) {
+      onCrossTabReceiveHook();
+    }
     this.notifyLocalListeners(message);
   }
 
@@ -217,26 +249,13 @@ export class BrowserRealtimeTransport implements RealtimeTransport {
         this.channel.onmessage = (ev: MessageEvent<RealtimeMessage>) => {
           const msg = ev.data;
           if (!msg || !msg.event || !msg.id) return;
-          if (this.seenIdSet.has(msg.id)) return;
-
-          // In multi-process browsers (Chromium), BroadcastChannel can outrace
-          // cross-process localStorage replication by a few milliseconds. Wait
-          // briefly for the strictly-ordered `storage` event (which guarantees
-          // the DB snapshot is already committed in this renderer) before falling back.
-          if (!this.pendingFallbacks.has(msg.id)) {
-            const tid = window.setTimeout(() => {
-              this.pendingFallbacks.delete(msg.id);
-              this.deliverCrossTabMessage(msg);
-            }, BROADCAST_FALLBACK_DELAY_MS);
-            this.pendingFallbacks.set(msg.id, tid);
-          }
+          this.deliverCrossTabMessage(msg);
         };
       } catch {
         this.channel = null;
       }
     }
 
-    // Primary cross-tab delivery: fires strictly after the preceding DB localStorage write commits
     this.storageHandler = (ev: StorageEvent) => {
       if (ev.key === STORAGE_BROADCAST_KEY && ev.newValue) {
         try {
@@ -257,14 +276,11 @@ export class BrowserRealtimeTransport implements RealtimeTransport {
     if (!this.initialized) return;
     this.initialized = false;
 
-    this.pendingFallbacks.forEach((tid) => window.clearTimeout(tid));
-    this.pendingFallbacks.clear();
-
     if (this.channel) {
       try {
         this.channel.close();
       } catch {
-        // ignore close error
+        // ignore
       }
       this.channel = null;
     }
@@ -314,20 +330,16 @@ export class BrowserRealtimeTransport implements RealtimeTransport {
       source: this.name,
     };
 
-    // Deduplicate against our own storage/broadcast echo
     this.markAndCheckDuplicate(message.id);
-
-    // Notify subscribers in the same window immediately
     this.notifyLocalListeners(message as RealtimeMessage);
 
     if (typeof window === 'undefined') return;
 
-    // Broadcast across tabs/windows
     if (this.channel) {
       try {
         this.channel.postMessage(message);
       } catch {
-        // Fallback below handles delivery
+        // fallback below
       }
     }
 
@@ -337,7 +349,7 @@ export class BrowserRealtimeTransport implements RealtimeTransport {
         JSON.stringify(message)
       );
     } catch {
-      // Ignore quota errors
+      // ignore quota errors
     }
   }
 
@@ -359,11 +371,6 @@ export class BrowserRealtimeTransport implements RealtimeTransport {
   }
 }
 
-/**
- * Stable proxy broker that delegates to the active RealtimeTransport.
- * Allows hot-swapping the transport (e.g. Browser -> Supabase/Ably/WebSocket)
- * while preserving every active component subscription seamlessly.
- */
 class RealtimeBroker implements RealtimeTransport {
   private transport: RealtimeTransport;
   private subscribers: Array<{
@@ -390,13 +397,10 @@ class RealtimeBroker implements RealtimeTransport {
 
   setTransport(nextTransport: RealtimeTransport): void {
     if (nextTransport === this.transport) return;
-
-    // Unbind existing subscriptions from old transport
     this.subscribers.forEach((entry) => entry.unsub());
     this.statusSubscribers.forEach((entry) => entry.unsub());
     void this.transport.disconnect();
 
-    // Swap and rebind all active subscribers onto the new transport
     this.transport = nextTransport;
     this.subscribers.forEach((entry) => {
       entry.unsub = this.transport.subscribe(entry.event, entry.listener);
@@ -456,10 +460,6 @@ class RealtimeBroker implements RealtimeTransport {
   }
 }
 
-/**
- * Factory helper for selecting a realtime transport from config.
- * Extend this switch when plugging in a hosted multi-device provider (see TODO.md §3).
- */
 export function createRealtimeTransport(
   config: HostedRealtimeConfig = { driver: 'browser' }
 ): RealtimeTransport {

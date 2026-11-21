@@ -34,7 +34,14 @@ import {
   canReopenFinishedGame,
   useAuth,
 } from '@/lib/auth';
+import {
+  CascadeConfirmationRequiredError,
+  VersionConflictError,
+  type CascadePolicy,
+} from '@/lib/commands';
+import type { CascadeImpact } from '@/lib/engine';
 import { useI18n } from '@/lib/i18n';
+import { ImpactPreviewDialog } from '@/components/admin/ImpactPreviewDialog';
 import { realtime } from '@/lib/realtime';
 import {
   gameRepo,
@@ -170,6 +177,7 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
   const [confirmReopenOpen, setConfirmReopenOpen] = useState<boolean>(false);
   const [confirmResetTimerOpen, setConfirmResetTimerOpen] = useState<boolean>(false);
   const [pendingSegmentIndex, setPendingSegmentIndex] = useState<number | null>(null);
+  const [reopenImpact, setReopenImpact] = useState<CascadeImpact | null>(null);
 
   const useArabicIndic = settings?.useArabicIndicDigits ?? false;
   const isSuperAdmin = user?.role === 'superAdmin';
@@ -933,12 +941,18 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
     }
   };
 
-  const handleConfirmReopen = async () => {
+  const handleConfirmReopen = async (
+    cascadeOpts?: { confirmCascade?: boolean; cascadePolicy?: CascadePolicy }
+  ) => {
     if (!game || !user || busyRef.current || !canReopen) return;
     busyRef.current = true;
     setBusyAction(true);
     try {
-      await gameRepo.reopenGame(game.id, user.id);
+      await gameRepo.reopenGame(game.id, user.id, {
+        ...cascadeOpts,
+        expectedVersion: game.version,
+      });
+      setReopenImpact(null);
       await loadConsoleState();
       const title =
         lang === 'ar'
@@ -953,7 +967,20 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
             ? 'تم تسجيل الإجراء في سجل المراجعة.'
             : 'Reopen action logged in Audit Log.',
       });
-    } catch {
+    } catch (err) {
+      if (err instanceof CascadeConfirmationRequiredError) {
+        setReopenImpact(err.impact);
+        return;
+      }
+      if (err instanceof VersionConflictError) {
+        await loadConsoleState();
+        toast({
+          variant: 'gold',
+          title: lang === 'ar' ? 'تم تحديث المباراة في نافذة أخرى' : 'Match Updated Elsewhere',
+          description: err.message,
+        });
+        return;
+      }
       notifyActionError('reopen session', 'إعادة فتح الجلسة');
     } finally {
       busyRef.current = false;
@@ -2297,7 +2324,23 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
         }
         confirmLabel={lang === 'ar' ? 'إعادة فتح الجلسة' : 'Reopen Session'}
         cancelLabel={lang === 'ar' ? 'إلغاء' : 'Cancel'}
-        onConfirm={handleConfirmReopen}
+        onConfirm={() => handleConfirmReopen()}
+      />
+
+      {/* 3b. Impact Preview Dialog when reopening affects downstream live/finished matches */}
+      <ImpactPreviewDialog
+        open={Boolean(reopenImpact)}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setReopenImpact(null);
+        }}
+        impact={reopenImpact}
+        busy={busyAction}
+        onConfirm={async (policy) => {
+          await handleConfirmReopen({
+            confirmCascade: true,
+            cascadePolicy: policy,
+          });
+        }}
       />
 
       {/* 4. Confirm Reset Running Timer */}

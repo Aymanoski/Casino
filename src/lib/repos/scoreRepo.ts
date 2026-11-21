@@ -1,26 +1,36 @@
 import type {
+  AbsenceEvent,
   BuzzEvent,
   Player,
   ScoreEvent,
   ScoreEventKind,
 } from '@/lib/schemas';
-import { feedback } from '@/lib/feedback';
-import { realtime } from '@/lib/realtime';
+import {
+  computeLeaderboard,
+  computeMatchResult,
+  computeMatchScores,
+  computeQualifiers,
+} from '@/lib/engine';
+import { commands, type CascadePolicy } from '@/lib/commands';
 import { storage } from '@/lib/storage';
-import { auditRepo } from './auditRepo';
-import { assertRepoPermission } from './permissions';
-import { recomputePlayerStatsInMemory } from './playerRepo';
 
 export interface LeaderboardEntry {
   rank: number;
   player: Player;
   totalPoints: number;
+  matchesPlayed: number;
   gamesPlayed: number;
   wins: number;
+  losses: number;
+  groupPoints: number;
+  yellowCards: number;
+  redCards: number;
+  absences: number;
 }
 
 export const scoreRepo = {
   async list(options?: {
+    matchId?: string;
     gameId?: string;
     playerId?: string;
     roundId?: string;
@@ -28,14 +38,34 @@ export const scoreRepo = {
     order?: 'newest' | 'oldest';
     includeDemo?: boolean;
   }): Promise<ScoreEvent[]> {
+    const matchFilter = options?.matchId ?? options?.gameId;
+
+    // Fast indexed path for single-match or single-player lookups (scales to 100k+ events!)
+    if (matchFilter && !options?.roundId) {
+      let events = await storage.getScoreEventsByMatch(matchFilter);
+      if (options?.playerId) {
+        events = events.filter((e) => e.playerId === options.playerId);
+      }
+      if (options?.scorerUserId) {
+        events = events.filter((e) => e.byUserId === options.scorerUserId);
+      }
+      events.sort((a, b) => {
+        const diff = Date.parse(b.createdAt) - Date.parse(a.createdAt);
+        return options?.order === 'oldest' ? -diff : diff;
+      });
+      return events;
+    }
+
     const db = await storage.readSnapshot();
-    const demoGameIds = new Set(db.games.filter((g) => g.isDemo).map((g) => g.id));
+    const demoMatchIds = new Set(
+      db.matches.filter((m) => m.isDemo).map((m) => m.id)
+    );
     let events = [...db.scoreEvents];
 
-    if (options?.gameId) {
-      events = events.filter((e) => e.gameId === options.gameId);
+    if (matchFilter) {
+      events = events.filter((e) => e.matchId === matchFilter);
     } else if (!options?.includeDemo) {
-      events = events.filter((e) => !demoGameIds.has(e.gameId));
+      events = events.filter((e) => !demoMatchIds.has(e.matchId));
     }
     if (options?.playerId) {
       events = events.filter((e) => e.playerId === options.playerId);
@@ -44,15 +74,14 @@ export const scoreRepo = {
       events = events.filter((e) => e.byUserId === options.scorerUserId);
     }
     if (options?.roundId) {
-      const roundGameIds = new Set(
-        db.games.filter((g) => g.roundId === options.roundId).map((g) => g.id)
+      const roundMatchIds = new Set(
+        db.matches.filter((m) => m.roundId === options.roundId).map((m) => m.id)
       );
-      events = events.filter((e) => roundGameIds.has(e.gameId));
+      events = events.filter((e) => roundMatchIds.has(e.matchId));
     }
 
     events.sort((a, b) => {
-      const diff =
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      const diff = Date.parse(b.createdAt) - Date.parse(a.createdAt);
       return options?.order === 'oldest' ? -diff : diff;
     });
 
@@ -60,7 +89,11 @@ export const scoreRepo = {
   },
 
   async listByGame(gameId: string): Promise<ScoreEvent[]> {
-    return this.list({ gameId, order: 'newest' });
+    return this.list({ matchId: gameId, order: 'newest' });
+  },
+
+  async listByMatch(matchId: string): Promise<ScoreEvent[]> {
+    return this.list({ matchId, order: 'newest' });
   },
 
   async listByPlayer(playerId: string): Promise<ScoreEvent[]> {
@@ -68,30 +101,67 @@ export const scoreRepo = {
   },
 
   async listBuzzByGame(gameId: string): Promise<BuzzEvent[]> {
-    const db = await storage.readSnapshot();
-    return db.buzzEvents
-      .filter((b) => b.gameId === gameId)
-      .sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
+    const buzzes = await storage.getBuzzEventsByMatch(gameId);
+    return buzzes.sort(
+      (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)
+    );
+  },
+
+  async listAbsencesByMatch(matchId: string): Promise<AbsenceEvent[]> {
+    const absences = await storage.getAbsenceEventsByMatch(matchId);
+    return absences.sort(
+      (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)
+    );
   },
 
   async getGameTotals(gameId: string): Promise<Record<string, number>> {
+    const match = await storage.getMatch(gameId);
+    if (!match) return {};
+    const events = await storage.getScoreEventsByMatch(gameId);
+    return computeMatchScores(match, events).totals;
+  },
+
+  /** Single-pass batched match totals avoiding N+1 IndexedDB calls across 1,000+ matches */
+  async getTotalsForMatches(
+    matchIds?: string[]
+  ): Promise<Record<string, Record<string, number>>> {
     const db = await storage.readSnapshot();
-    const game = db.games.find((g) => g.id === gameId);
-    const totals: Record<string, number> = {};
-    if (game) {
-      for (const pid of game.playerIds) {
-        totals[pid] = 0;
+    const filterSet = matchIds ? new Set(matchIds) : null;
+    const matchById = new Map<string, (typeof db.matches)[number]>();
+    const out: Record<string, Record<string, number>> = {};
+
+    for (const m of db.matches) {
+      if (filterSet && !filterSet.has(m.id)) continue;
+      matchById.set(m.id, m);
+      const t: Record<string, number> = {};
+      for (const p of m.participants) {
+        if (p.playerId) t[p.playerId] = 0;
       }
+      out[m.id] = t;
     }
+
     for (const ev of db.scoreEvents) {
-      if (ev.gameId === gameId) {
-        totals[ev.playerId] = (totals[ev.playerId] ?? 0) + ev.delta;
-      }
+      const m = matchById.get(ev.matchId);
+      if (!m) continue;
+      if ((ev.replayEpoch ?? 0) !== (m.replayEpoch ?? 0)) continue;
+      const t = out[m.id];
+      t[ev.playerId] = (t[ev.playerId] ?? 0) + ev.delta;
     }
-    return totals;
+
+    return out;
+  },
+
+  async getMatchScoreSummary(matchId: string) {
+    const match = await storage.getMatch(matchId);
+    if (!match) {
+      return {
+        totals: {} as Record<string, number>,
+        yellowCardsByPlayer: {} as Record<string, number>,
+        redCardsByPlayer: {} as Record<string, number>,
+      };
+    }
+    const events = await storage.getScoreEventsByMatch(matchId);
+    return computeMatchScores(match, events);
   },
 
   async getLeaderboard(options?: {
@@ -99,446 +169,199 @@ export const scoreRepo = {
     includeHost?: boolean;
   }): Promise<LeaderboardEntry[]> {
     const db = await storage.readSnapshot();
-    const demoGameIds = new Set(db.games.filter((g) => g.isDemo).map((g) => g.id));
-    const tournamentGames = db.games.filter((g) => !g.isDemo);
-    const players = options?.includeHost
-      ? db.players
-      : db.players.filter((p) => !p.isHost);
-
-    const allowedGameIds = options?.roundId
-      ? new Set(
-          tournamentGames
-            .filter((g) => g.roundId === options.roundId)
-            .map((g) => g.id)
-        )
-      : null;
-
-    const entries = players.map((player) => {
-      const events = db.scoreEvents.filter(
-        (e) =>
-          e.playerId === player.id &&
-          !demoGameIds.has(e.gameId) &&
-          (!allowedGameIds || allowedGameIds.has(e.gameId))
-      );
-      const totalPoints = events.reduce((sum, e) => sum + e.delta, 0);
-      const gamesPlayed = tournamentGames.filter(
-        (g) =>
-          (!allowedGameIds || allowedGameIds.has(g.id)) &&
-          (g.status === 'finished' || g.status === 'live') &&
-          g.playerIds.includes(player.id)
-      ).length;
-      const wins = tournamentGames.filter(
-        (g) =>
-          (!allowedGameIds || allowedGameIds.has(g.id)) &&
-          g.status === 'finished' &&
-          g.winnerPlayerId === player.id
-      ).length;
-
-      return {
-        rank: 0,
-        player,
-        totalPoints,
-        gamesPlayed,
-        wins,
-      };
-    });
-
-    entries.sort((a, b) => {
-      if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
-      if (b.wins !== a.wins) return b.wins - a.wins;
-      return a.player.seed - b.player.seed;
-    });
-
-    return entries.map((entry, idx) => ({
-      ...entry,
-      rank: idx + 1,
-    }));
+    const matchOutcomes = new Map(
+      db.matches
+        .filter((m) => !m.isDemo)
+        .map((m) => [
+          m.id,
+          computeMatchResult(
+            m,
+            db.scoreEvents,
+            db.absenceEvents,
+            db.matchEvents,
+            db.buzzEvents
+          ),
+        ])
+    );
+    const { groupStandings } = computeQualifiers(
+      db.groups,
+      db.matches,
+      db.scoreEvents,
+      db.absenceEvents,
+      db.matchEvents,
+      db.settings.tournament
+    );
+    // Per AGENTS.md §15.1, Marwan Serry (guest) is ALWAYS excluded from leaderboard rankings
+    return computeLeaderboard(
+      db.players,
+      db.matches,
+      matchOutcomes,
+      groupStandings,
+      db.scoreEvents,
+      db.absenceEvents,
+      { roundId: options?.roundId }
+    );
   },
 
+  // Write methods strictly delegate to the atomic Command Pipeline
   async applyScore(input: {
-    gameId: string;
+    gameId?: string;
+    matchId?: string;
     segmentId: string;
     playerId: string;
     delta: number;
     note?: string;
-    kind: Extract<ScoreEventKind, 'preset' | 'custom'>;
+    kind?: ScoreEventKind | 'preset' | 'custom';
     byUserId: string;
+    confirmCascade?: boolean;
+    cascadePolicy?: CascadePolicy;
+    expectedVersion?: number;
   }): Promise<ScoreEvent> {
-    const db = await storage.readSnapshot();
-    const game = db.games.find((g) => g.id === input.gameId);
-    assertRepoPermission(db, input.byUserId, 'score.operate', { game });
-
-    const event: ScoreEvent = {
-      id: `score-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      gameId: input.gameId,
+    const matchId = input.matchId ?? input.gameId ?? '';
+    if (input.kind === 'yellow' || input.kind === 'red') {
+      return commands.applyCard({
+        matchId,
+        segmentId: input.segmentId,
+        playerId: input.playerId,
+        card: input.kind,
+        note: input.note,
+        byUserId: input.byUserId,
+        confirmCascade: input.confirmCascade,
+        cascadePolicy: input.cascadePolicy,
+        expectedVersion: input.expectedVersion,
+      });
+    }
+    return commands.applyPoint({
+      matchId,
       segmentId: input.segmentId,
       playerId: input.playerId,
       delta: input.delta,
-      note: input.note?.trim() || undefined,
-      kind: input.kind,
+      note: input.note,
       byUserId: input.byUserId,
-      createdAt: new Date().toISOString(),
-    };
-
-    db.scoreEvents.unshift(event);
-    recomputePlayerStatsInMemory(db);
-    await storage.writeSnapshot(db);
-
-    const player = db.players.find((p) => p.id === input.playerId);
-    const signStr = input.delta > 0 ? `+${input.delta}` : `${input.delta}`;
-
-    if (!game?.isDemo) {
-      await auditRepo.record({
-        actorUserId: input.byUserId,
-        action: 'score.add',
-        entityType: 'score',
-        entityId: event.id,
-        summary: `Applied ${signStr} pts to ${player?.fullName ?? input.playerId}${input.note ? ` (${input.note})` : ''}`,
-        summaryAr: `تم احتساب ${signStr} نقطة للاعب ${player?.fullNameAr ?? input.playerId}${input.note ? ` (${input.note})` : ''}`,
-        before: null,
-        after: {
-          gameId: input.gameId,
-          playerId: input.playerId,
-          delta: input.delta,
-          kind: input.kind,
-        },
-      });
-    }
-
-    if (input.delta >= 0) {
-      feedback.play('score.positive');
-      feedback.haptic('medium');
-    } else {
-      feedback.play('score.negative');
-      feedback.haptic('warning');
-    }
-
-    realtime.publish('score.changed', {
-      gameId: input.gameId,
-      playerId: input.playerId,
-      delta: input.delta,
-      scoreEventId: event.id,
+      confirmCascade: input.confirmCascade,
+      cascadePolicy: input.cascadePolicy,
+      expectedVersion: input.expectedVersion,
     });
+  },
 
-    return event;
+  async applyPoint(input: {
+    matchId: string;
+    segmentId: string;
+    playerId: string;
+    delta: number;
+    note?: string;
+    byUserId: string;
+    confirmCascade?: boolean;
+    cascadePolicy?: CascadePolicy;
+    expectedVersion?: number;
+  }): Promise<ScoreEvent> {
+    return commands.applyPoint(input);
+  },
+
+  async applyCard(input: {
+    matchId: string;
+    segmentId: string;
+    playerId: string;
+    card: 'yellow' | 'red';
+    note?: string;
+    byUserId: string;
+    confirmCascade?: boolean;
+    cascadePolicy?: CascadePolicy;
+    expectedVersion?: number;
+  }): Promise<ScoreEvent> {
+    return commands.applyCard(input);
   },
 
   async undoLastScore(
     gameId: string,
     byUserId: string,
-    options?: { onlyOwn?: boolean }
+    options?: {
+      onlyOwn?: boolean;
+      confirmCascade?: boolean;
+      cascadePolicy?: CascadePolicy;
+      expectedVersion?: number;
+    }
   ): Promise<ScoreEvent | null> {
-    const db = await storage.readSnapshot();
-    const game = db.games.find((g) => g.id === gameId);
-    const actor = assertRepoPermission(db, byUserId, 'score.operate', { game });
-
-    // Scorers may only undo their own last action per AGENTS.md §4
-    const enforceOwn = options?.onlyOwn || actor?.role === 'scorer';
-
-    const targetIdx = db.scoreEvents.findIndex(
-      (e) =>
-        e.gameId === gameId &&
-        e.kind !== 'undo' &&
-        !e.undoneByEventId &&
-        (!enforceOwn || e.byUserId === byUserId)
-    );
-    if (targetIdx === -1) return null;
-
-    return this.undoScoreEventById(gameId, db.scoreEvents[targetIdx].id, byUserId);
+    return commands.undoLastScore({
+      matchId: gameId,
+      byUserId,
+      onlyOwn: options?.onlyOwn,
+      confirmCascade: options?.confirmCascade,
+      cascadePolicy: options?.cascadePolicy,
+      expectedVersion: options?.expectedVersion,
+    });
   },
 
   async undoScoreEventById(
     gameId: string,
     targetEventId: string,
-    byUserId: string
+    byUserId: string,
+    options?: {
+      reason?: string;
+      confirmCascade?: boolean;
+      cascadePolicy?: CascadePolicy;
+      expectedVersion?: number;
+    }
   ): Promise<ScoreEvent | null> {
-    const db = await storage.readSnapshot();
-    const game = db.games.find((g) => g.id === gameId);
-    const targetIdx = db.scoreEvents.findIndex(
-      (e) =>
-        e.id === targetEventId &&
-        e.gameId === gameId &&
-        e.kind !== 'undo' &&
-        !e.undoneByEventId
-    );
-    if (targetIdx === -1) return null;
-
-    const target = db.scoreEvents[targetIdx];
-    const isOwnScorerUndo = target.byUserId === byUserId;
-    if (isOwnScorerUndo) {
-      assertRepoPermission(db, byUserId, 'score.operate', { game });
-    } else {
-      assertRepoPermission(db, byUserId, 'score.manageHistory', { game });
-    }
-
-    const undoEvent: ScoreEvent = {
-      id: `score-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      gameId,
-      segmentId: target.segmentId,
-      playerId: target.playerId,
-      delta: -target.delta,
-      note: `Undo (${target.delta > 0 ? `+${target.delta}` : target.delta})`,
-      kind: 'undo',
+    return commands.revertEvent({
+      matchId: gameId,
+      targetEventId,
       byUserId,
-      targetEventId: target.id,
-      createdAt: new Date().toISOString(),
-    };
-
-    db.scoreEvents[targetIdx] = {
-      ...target,
-      undoneByEventId: undoEvent.id,
-    };
-    db.scoreEvents.unshift(undoEvent);
-    recomputePlayerStatsInMemory(db);
-    await storage.writeSnapshot(db);
-
-    const player = db.players.find((p) => p.id === target.playerId);
-
-    if (!game?.isDemo) {
-      await auditRepo.record({
-        actorUserId: byUserId,
-        action: 'score.undo',
-        entityType: 'score',
-        entityId: undoEvent.id,
-        summary: `Undid ${target.delta > 0 ? `+${target.delta}` : target.delta} pts for ${player?.fullName ?? target.playerId}`,
-        summaryAr: `تم التراجع عن ${target.delta > 0 ? `+${target.delta}` : target.delta} نقطة للاعب ${player?.fullNameAr ?? target.playerId}`,
-        before: { targetEventId: target.id, delta: target.delta },
-        after: { undoEventId: undoEvent.id, delta: undoEvent.delta },
-      });
-    }
-
-    feedback.play('score.undo');
-    feedback.haptic('light');
-
-    realtime.publish('score.changed', {
-      gameId,
-      playerId: target.playerId,
-      delta: undoEvent.delta,
-      scoreEventId: undoEvent.id,
-      isUndo: true,
+      reason: options?.reason,
+      confirmCascade: options?.confirmCascade,
+      cascadePolicy: options?.cascadePolicy,
+      expectedVersion: options?.expectedVersion,
     });
-
-    return undoEvent;
   },
 
   async editScoreEvent(
     eventId: string,
     patch: { delta: number; note?: string; segmentId?: string },
-    byUserId: string
+    byUserId: string,
+    options?: {
+      confirmCascade?: boolean;
+      cascadePolicy?: CascadePolicy;
+      expectedVersion?: number;
+    }
   ): Promise<ScoreEvent | null> {
-    const db = await storage.readSnapshot();
-    const idx = db.scoreEvents.findIndex((e) => e.id === eventId);
-    if (idx === -1) return null;
-
-    const before = { ...db.scoreEvents[idx] };
-    const game = db.games.find((g) => g.id === before.gameId);
-    assertRepoPermission(db, byUserId, 'score.manageHistory', { game });
-
-    const updated: ScoreEvent = {
-      ...before,
+    return commands.editScoreEvent({
+      eventId,
       delta: patch.delta,
-      note: patch.note?.trim() || undefined,
-      segmentId: patch.segmentId ?? before.segmentId,
-    };
-
-    db.scoreEvents[idx] = updated;
-    recomputePlayerStatsInMemory(db);
-    await storage.writeSnapshot(db);
-
-    const player = db.players.find((p) => p.id === updated.playerId);
-    const beforeSign = before.delta > 0 ? `+${before.delta}` : `${before.delta}`;
-    const afterSign = updated.delta > 0 ? `+${updated.delta}` : `${updated.delta}`;
-
-    if (!game?.isDemo) {
-      await auditRepo.record({
-        actorUserId: byUserId,
-        action: 'score.edit',
-        entityType: 'score',
-        entityId: eventId,
-        summary: `Edited score for ${player?.fullName ?? updated.playerId}: ${beforeSign} -> ${afterSign}${updated.note ? ` (${updated.note})` : ''}`,
-        summaryAr: `تعديل نقاط ${player?.fullNameAr ?? updated.playerId}: ${beforeSign} ← ${afterSign}${updated.note ? ` (${updated.note})` : ''}`,
-        before: {
-          delta: before.delta,
-          note: before.note ?? null,
-          segmentId: before.segmentId,
-        },
-        after: {
-          delta: updated.delta,
-          note: updated.note ?? null,
-          segmentId: updated.segmentId,
-        },
-      });
-    }
-
-    feedback.play('score.undo');
-    feedback.haptic('light');
-
-    realtime.publish('score.changed', {
-      gameId: updated.gameId,
-      playerId: updated.playerId,
-      delta: updated.delta - before.delta,
-      scoreEventId: updated.id,
-      isEdit: true,
+      note: patch.note,
+      segmentId: patch.segmentId,
+      byUserId,
+      confirmCascade: options?.confirmCascade,
+      cascadePolicy: options?.cascadePolicy,
+      expectedVersion: options?.expectedVersion,
     });
-
-    return updated;
-  },
-
-  async deleteScoreEvent(
-    eventId: string,
-    byUserId: string
-  ): Promise<ScoreEvent | null> {
-    const db = await storage.readSnapshot();
-    const target = db.scoreEvents.find((e) => e.id === eventId);
-    if (!target) return null;
-
-    const game = db.games.find((g) => g.id === target.gameId);
-    assertRepoPermission(db, byUserId, 'score.manageHistory', { game });
-
-    const idsToRemove = new Set<string>([eventId]);
-    if (target.undoneByEventId) {
-      idsToRemove.add(target.undoneByEventId);
-    }
-
-    db.scoreEvents = db.scoreEvents
-      .filter((e) => !idsToRemove.has(e.id))
-      .map((e) =>
-        target.targetEventId && e.id === target.targetEventId
-          ? { ...e, undoneByEventId: undefined }
-          : e
-      );
-
-    recomputePlayerStatsInMemory(db);
-    await storage.writeSnapshot(db);
-
-    const player = db.players.find((p) => p.id === target.playerId);
-    const signStr = target.delta > 0 ? `+${target.delta}` : `${target.delta}`;
-
-    if (!game?.isDemo) {
-      await auditRepo.record({
-        actorUserId: byUserId,
-        action: 'score.delete',
-        entityType: 'score',
-        entityId: target.id,
-        summary: `Deleted ${signStr} pts record for ${player?.fullName ?? target.playerId}`,
-        summaryAr: `حذف حركة نقاط (${signStr}) للاعب ${player?.fullNameAr ?? target.playerId}`,
-        before: {
-          gameId: target.gameId,
-          playerId: target.playerId,
-          segmentId: target.segmentId,
-          delta: target.delta,
-          note: target.note ?? null,
-          kind: target.kind,
-        },
-        after: null,
-      });
-    }
-
-    feedback.play('score.undo');
-    feedback.haptic('warning');
-
-    realtime.publish('score.changed', {
-      gameId: target.gameId,
-      playerId: target.playerId,
-      delta: -target.delta,
-      scoreEventId: target.id,
-      isDelete: true,
-    });
-
-    return target;
   },
 
   async recordBuzz(input: {
-    gameId: string;
+    gameId?: string;
+    matchId?: string;
     segmentId: string;
     playerId: string;
     byUserId: string;
+    expectedVersion?: number;
   }): Promise<BuzzEvent> {
-    const db = await storage.readSnapshot();
-    const game = db.games.find((g) => g.id === input.gameId);
-    assertRepoPermission(db, input.byUserId, 'score.operate', { game });
-
-    const buzz: BuzzEvent = {
-      id: `buzz-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      gameId: input.gameId,
+    return commands.recordBuzz({
+      matchId: input.matchId ?? input.gameId ?? '',
       segmentId: input.segmentId,
       playerId: input.playerId,
       byUserId: input.byUserId,
-      cleared: false,
-      createdAt: new Date().toISOString(),
-    };
-
-    db.buzzEvents.unshift(buzz);
-    const gameIdx = db.games.findIndex((g) => g.id === input.gameId);
-    if (gameIdx !== -1) {
-      db.games[gameIdx] = {
-        ...db.games[gameIdx],
-        activeBuzzPlayerId: input.playerId,
-      };
-    }
-
-    await storage.writeSnapshot(db);
-
-    const player = db.players.find((p) => p.id === input.playerId);
-    if (!game?.isDemo) {
-      await auditRepo.record({
-        actorUserId: input.byUserId,
-        action: 'buzz.record',
-        entityType: 'buzz',
-        entityId: buzz.id,
-        summary: `${player?.fullName ?? input.playerId} buzzed first`,
-        summaryAr: `${player?.fullNameAr ?? input.playerId} ضغط الجرس أولاً`,
-        before: null,
-        after: {
-          gameId: input.gameId,
-          playerId: input.playerId,
-          segmentId: input.segmentId,
-        },
-      });
-    }
-
-    feedback.play('buzz');
-    feedback.haptic('buzz');
-
-    realtime.publish('buzz.recorded', {
-      gameId: input.gameId,
-      playerId: input.playerId,
-      segmentId: input.segmentId,
-      buzzId: buzz.id,
+      expectedVersion: input.expectedVersion,
     });
-
-    return buzz;
   },
 
-  async clearBuzz(gameId: string, byUserId: string): Promise<void> {
-    const db = await storage.readSnapshot();
-    const gameIdx = db.games.findIndex((g) => g.id === gameId);
-    if (gameIdx === -1) return;
-
-    const game = db.games[gameIdx];
-    assertRepoPermission(db, byUserId, 'score.operate', { game });
-
-    const prevPlayerId = game.activeBuzzPlayerId;
-    const isDemo = game.isDemo;
-    db.games[gameIdx] = {
-      ...game,
-      activeBuzzPlayerId: null,
-    };
-    await storage.writeSnapshot(db);
-
-    if (!isDemo) {
-      await auditRepo.record({
-        actorUserId: byUserId,
-        action: 'buzz.clear',
-        entityType: 'buzz',
-        entityId: gameId,
-        summary: `Cleared active buzzer highlight on ${gameId.toUpperCase()}`,
-        summaryAr: `تم مسح إشارة الجرس في المباراة ${gameId.toUpperCase()}`,
-        before: { activeBuzzPlayerId: prevPlayerId },
-        after: { activeBuzzPlayerId: null },
-      });
-    }
-
-    realtime.publish('buzz.cleared', { gameId });
+  async clearBuzz(
+    gameId: string,
+    byUserId: string,
+    expectedVersion?: number
+  ): Promise<void> {
+    return commands.clearBuzz({
+      matchId: gameId,
+      byUserId,
+      expectedVersion,
+    });
   },
 };

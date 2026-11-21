@@ -108,6 +108,21 @@ export function getGameStatusMeta(
         label: lang === 'ar' ? 'مباشر' : 'LIVE',
         variant: 'red',
       };
+    case 'needsTieBreak':
+      return {
+        label: lang === 'ar' ? 'جولة حسم' : 'Tie-Break',
+        variant: 'gold',
+      };
+    case 'needsReview':
+      return {
+        label: lang === 'ar' ? 'تحتاج مراجعة' : 'Needs Review',
+        variant: 'negative',
+      };
+    case 'void':
+      return {
+        label: lang === 'ar' ? 'ملغاة (غياب)' : 'Void',
+        variant: 'muted',
+      };
     case 'finished':
       return {
         label: lang === 'ar' ? 'منتهية' : 'Finished',

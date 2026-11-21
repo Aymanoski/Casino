@@ -116,16 +116,11 @@ export function ScorerDashboardView() {
           ? allGames.filter((g) => g.scorerUserId === user.id)
           : allGames;
 
-      const totalsEntries = await Promise.all(
-        scopedGames.map(async (g) => [g.id, await scoreRepo.getGameTotals(g.id)] as const)
+      const totalsMap = await scoreRepo.getTotalsForMatches(
+        scopedGames.map((g) => g.id)
       );
 
       if (!mountedRef.current || seq !== loadSeqRef.current) return;
-
-      const totalsMap: Record<string, Record<string, number>> = {};
-      for (const [gid, map] of totalsEntries) {
-        totalsMap[gid] = map;
-      }
 
       setGames(scopedGames);
       setPlayers(allPlayers);
@@ -200,8 +195,11 @@ export function ScorerDashboardView() {
   const filteredGames = useMemo(() => {
     const priority: Record<GameStatus, number> = {
       live: 0,
-      scheduled: 1,
-      finished: 2,
+      needsTieBreak: 1,
+      needsReview: 2,
+      scheduled: 3,
+      finished: 4,
+      void: 5,
     };
     return games
       .filter((g) => {

@@ -212,8 +212,8 @@ export function AdminBracketView() {
           settingsRepo.get(),
         ]);
 
-      const totalsEntries = await Promise.all(
-        allGames.map(async (g) => [g.id, await scoreRepo.getGameTotals(g.id)] as const)
+      const totalsMap = await scoreRepo.getTotalsForMatches(
+        allGames.map((g) => g.id)
       );
 
       if (!mountedRef.current || seq !== loadSeqRef.current) return;
@@ -230,7 +230,7 @@ export function AdminBracketView() {
         setSemiAdvanceCount(appSettings.bracketConfig.semiAdvanceCount);
         setIncludeFinalWithMarwan(allGames.some((g) => g.isFinal));
       }
-      setTotalsByGame(Object.fromEntries(totalsEntries));
+      setTotalsByGame(totalsMap);
       setSeedingRoundId((prev) =>
         prev && allRounds.some((r) => r.id === prev)
           ? prev
@@ -387,7 +387,18 @@ export function AdminBracketView() {
   };
 
   const handleSaveGameFromModal = async (
-    payload: Omit<Game, 'id'>,
+    payload: {
+      roundId: string;
+      tableNumber?: number;
+      tableName: string;
+      tableNameAr: string;
+      scheduledAt: string;
+      judgeUserId: string;
+      scorerUserId: string;
+      playerIds: string[];
+      segmentIds: string[];
+      isFinal: boolean;
+    },
     existingId?: string
   ) => {
     if (!user) return;

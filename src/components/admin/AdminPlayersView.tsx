@@ -350,6 +350,12 @@ export function AdminPlayersView() {
 
     setSubmitting(true);
     try {
+      const arrivalOnly = (
+        ['registered', 'checkedIn', 'absent'] as const
+      ).includes(parsed.data.status as 'registered' | 'checkedIn' | 'absent')
+        ? (parsed.data.status as 'registered' | 'checkedIn' | 'absent')
+        : 'registered';
+
       if (editingPlayer) {
         await playerRepo.update(
           editingPlayer.id,
@@ -360,11 +366,18 @@ export function AdminPlayersView() {
             nicknameAr: parsed.data.nicknameAr || parsed.data.nickname,
             email: emailLower,
             phone: parsed.data.phone,
-            status: parsed.data.status,
             seed: parsed.data.seed,
           },
           user.id
         );
+        if (
+          arrivalOnly !== editingPlayer.status &&
+          (['registered', 'checkedIn', 'absent'] as const).includes(
+            editingPlayer.status as 'registered' | 'checkedIn' | 'absent'
+          )
+        ) {
+          await playerRepo.recordCheckIn(editingPlayer.id, arrivalOnly, user.id);
+        }
         toast({
           variant: 'positive',
           title: lang === 'ar' ? 'تم تحديث بيانات اللاعب' : 'Player updated',
@@ -383,7 +396,7 @@ export function AdminPlayersView() {
             nicknameAr: parsed.data.nicknameAr || parsed.data.nickname,
             email: emailLower,
             phone: parsed.data.phone,
-            status: parsed.data.status,
+            initialCheckInStatus: arrivalOnly,
             seed: parsed.data.seed,
           },
           user.id
@@ -413,15 +426,15 @@ export function AdminPlayersView() {
 
   const handleQuickStatusChange = async (
     player: Player,
-    nextStatus: PlayerStatus
+    nextStatus: 'registered' | 'checkedIn' | 'absent'
   ) => {
     if (!user || busyPlayerId === player.id) return;
     setBusyPlayerId(player.id);
     try {
-      await playerRepo.update(player.id, { status: nextStatus }, user.id);
+      await playerRepo.recordCheckIn(player.id, nextStatus, user.id);
       toast({
         variant: 'info',
-        title: lang === 'ar' ? 'تم تحديث الحالة' : 'Status updated',
+        title: lang === 'ar' ? 'تم تحديث الحضور' : 'Check-in status recorded',
         description: `${localizeText(lang, player.fullName, player.fullNameAr)} → ${getPlayerStatusMeta(nextStatus, lang).label}`,
       });
       await loadData();
@@ -480,7 +493,11 @@ export function AdminPlayersView() {
           nicknameAr: r.nicknameAr,
           phone: r.phone,
           email: r.email,
-          status: r.status,
+          initialCheckInStatus: (
+            ['registered', 'checkedIn', 'absent'] as const
+          ).includes(r.status as 'registered' | 'checkedIn' | 'absent')
+            ? (r.status as 'registered' | 'checkedIn' | 'absent')
+            : 'registered',
         })),
         user.id
       );
@@ -610,22 +627,35 @@ export function AdminPlayersView() {
         header: lang === 'ar' ? 'الحالة' : 'Status',
         sortable: true,
         sortAccessor: (p) => p.status,
-        render: (p) => (
-          <select
-            aria-label={`${lang === 'ar' ? 'حالة' : 'Status for'} ${p.fullName}`}
-            value={p.status}
-            onChange={(e) =>
-              handleQuickStatusChange(p, e.target.value as PlayerStatus)
-            }
-            className="min-h-[44px] rounded-input border border-border-paper bg-white px-2.5 py-1.5 text-base sm:text-xs font-bold text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
-          >
-            {ALL_STATUSES.map((st) => (
-              <option key={st} value={st}>
-                {getPlayerStatusMeta(st, lang).label}
-              </option>
-            ))}
-          </select>
-        ),
+        render: (p) => {
+          const isArrivalOnly =
+            p.status === 'registered' ||
+            p.status === 'checkedIn' ||
+            p.status === 'absent';
+          if (!isArrivalOnly) {
+            const meta = getPlayerStatusMeta(p.status, lang);
+            return <Badge variant={meta.variant}>{meta.label}</Badge>;
+          }
+          return (
+            <select
+              aria-label={`${lang === 'ar' ? 'حضور' : 'Arrival status for'} ${p.fullName}`}
+              value={p.status}
+              onChange={(e) =>
+                handleQuickStatusChange(
+                  p,
+                  e.target.value as 'registered' | 'checkedIn' | 'absent'
+                )
+              }
+              className="min-h-[44px] rounded-input border border-border-paper bg-white px-2.5 py-1.5 text-base sm:text-xs font-bold text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
+            >
+              {(['registered', 'checkedIn', 'absent'] as const).map((st) => (
+                <option key={st} value={st}>
+                  {getPlayerStatusMeta(st, lang).label}
+                </option>
+              ))}
+            </select>
+          );
+        },
       },
       {
         key: 'points',

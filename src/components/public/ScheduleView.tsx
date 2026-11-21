@@ -541,7 +541,8 @@ export function ScheduleView() {
                   ] as Array<{ value: StatusFilter; en: string; ar: string }>
                 ).map((item) => {
                   const active = statusFilter === item.value;
-                  const count = maps.statusCounts[item.value];
+                  const count =
+                    (maps.statusCounts as Record<string, number>)[item.value] ?? 0;
                   return (
                     <button
                       key={item.value}

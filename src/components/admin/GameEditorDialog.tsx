@@ -30,6 +30,19 @@ import {
   toDateTimeLocalInput,
 } from './adminFormatters';
 
+export interface MatchEditorPayload {
+  roundId: string;
+  tableNumber?: number;
+  tableName: string;
+  tableNameAr: string;
+  scheduledAt: string;
+  judgeUserId: string;
+  scorerUserId: string;
+  playerIds: string[];
+  segmentIds: string[];
+  isFinal: boolean;
+}
+
 export interface GameEditorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -40,12 +53,10 @@ export interface GameEditorDialogProps {
   segments: Segment[];
   defaultPlayersPerGame?: number;
   onSave: (
-    payload: Omit<Game, 'id'>,
+    payload: MatchEditorPayload,
     existingGameId?: string
   ) => Promise<void>;
 }
-
-const GAME_STATUSES: GameStatus[] = ['scheduled', 'live', 'finished'];
 
 export function GameEditorDialog({
   open,
@@ -55,17 +66,17 @@ export function GameEditorDialog({
   players,
   scorers,
   segments,
-  defaultPlayersPerGame = 3,
+  defaultPlayersPerGame = 2,
   onSave,
 }: GameEditorDialogProps) {
   const { lang } = useI18n();
 
   const [roundId, setRoundId] = useState('');
+  const [tableNumber, setTableNumber] = useState(1);
   const [tableName, setTableName] = useState('');
   const [tableNameAr, setTableNameAr] = useState('');
   const [scheduledAtLocal, setScheduledAtLocal] = useState('');
   const [scorerUserId, setScorerUserId] = useState('');
-  const [status, setStatus] = useState<GameStatus>('scheduled');
   const [isFinal, setIsFinal] = useState(false);
   const [playerIds, setPlayerIds] = useState<string[]>([]);
   const [segmentIds, setSegmentIds] = useState<string[]>([]);
@@ -74,7 +85,6 @@ export function GameEditorDialog({
 
   const roundSelectId = React.useId();
   const scorerSelectId = React.useId();
-  const statusSelectId = React.useId();
 
   const nonHostPlayers = useMemo(
     () => players.filter((p) => !p.isHost),
@@ -86,16 +96,16 @@ export function GameEditorDialog({
     setFormError(null);
     if (game) {
       setRoundId(game.roundId);
+      setTableNumber(game.tableNumber ?? 1);
       setTableName(game.tableName);
       setTableNameAr(game.tableNameAr);
       setScheduledAtLocal(toDateTimeLocalInput(game.scheduledAt));
-      setScorerUserId(game.scorerUserId);
-      setStatus(game.status);
+      setScorerUserId(game.judgeUserId || game.scorerUserId);
       setIsFinal(Boolean(game.isFinal));
       setPlayerIds([...game.playerIds]);
       setSegmentIds([...game.segmentIds]);
     } else {
-      const defaultRound = rounds[0]?.id ?? 'round-1';
+      const defaultRound = rounds[0]?.id ?? 'round-groups';
       const defaultScorer = scorers[0]?.id ?? 'user-scorer-1';
       const defaultSegs = segments
         .filter((s) => s.id !== 'seg-16')
@@ -106,13 +116,13 @@ export function GameEditorDialog({
         return nonHostPlayers[idx]?.id ?? `tbd-seat-${idx + 1}`;
       });
       setRoundId(defaultRound);
+      setTableNumber(1);
       setTableName(`Table ${Math.floor(Math.random() * 20) + 10} — Show Stage`);
       setTableNameAr('طاولة جديدة — المسرح');
       setScheduledAtLocal(
         toDateTimeLocalInput(new Date(Date.now() + 3600_000).toISOString())
       );
       setScorerUserId(defaultScorer);
-      setStatus('scheduled');
       setIsFinal(false);
       setPlayerIds(initialSeats);
       setSegmentIds(defaultSegs.length > 0 ? defaultSegs : ['seg-1']);
@@ -191,27 +201,17 @@ export function GameEditorDialog({
 
     setSaving(true);
     try {
-      const payload: Omit<Game, 'id'> = {
+      const payload: MatchEditorPayload = {
         roundId,
+        tableNumber: Math.max(1, tableNumber),
         tableName: tableName.trim(),
         tableNameAr: tableNameAr.trim() || tableName.trim(),
         scheduledAt: fromDateTimeLocalInput(scheduledAtLocal),
-        status,
+        judgeUserId: scorerUserId,
         scorerUserId,
         playerIds,
-        currentSegmentIndex: game
-          ? Math.min(game.currentSegmentIndex, segmentIds.length - 1)
-          : 0,
         segmentIds,
-        winnerPlayerId: game?.winnerPlayerId,
-        advancingPlayerIds: game?.advancingPlayerIds,
         isFinal,
-        startedAt: game?.startedAt,
-        finishedAt: game?.finishedAt,
-        activeBuzzPlayerId: game?.activeBuzzPlayerId ?? null,
-        timer: game?.timer ?? { status: 'idle', durationSec: 45, remainingSec: 45 },
-        podOrder: game?.podOrder,
-        isDemo: false,
       };
       await onSave(payload, game?.id);
       onOpenChange(false);
@@ -338,26 +338,14 @@ export function GameEditorDialog({
               onChange={(e) => setScheduledAtLocal(e.target.value)}
             />
 
-            <div className="space-y-1.5">
-              <label
-                htmlFor={statusSelectId}
-                className="block text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-ink"
-              >
-                {lang === 'ar' ? 'حالة المباراة' : 'Game Status'}
-              </label>
-              <select
-                id={statusSelectId}
-                value={status}
-                onChange={(e) => setStatus(e.target.value as GameStatus)}
-                className="flex min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-3 text-base text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
-              >
-                {GAME_STATUSES.map((st) => (
-                  <option key={st} value={st}>
-                    {getGameStatusMeta(st, lang).label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Input
+              label={lang === 'ar' ? 'رقم الطاولة' : 'Table Number'}
+              type="number"
+              min={1}
+              max={64}
+              value={tableNumber}
+              onChange={(e) => setTableNumber(Number(e.target.value) || 1)}
+            />
           </FormGrid>
 
           {/* Seated Contestants */}

@@ -1,8 +1,13 @@
-import type { DatabaseSnapshot, Game, User, UserRole } from '@/lib/schemas';
+import type {
+  DatabaseSnapshot,
+  Match,
+  User,
+  UserRole,
+} from '@/lib/schemas';
 
 /**
- * Centralized Scoring History & Table Lifecycle Permissions
- * Add or remove manager roles here as product permissions evolve (no UI rewrites needed).
+ * Centralized Scoring History, Match Lifecycle & Consistency Permissions
+ * Aligned 1:1 with AGENTS.md §4 and §15.5.
  */
 export const SCORE_HISTORY_MANAGER_ROLES: readonly UserRole[] = ['superAdmin'];
 export const REOPEN_GAME_MANAGER_ROLES: readonly UserRole[] = ['superAdmin'];
@@ -10,19 +15,29 @@ export const REOPEN_GAME_MANAGER_ROLES: readonly UserRole[] = ['superAdmin'];
 export type RepoAction =
   | 'player.manage'
   | 'player.checkIn'
+  | 'player.updateOwnAvatar'
   | 'user.manage'
   | 'bracket.manage'
   | 'game.operate'
+  | 'match.operate'
   | 'game.reopen'
+  | 'match.reopen'
+  | 'match.override'
+  | 'match.resolveReview'
   | 'score.operate'
   | 'score.manageHistory'
+  | 'absence.reverse'
   | 'segment.manage'
   | 'segment.editCopy'
   | 'content.manage'
   | 'sponsor.manage'
   | 'settings.manage'
   | 'audit.read'
-  | 'results.read';
+  | 'results.read'
+  | 'consistency.check'
+  | 'consistency.repair'
+  | 'contact.viewPlayer'
+  | 'contact.viewJudge';
 
 export class PermissionDeniedError extends Error {
   readonly code = 'PERMISSION_DENIED';
@@ -53,36 +68,30 @@ export interface RoleCapabilitySpec {
   routes: string[];
 }
 
-/**
- * Authoritative role capability catalog per AGENTS.md §4.
- * Consumed by /admin/managers UI and aligned 1:1 with assertRepoPermission below.
- */
 export const MANAGER_ROLE_SPECS: RoleCapabilitySpec[] = [
   {
     role: 'superAdmin',
     titleEn: 'Super Admin',
     titleAr: 'مدير البطولة (صلاحية كاملة)',
     summaryEn:
-      'Complete operational authority across players, staff, bracket, scoring, audit log, and tournament settings.',
+      'Complete operational authority across players, groups, knockout bracket, overrides, Impact Preview, Consistency check, and settings.',
     summaryAr:
-      'صلاحية تشغيلية كاملة على اللاعبين، طاقم العمل، شجرة البطولة، التحكيم، سجل المراجعة، وإعدادات الحدث.',
+      'صلاحية تشغيلية كاملة على اللاعبين، المجموعات، التصفيات، التعديلات الإدارية، معاينة الأثر، فحص التناسق، والإعدادات.',
     canDoEn: [
-      'Create, edit, delete, and CSV-import players',
-      'Create managers and assign or change roles',
-      'Build & auto-generate bracket, rounds, tables, and the Grand Final',
-      'Full CRUD & reorder on segments, presets, and timers',
-      'Run or reopen any game & edit/revert scoring history',
-      'Inspect Results Feed, Audit Log (with before/after diffs), and export CSV',
-      'Edit settings, placeholders, content, sponsors, and reset demo data',
+      'Create, edit, delete, and CSV-import players & manage avatars',
+      'Draw/re-draw groups, configure tournament settings, and manage knockouts',
+      'Run or reopen any match, apply overrides, reverse absences, and confirm Impact Preview cascades',
+      'Run Consistency check and Repair by recomputation',
+      'Inspect Results Feed, Audit Log (including automatic cascade entries), and export CSV',
+      'View all player and judge contact cards',
     ],
     canDoAr: [
-      'إضافة وتعديل وحذف اللاعبين والاستيراد الجماعي عبر CSV',
-      'إنشاء حسابات المديرين وتعيين الصلاحيات وتعديلها',
-      'بناء وتوليد شجرة البطولة، الجولات، الطاولات، والنهائي الكبير',
-      'إدارة الفقرات وترتيبها وتعديل النقاط المسبقة والمؤقتات',
-      'إدارة أي طاولة أو إعادة فتحها وتعديل سجل النقاط',
-      'استعراض سجل النتائج وسجل المراجعة (قبل/بعد) وتصدير CSV',
-      'تعديل إعدادات البطولة والمحتوى والرعاة وإعادة ضبط البيانات',
+      'إضافة وتعديل وحذف اللاعبين والاستيراد الجماعي وإدارة الصور الشخصية',
+      'سحب المجموعات وضبط إعدادات البطولة وإدارة الإقصائيات',
+      'إدارة أي مباراة أو إعادة فتحها وتطبيق القرارات الإدارية ومعاينة أثر التعديلات',
+      'تشغيل فحص التناسق وإصلاح البيانات بإعادة الحساب',
+      'استعراض سجل النتائج وسجل المراجعة (شاملاً الحركات التلقائية) وتصدير CSV',
+      'عرض بيانات التواصل لجميع اللاعبين والحكام',
     ],
     cannotDoEn: ['No restrictions — full studio access'],
     cannotDoAr: ['لا توجد قيود — وصول كامل لجميع الأدوات'],
@@ -90,35 +99,35 @@ export const MANAGER_ROLE_SPECS: RoleCapabilitySpec[] = [
   },
   {
     role: 'scorer',
-    titleEn: 'Table Scorer',
+    titleEn: 'Table Judge / Scorer',
     titleAr: 'حكم طاولة',
     summaryEn:
-      'Runs assigned 3-player game sessions live on a tablet or phone with zero-mistake speed.',
+      'Runs assigned 1v1 matches (or 3-player Grand Final) with +1/−1 points, Yellow/Red cards, absence walkovers, buzzes, and player contact cards.',
     summaryAr:
-      'يدير طاولات اللعب المخصصة له مباشرة على التابلت أو الهاتف بسرعة ودقة عالية.',
+      'يدير مبارياته المخصصة (١ ضد ١ أو النهائي الثلاثي) بنقاط +١/−١، البطاقات الصفراء والحمراء، تسجيل الغياب، الجرس، وبيانات التواصل.',
     canDoEn: [
-      'View assigned games on /scorer',
-      'Start assigned game, run segment timer, advance segments',
-      'Tap "Buzzed First" and clear buzzes on assigned games',
-      'Add/subtract preset & custom points with notes',
-      'Undo own last scoring action and trigger Tie-Breaker #16',
+      'View assigned matches on /scorer',
+      'Start assigned match, run segment timer, advance segments',
+      'Tap "Buzzed First", apply +1/−1 points, Yellow (−1) and Red (−2) cards with notes',
+      'Undo own last scoring action and trigger Sudden-Death Tie-Breaker #16',
+      'Mark a player absent (triggers walkover in 1v1) and view contact cards of players in assigned matches',
     ],
     canDoAr: [
-      'عرض الطاولات المخصصة له فقط في لوحة الحكم',
-      'بدء المباراة وتشغيل مؤقت الفقرة والانتقال بين الفقرات',
-      'تسجيل أول من ضغط الجرس وإلغاء الجرس',
-      'إضافة وخصم النقاط المسبقة أو المخصصة مع ملاحظة',
-      'التراجع عن آخر حركة نقاط خاصة به وفتح جولة الحسم',
+      'عرض المباريات المخصصة له فقط في لوحة الحكم',
+      'بدء المباراة وتشغيل المؤقت والانتقال بين الفقرات',
+      'تسجيل الجرس، إضافة/خصم نقطة، منح بطاقة صفراء (−١) أو حمراء (−٢) مع ملاحظة',
+      'التراجع عن آخر حركة نقاط خاصة به وفتح جولة الحسم عند التعادل',
+      'تسجيل غياب لاعب في مبارياته والاطلاع على بيانات التواصل الخاصة بهم',
     ],
     cannotDoEn: [
-      'Access or score another scorer’s game',
-      'Edit bracket, players, managers, segments, or settings',
-      'Access Admin Studio pages, Results Feed, or Audit Log',
+      'Access, score, or view contact info for other judges’ matches',
+      'Reverse absences, override results, or edit bracket/players/settings',
+      'Access Admin Studio pages, Consistency check, Results Feed, or Audit Log',
     ],
     cannotDoAr: [
-      'الوصول إلى طاولات حكام آخرين أو تعديل نقاطها',
-      'تعديل شجرة البطولة أو اللاعبين أو المديرين أو الفقرات أو الإعدادات',
-      'دخول صفحات إدارة البطولة أو سجل المراجعة',
+      'الوصول لمباريات حكام آخرين أو عرض بيانات تواصل لاعبيهم',
+      'إلغاء الغياب أو تعديل شجرة البطولة أو اللاعبين أو الإعدادات',
+      'دخول صفحات إدارة البطولة أو فحص التناسق أو سجل المراجعة',
     ],
     routes: ['/scorer', '/scorer/[gameId]'],
   },
@@ -127,28 +136,28 @@ export const MANAGER_ROLE_SPECS: RoleCapabilitySpec[] = [
     titleEn: 'Check-In Staff',
     titleAr: 'مسؤول تسجيل الحضور',
     summaryEn:
-      'Operates the venue arrival gate for today’s tables and contestant attendance.',
+      'Operates the venue arrival gate for scheduled matches and contestant attendance with access to player contact cards.',
     summaryAr:
-      'يدير بوابة استقبال المتسابقين لمباريات اليوم وتأكيد حضورهم أو غيابهم.',
+      'يدير بوابة استقبال المتسابقين لمباريات اليوم وتأكيد حضورهم أو غيابهم مع إمكانية التواصل مع المتأخرين.',
     canDoEn: [
-      'View Admin Overview and today’s scheduled tables',
-      'View players assigned to upcoming and live games',
-      'Mark contestants as Checked In, Absent, or Registered',
+      'View Admin Overview and today’s scheduled matches',
+      'View player contact details for gate check-in follow-up',
+      'Mark contestants as Checked In, Absent, or Registered via check-in events',
     ],
     canDoAr: [
       'عرض نظرة عامة وجدول مباريات اليوم',
-      'استعراض أسماء المتسابقين في الطاولات القادمة والمباشرة',
-      'تحديث حالة اللاعب إلى «تم الحضور» أو «غائب» أو «مسجّل»',
+      'عرض بيانات تواصل اللاعبين لمتابعة الحضور عند البوابة',
+      'تحديث حالة الوصول إلى «تم الحضور» أو «غائب» أو «مسجّل»',
     ],
     cannotDoEn: [
       'Create, edit profile details, or delete players',
-      'Change scores, buzzes, bracket, games, or settings',
-      'Manage users, content, sponsors, or read Audit Log',
+      'Change scores, cards, bracket, matches, or settings',
+      'Manage users, content, sponsors, Consistency check, or read Audit Log',
     ],
     cannotDoAr: [
       'إضافة لاعبين جدد أو تعديل بياناتهم أو حذفهم',
-      'تعديل النقاط أو شجرة البطولة أو الإعدادات',
-      'إدارة المديرين أو المحتوى أو الرعاة أو سجل المراجعة',
+      'تعديل النقاط أو البطاقات أو شجرة البطولة أو الإعدادات',
+      'إدارة المديرين أو المحتوى أو الرعاة أو فحص التناسق أو سجل المراجعة',
     ],
     routes: ['/admin', '/admin/check-in'],
   },
@@ -171,14 +180,14 @@ export const MANAGER_ROLE_SPECS: RoleCapabilitySpec[] = [
       'تحرير أسماء وأوصاف الفقرات باللغتين العربية والإنجليزية',
     ],
     cannotDoEn: [
-      'Change segment point presets, timers, or delete/reorder segments',
-      'Change scores, bracket, games, players, managers, or settings',
-      'Access Gate Check-In, Results Feed, or Audit Log',
+      'Change segment timers, categories, or delete/reorder segments',
+      'Change scores, bracket, matches, players, managers, or settings',
+      'View player contacts, Gate Check-In, Results Feed, Consistency check, or Audit Log',
     ],
     cannotDoAr: [
-      'تعديل نقاط الفقرات أو مؤقتاتها أو حذفها أو تغيير ترتيبها',
+      'تعديل مؤقتات الفقرات أو فئاتها أو حذفها أو تغيير ترتيبها',
       'تعديل النقاط أو شجرة البطولة أو اللاعبين أو المديرين أو الإعدادات',
-      'دخول بوابة الحضور أو سجل النتائج أو سجل المراجعة',
+      'عرض بيانات التواصل أو بوابة الحضور أو سجل النتائج أو المراجعة',
     ],
     routes: ['/admin', '/admin/content', '/admin/sponsors', '/admin/segments'],
   },
@@ -201,25 +210,37 @@ export function canRolePerformAction(
 
   switch (action) {
     case 'player.checkIn':
-      return role === 'checkIn';
+    case 'contact.viewPlayer':
+      return role === 'checkIn' || role === 'scorer';
+    case 'contact.viewJudge':
+      return role === 'player' || role === 'scorer';
+    case 'player.updateOwnAvatar':
+      return role === 'player';
     case 'segment.editCopy':
     case 'content.manage':
     case 'sponsor.manage':
       return role === 'content';
     case 'game.operate':
+    case 'match.operate':
     case 'score.operate':
       return role === 'scorer';
     case 'game.reopen':
+    case 'match.reopen':
       return REOPEN_GAME_MANAGER_ROLES.includes(role);
     case 'score.manageHistory':
       return SCORE_HISTORY_MANAGER_ROLES.includes(role);
     case 'player.manage':
     case 'user.manage':
     case 'bracket.manage':
+    case 'match.override':
+    case 'match.resolveReview':
+    case 'absence.reverse':
     case 'segment.manage':
     case 'settings.manage':
     case 'audit.read':
     case 'results.read':
+    case 'consistency.check':
+    case 'consistency.repair':
       return false;
     default:
       return false;
@@ -230,12 +251,21 @@ export function assertRepoPermission(
   db: DatabaseSnapshot,
   actorUserId: string | null | undefined,
   action: RepoAction,
-  context?: { game?: Game | null }
+  context?: {
+    game?: Match | null;
+    match?: Match | null;
+    targetPlayerId?: string;
+    targetJudgeId?: string;
+  }
 ): User | null {
+  const match = context?.match ?? context?.game ?? null;
+
   // Interactive landing-page exhibition demo table is intentionally open to visitors/pitch presenters
   if (
-    context?.game?.isDemo &&
-    (action === 'game.operate' || action === 'score.operate')
+    match?.isDemo &&
+    (action === 'game.operate' ||
+      action === 'match.operate' ||
+      action === 'score.operate')
   ) {
     return resolveActorUser(db, actorUserId);
   }
@@ -259,19 +289,103 @@ export function assertRepoPermission(
     throw new PermissionDeniedError(action, role);
   }
 
-  // Enforce scorer table isolation per AGENTS.md §4 ("Cannot edit other scorers' games")
+  // Enforce scorer/judge match isolation (AGENTS.md §4 & §15.5)
   if (
-    (action === 'game.operate' || action === 'score.operate') &&
+    (action === 'game.operate' ||
+      action === 'match.operate' ||
+      action === 'score.operate') &&
     role === 'scorer' &&
-    context?.game &&
-    context.game.scorerUserId !== actor.id
+    match &&
+    match.judgeUserId !== actor.id
   ) {
     throw new PermissionDeniedError(
       action,
       role,
-      `Scorer "${actor.name}" is not assigned to game "${context.game.tableName}".`
+      `Judge "${actor.name}" is not assigned to match "${match.tableName}".`
+    );
+  }
+
+  // Enforce player contact visibility (AGENTS.md §15.5):
+  // Scorers ONLY see contact info for players in their assigned matches!
+  if (action === 'contact.viewPlayer' && role === 'scorer') {
+    const pid = context?.targetPlayerId;
+    const isAssigned = Boolean(
+      pid &&
+        db.matches.some(
+          (m) =>
+            m.judgeUserId === actor.id &&
+            m.participants.some((p) => p.playerId === pid)
+        )
+    );
+    if (!isAssigned) {
+      throw new PermissionDeniedError(
+        action,
+        role,
+        `Judge "${actor.name}" may only view contact details for players in assigned matches.`
+      );
+    }
+  }
+
+  // Enforce judge contact visibility for players (AGENTS.md §15.3 & §15.5):
+  // Players ONLY see the judge contact for their own upcoming/live match!
+  if (action === 'contact.viewJudge' && role === 'player') {
+    const jid = context?.targetJudgeId;
+    const isOwnMatchJudge = Boolean(
+      jid &&
+        actor.playerId &&
+        db.matches.some(
+          (m) =>
+            m.judgeUserId === jid &&
+            (m.status === 'scheduled' || m.status === 'live') &&
+            m.participants.some((p) => p.playerId === actor.playerId)
+        )
+    );
+    if (!isOwnMatchJudge) {
+      throw new PermissionDeniedError(
+        action,
+        role,
+        'Players may only view judge contact details for their own upcoming or live match.'
+      );
+    }
+  }
+
+  // Player updating their own avatar only
+  if (
+    action === 'player.updateOwnAvatar' &&
+    role === 'player' &&
+    context?.targetPlayerId &&
+    actor.playerId !== context.targetPlayerId
+  ) {
+    throw new PermissionDeniedError(
+      action,
+      role,
+      'Players may only update their own avatar.'
     );
   }
 
   return actor;
+}
+
+/**
+ * Repository-level segment secrecy filter (AGENTS.md §15.3):
+ * Players MUST NOT receive segment names/order/IDs for upcoming or live matches
+ * so segments stay a surprise until finished (or shown live on venue Big Screen).
+ */
+export function redactMatchForRole(
+  match: Match,
+  role?: UserRole | 'visitor' | null
+): Match {
+  if (!role || role === 'superAdmin' || role === 'scorer' || role === 'content' || role === 'checkIn') {
+    return match;
+  }
+  // For 'player' role (and public 'visitor' reads when explicitly scoped):
+  // Hide segment lineup on matches that are NOT finished!
+  if (match.status !== 'finished' && !match.isDemo) {
+    return {
+      ...match,
+      segmentIds: [],
+      currentSegmentIndex: 0,
+    };
+  }
+  return match;
 }

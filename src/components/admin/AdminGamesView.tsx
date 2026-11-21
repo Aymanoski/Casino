@@ -47,6 +47,8 @@ import {
 } from './AdminPageHeader';
 import { formatAdminTimeShort, getGameStatusMeta } from './adminFormatters';
 
+import type { MatchEditorPayload } from './GameEditorDialog';
+
 const GameEditorDialog = dynamic(
   () => import('./GameEditorDialog').then((m) => ({ default: m.GameEditorDialog })),
   { ssr: false }
@@ -197,7 +199,7 @@ export function AdminGamesView() {
   };
 
   const handleSaveGame = async (
-    payload: Omit<Game, 'id'>,
+    payload: MatchEditorPayload,
     existingId?: string
   ) => {
     if (!user) return;

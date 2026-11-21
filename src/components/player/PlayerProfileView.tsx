@@ -90,7 +90,7 @@ export function PlayerProfileView() {
         const [players, games, rounds, segments, leaderboard, allScoreEvents, settings] =
           await Promise.all([
             playerRepo.list({ includeHost: true }),
-            gameRepo.list(),
+            gameRepo.list({ viewerRole: user?.role ?? 'visitor' }),
             roundRepo.list(),
             segmentRepo.list(),
             scoreRepo.getLeaderboard(),

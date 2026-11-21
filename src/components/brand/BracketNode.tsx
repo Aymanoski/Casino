@@ -9,6 +9,8 @@ import { LiveBadge } from './LiveBadge';
 import { MarqueeBulbs } from './MarqueeBulbs';
 import { PlayerAvatar } from './PlayerAvatar';
 
+import type { MatchStatus } from '@/lib/schemas';
+
 export interface BracketPlayerSlot {
   id?: string;
   name: string;
@@ -24,7 +26,7 @@ export interface BracketPlayerSlot {
 export interface BracketNodeProps {
   tableName: string;
   roundLabel?: string;
-  status: 'scheduled' | 'live' | 'finished';
+  status: MatchStatus;
   isFinal?: boolean;
   players:
     | [BracketPlayerSlot, BracketPlayerSlot, BracketPlayerSlot]
@@ -147,6 +149,18 @@ export const BracketNode = React.memo(function BracketNode({
         <div className="shrink-0">
           {status === 'live' ? (
             <LiveBadge size="sm" surface="paper" />
+          ) : status === 'needsTieBreak' ? (
+            <Badge variant="gold" className="px-2.5 py-0.5 text-[11px]">
+              {lang === 'ar' ? 'جولة حسم' : 'TIE-BREAK'}
+            </Badge>
+          ) : status === 'needsReview' ? (
+            <Badge variant="negative" className="px-2.5 py-0.5 text-[11px]">
+              {lang === 'ar' ? 'مراجعة' : 'REVIEW'}
+            </Badge>
+          ) : status === 'void' ? (
+            <Badge variant="muted" className="px-2.5 py-0.5 text-[11px]">
+              {lang === 'ar' ? 'ملغاة' : 'VOID'}
+            </Badge>
           ) : status === 'finished' ? (
             <Badge variant="muted" className="px-2.5 py-0.5 text-[11px]">
               {lang === 'ar' ? 'منتهية' : 'DONE'}

@@ -163,6 +163,7 @@ export function StudioSidebarShell({
     { href: '/admin/segments', label: t.adminNav.segments, shortLabel: lang === 'ar' ? 'الفقرات' : 'Segments', icon: Layers },
     { href: '/admin/results', label: t.adminNav.results, shortLabel: lang === 'ar' ? 'النتائج' : 'Results', icon: Activity },
     { href: '/admin/audit', label: t.adminNav.audit, shortLabel: lang === 'ar' ? 'المراجعة' : 'Audit', icon: Shield },
+    { href: '/admin/consistency', label: t.adminNav.consistency, shortLabel: lang === 'ar' ? 'التناسق' : 'Integrity', icon: CheckSquare },
     { href: '/admin/managers', label: t.adminNav.managers, shortLabel: lang === 'ar' ? 'المديرون' : 'Managers', icon: Users },
     { href: '/admin/content', label: t.adminNav.content, shortLabel: lang === 'ar' ? 'المحتوى' : 'Content', icon: FileText },
     { href: '/admin/sponsors', label: t.adminNav.sponsors, shortLabel: lang === 'ar' ? 'الرعاة' : 'Sponsors', icon: Award },

@@ -93,7 +93,7 @@ export function PlayerHistoryView() {
         const [players, games, rounds, segments, scoreEvents, settings] =
           await Promise.all([
             playerRepo.list({ includeHost: true }),
-            gameRepo.list(),
+            gameRepo.list({ viewerRole: user?.role ?? 'visitor' }),
             roundRepo.list(),
             segmentRepo.list(),
             scoreRepo.list({ order: 'oldest' }),
@@ -887,13 +887,17 @@ export function PlayerHistoryView() {
                                                 ? lang === 'ar'
                                                   ? 'تراجع'
                                                   : 'Undo'
-                                                : ev.kind === 'custom'
+                                                : ev.kind === 'yellow'
                                                   ? lang === 'ar'
-                                                    ? 'مخصص'
-                                                    : 'Custom'
-                                                  : lang === 'ar'
-                                                    ? 'سريع'
-                                                    : 'Preset'}
+                                                    ? 'بطاقة صفراء (−١)'
+                                                    : 'Yellow (−1)'
+                                                  : ev.kind === 'red'
+                                                    ? lang === 'ar'
+                                                      ? 'بطاقة حمراء (−٢)'
+                                                      : 'Red (−2)'
+                                                    : lang === 'ar'
+                                                      ? 'نقطة'
+                                                      : 'Point'}
                                             </span>
                                             {ev.note && (
                                               <span className="min-w-0 break-all sm:break-words text-ink font-medium">

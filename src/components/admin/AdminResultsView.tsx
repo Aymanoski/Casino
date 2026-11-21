@@ -118,8 +118,8 @@ export function AdminResultsView() {
       ]);
 
       const finished = allGames.filter((g) => g.status === 'finished');
-      const totalsEntries = await Promise.all(
-        finished.map(async (g) => [g.id, await scoreRepo.getGameTotals(g.id)] as const)
+      const totalsMap = await scoreRepo.getTotalsForMatches(
+        finished.map((g) => g.id)
       );
 
       if (!mountedRef.current || seq !== loadSeqRef.current) return;
@@ -130,7 +130,7 @@ export function AdminResultsView() {
       setSegments(allSegments);
       setUsers(allUsers);
       setSettings(appSettings);
-      setTotalsByGame(Object.fromEntries(totalsEntries));
+      setTotalsByGame(totalsMap);
       setError(null);
     } catch {
       if (!mountedRef.current || seq !== loadSeqRef.current) return;

@@ -4,7 +4,31 @@
 
 ---
 
-## 1. Storage & Repository Modules (`src/lib/repos/*` → Database / ORM)
+## 1. Storage & Repository Modules (`src/lib/storage` + `src/lib/commands` + `src/lib/repos/*` → Database / ORM)
+
+All UI components and pages read through `src/lib/repos/*` and execute all mutations exclusively through the atomic Command Pipeline (`src/lib/commands/index.ts`), backed by pure deterministic derivations in `src/lib/engine/*` and IndexedDB (`idb`) in `src/lib/storage/index.ts`. To connect a production database (e.g., PostgreSQL with Prisma or Drizzle, or Supabase):
+
+- [ ] **`src/lib/storage/index.ts`**: Replace IndexedDB (`casino_el_al3ab_idb_v1` with 15 indexed object stores & atomic `commitDelta` transactions) with a PostgreSQL/ORM transaction adapter implementing `StorageAdapter`.
+- [ ] **`src/lib/commands/index.ts`**: Move `executeCommand` / `commands.*` into Next.js Server Actions / API route handlers wrapped in `BEGIN ... COMMIT` SQL transactions using optimistic row locking (`WHERE id = $1 AND version = $expectedVersion`), preserving the exact pure `/lib/engine` recomputation, cascade Impact Preview, automatic audit entries, and `checkInvariants()` pipeline.
+- [ ] **`src/lib/repos/matchRepo.ts` (`gameRepo` alias) & `groupRepo.ts`**: Replace IndexedDB indexed queries (`by-roundId`, `by-groupId`, `by-judgeUserId`, `by-status`) with SQL queries, keeping `redactMatchForRole()` enforced server-side so `player`-role reads never return `segmentIds` for unfinished matches.
+- [ ] **`src/lib/repos/scoreRepo.ts`**: Replace IndexedDB `scoreEvents`, `absenceEvents`, `buzzEvents` index queries (`by-matchId`, `by-playerId`, `by-createdAt`) with append-only SQL tables (`INSERT`-only, no `UPDATE`/`DELETE` grants on event tables).
+- [ ] **`src/lib/repos/playerRepo.ts` & `userRepo.ts`**: Enforce `contact.viewPlayer` / `contact.viewJudge` and `contact.viewed` audit logging server-side; store uploaded player avatar photos (<= 300KB cropped square) in object storage (S3 / Supabase Storage / R2) instead of data URLs.
+- [ ] **`src/lib/repos/auditRepo.ts`, `roundRepo.ts`, `segmentRepo.ts`, `contentRepo.ts`, `sponsorRepo.ts`, `settingsRepo.ts`**: Back each store with PostgreSQL tables; gate `resetDemoData` behind non-production environment flag.
+- [ ] **`src/lib/repos/permissions.ts`**: Mirror `assertRepoPermission`, `redactMatchForRole`, and contact visibility rules in server middleware + PostgreSQL RLS policies.
+
+### Change Request 1 — Step 1 Completion Checklist (`v0.1.1-cr1-engine`)
+- [x] Full codebase audit of derived writes + failing Vitest reproduction of reported winner-tag bug before fixing.
+- [x] Updated CR1 data model (`Match`, `Group`, `MatchResult`, `version`, `replayEpoch`, `ScoreEvent.kind` = `point | yellow | red | undo`, `AbsenceEvent`, `MatchLifecycleEvent`, `CheckInEvent`, `PlayerContact`, `Avatar`, `Settings.tournament`) + procedural seed generator (`12` / `48` / default `720` players).
+- [x] Pure engine in `src/lib/engine/` (`computeMatchResult`, `computeGroupStandings`, `computeQualifiers`, `generateKnockout`, `resolveByes`, `propagateWinners`, `computePlayerStatus`, `computeAllPlayerStats`, `computeLeaderboard`, `autoScheduleMatches`, `previewCascadeImpact`, `checkInvariants`) with zero UI/storage imports.
+- [x] Atomic Command Pipeline in `src/lib/commands/` + refactored all existing write paths + AST lint guard (`scripts/check-derived-writes.mjs`) wired into `npm run lint`.
+- [x] Cascade rules (`scheduled` auto-update vs live/finished `needsReview` / `invalidateForReplay`) + bilingual `ImpactPreviewDialog` wired into `SessionHistoryDrawer` and `ScorerConsoleView`.
+- [x] 9 engine invariants enforced after every command in dev/test + Admin Consistency Check page (`/admin/consistency`) with one-click **Repair by recomputation**.
+- [x] IndexedDB storage (`idb`) with 15 indexed object stores, atomic delta commits, cross-tab sync, Reset Demo Data, and verified 1,000+ matches / 100,000+ events scale test.
+- [x] Vitest suite (`18/18` passing) covering reported bug, ties/tie-breaks, walkover, both absent, absence reversed, card accumulation/undo, 3-way group cycle & deadlock tie-break, BYEs & odd group counts, alternate settings (48/4/2, 16/4/2), 1v1v1 Marwan Final, downstream cascade after match started, permissions/privacy, consistency repair, post-commit realtime, and 100k-event scale.
+
+---
+
+## 1b. Legacy Reference: Per-Repo SQL Mapping
 
 All UI components and pages call async functions in `src/lib/repos/*` and never touch `localStorage` or `src/lib/seed` directly. To connect a production database (e.g., PostgreSQL with Prisma or Drizzle, or Supabase):
 

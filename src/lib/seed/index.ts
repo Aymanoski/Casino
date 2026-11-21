@@ -1,204 +1,310 @@
-import type {
-  AuditEntry,
-  BuzzEvent,
-  ContentItem,
-  DatabaseSnapshot,
-  Game,
-  Player,
-  Round,
-  ScoreEvent,
-  Segment,
-  Settings,
-  Sponsor,
-  User,
+import {
+  AVATAR_LIBRARY_KEYS,
+  MARWAN_PLAYER_ID,
+  type AbsenceEvent,
+  type AuditEntry,
+  type BuzzEvent,
+  type CheckInEvent,
+  type ContentItem,
+  type DatabaseSnapshot,
+  type Group,
+  type Match,
+  type MatchLifecycleEvent,
+  type Player,
+  type Round,
+  type ScoreEvent,
+  type Segment,
+  type Settings,
+  type Sponsor,
+  type TournamentSettings,
+  type User,
 } from '@/lib/schemas';
+import {
+  autoScheduleMatches,
+  generateGroupRoundRobinPairs,
+  generateGroups,
+  generateKnockout,
+  propagateWinners,
+} from '@/lib/engine';
 
-export const SEED_VERSION = 2;
+export const SEED_VERSION = 3;
 
-export function createDemoSeedState(): {
-  game: Game;
-  scoreEvents: ScoreEvent[];
-  buzzEvents: BuzzEvent[];
-} {
-  const demoSegments = ['seg-1', 'seg-3', 'seg-6', 'seg-10', 'seg-13', 'seg-15'];
-  const baseMs = new Date('2026-11-18T21:00:00.000Z').getTime();
+export type SeedPresetSize = 12 | 48 | 720;
 
-  const game: Game = {
-    id: 'game-demo',
-    roundId: 'round-demo',
-    tableName: 'Pitch Live Table — Exhibition Showcase',
-    tableNameAr: 'طاولة العرض المباشر — تجربة البث',
-    scheduledAt: '2026-11-18T21:00:00.000Z',
-    startedAt: '2026-11-18T21:01:00.000Z',
-    status: 'live',
-    scorerUserId: 'user-scorer-1',
-    playerIds: ['player-1', 'player-19', 'player-4'],
-    currentSegmentIndex: 2,
-    segmentIds: demoSegments,
-    isFinal: false,
-    isDemo: true,
-    activeBuzzPlayerId: 'player-19',
-    timer: {
-      status: 'paused',
-      durationSec: 45,
-      remainingSec: 32,
-      endsAt: null,
-    },
-  };
-
-  const scoreEvents: ScoreEvent[] = [
-    {
-      id: 'score-demo-7',
-      gameId: 'game-demo',
-      segmentId: 'seg-6',
-      playerId: 'player-19',
-      delta: 10,
-      note: 'Reversed Arabic proverb on first buzz',
-      kind: 'preset',
-      byUserId: 'user-scorer-1',
-      createdAt: new Date(baseMs + 7 * 60_000).toISOString(),
-    },
-    {
-      id: 'score-demo-6',
-      gameId: 'game-demo',
-      segmentId: 'seg-3',
-      playerId: 'player-4',
-      delta: 5,
-      note: 'Quick bonus lyric save',
-      kind: 'preset',
-      byUserId: 'user-scorer-1',
-      createdAt: new Date(baseMs + 6 * 60_000).toISOString(),
-    },
-    {
-      id: 'score-demo-5',
-      gameId: 'game-demo',
-      segmentId: 'seg-3',
-      playerId: 'player-1',
-      delta: 10,
-      note: 'Put the word in a Ramadan anthem',
-      kind: 'preset',
-      byUserId: 'user-scorer-1',
-      createdAt: new Date(baseMs + 5 * 60_000).toISOString(),
-    },
-    {
-      id: 'score-demo-4',
-      gameId: 'game-demo',
-      segmentId: 'seg-3',
-      playerId: 'player-19',
-      delta: 10,
-      note: 'First buzz lyric match',
-      kind: 'preset',
-      byUserId: 'user-scorer-1',
-      createdAt: new Date(baseMs + 4 * 60_000).toISOString(),
-    },
-    {
-      id: 'score-demo-3',
-      gameId: 'game-demo',
-      segmentId: 'seg-1',
-      playerId: 'player-4',
-      delta: 10,
-      note: 'Classic track answered fast',
-      kind: 'preset',
-      byUserId: 'user-scorer-1',
-      createdAt: new Date(baseMs + 3 * 60_000).toISOString(),
-    },
-    {
-      id: 'score-demo-2',
-      gameId: 'game-demo',
-      segmentId: 'seg-1',
-      playerId: 'player-1',
-      delta: 5,
-      note: 'Encore chorus line bonus',
-      kind: 'preset',
-      byUserId: 'user-scorer-1',
-      createdAt: new Date(baseMs + 2 * 60_000).toISOString(),
-    },
-    {
-      id: 'score-demo-1',
-      gameId: 'game-demo',
-      segmentId: 'seg-1',
-      playerId: 'player-1',
-      delta: 10,
-      note: 'Opening buzz winner',
-      kind: 'preset',
-      byUserId: 'user-scorer-1',
-      createdAt: new Date(baseMs + 60_000).toISOString(),
-    },
-  ];
-
-  const buzzEvents: BuzzEvent[] = [
-    {
-      id: 'buzz-demo-2',
-      gameId: 'game-demo',
-      segmentId: 'seg-6',
-      playerId: 'player-19',
-      byUserId: 'user-scorer-1',
-      cleared: false,
-      createdAt: new Date(baseMs + 7 * 60_000).toISOString(),
-    },
-    {
-      id: 'buzz-demo-1',
-      gameId: 'game-demo',
-      segmentId: 'seg-3',
-      playerId: 'player-1',
-      byUserId: 'user-scorer-1',
-      cleared: false,
-      createdAt: new Date(baseMs + 5 * 60_000).toISOString(),
-    },
-  ];
-
-  return { game, scoreEvents, buzzEvents };
+export interface CreateSeedOptions {
+  totalPlayers?: number;
+  groupSize?: number;
+  advancePerGroup?: number;
+  pointsPerGroupWin?: number;
+  tablesCount?: number;
+  slotMinutes?: number;
+  includeFinalWithMarwan?: boolean;
+  /** When false, creates a clean all-scheduled tournament with zero simulated matches */
+  includeDemoProgress?: boolean;
 }
 
-const RAW_PLAYERS: Array<{
-  id: string;
+// First 27 curated entries from AGENTS.md §9 (seed pool prefix)
+const INITIAL_27_PLAYERS: Array<{
   fullName: string;
   fullNameAr: string;
   nickname: string;
   nicknameAr: string;
-  seed: number;
+  email: string;
 }> = [
-  { id: 'player-1', fullName: 'Omar Hassan', fullNameAr: 'عمر حسن', nickname: 'The Fox', nicknameAr: 'الثعلب', seed: 1 },
-  { id: 'player-2', fullName: 'Youssef Adel', fullNameAr: 'يوسف عادل', nickname: 'Joe', nicknameAr: 'جو', seed: 2 },
-  { id: 'player-3', fullName: 'Mostafa Gamal', fullNameAr: 'مصطفى جمال', nickname: 'Tofa', nicknameAr: 'توفة', seed: 3 },
-  { id: 'player-4', fullName: 'Karim Nabil', fullNameAr: 'كريم نبيل', nickname: 'K-Nab', nicknameAr: 'كيمو', seed: 4 },
-  { id: 'player-5', fullName: 'Ahmed Samir', fullNameAr: 'أحمد سمير', nickname: 'Sammoora', nicknameAr: 'سمورة', seed: 5 },
-  { id: 'player-6', fullName: 'Mahmoud Fathy', fullNameAr: 'محمود فتحي', nickname: 'Abu Fathy', nicknameAr: 'أبو فتحي', seed: 6 },
-  { id: 'player-7', fullName: 'Ali Tarek', fullNameAr: 'علي طارق', nickname: 'Ali Baba', nicknameAr: 'علي بابا', seed: 7 },
-  { id: 'player-8', fullName: 'Hossam Ragab', fullNameAr: 'حسام رجب', nickname: 'Hoss', nicknameAr: 'حس', seed: 8 },
-  { id: 'player-9', fullName: 'Ibrahim Zaki', fullNameAr: 'إبراهيم زكي', nickname: 'Brahim', nicknameAr: 'إبراهيمو', seed: 9 },
-  { id: 'player-10', fullName: 'Khaled Mansour', fullNameAr: 'خالد منصور', nickname: 'Khaldoon', nicknameAr: 'خلدون', seed: 10 },
-  { id: 'player-11', fullName: 'Tamer Essam', fullNameAr: 'تامر عصام', nickname: 'Timo', nicknameAr: 'تيمو', seed: 11 },
-  { id: 'player-12', fullName: 'Sherif Magdy', fullNameAr: 'شريف مجدي', nickname: 'Sheriff', nicknameAr: 'الشريف', seed: 12 },
-  { id: 'player-13', fullName: 'Amr Wael', fullNameAr: 'عمرو وائل', nickname: 'Amoora', nicknameAr: 'عمورة', seed: 13 },
-  { id: 'player-14', fullName: 'Hany Salah', fullNameAr: 'هاني صلاح', nickname: 'Hanoon', nicknameAr: 'حنون', seed: 14 },
-  { id: 'player-15', fullName: 'Walid Anwar', fullNameAr: 'وليد أنور', nickname: 'Wally', nicknameAr: 'والي', seed: 15 },
-  { id: 'player-16', fullName: 'Mina Girgis', fullNameAr: 'مينا جرجس', nickname: 'Mino', nicknameAr: 'مينو', seed: 16 },
-  { id: 'player-17', fullName: 'Fady Samy', fullNameAr: 'فادي سامي', nickname: 'Fadi', nicknameAr: 'فادو', seed: 17 },
-  { id: 'player-18', fullName: 'Nour El-Din Hesham', fullNameAr: 'نور الدين هشام', nickname: 'Nouro', nicknameAr: 'نورو', seed: 18 },
-  { id: 'player-19', fullName: 'Salma Reda', fullNameAr: 'سلمى رضا', nickname: 'Salsabeel', nicknameAr: 'سلسبيل', seed: 19 },
-  { id: 'player-20', fullName: 'Mariam Hatem', fullNameAr: 'مريم حاتم', nickname: 'Mimi', nicknameAr: 'ميمي', seed: 20 },
-  { id: 'player-21', fullName: 'Dina Yasser', fullNameAr: 'دينا ياسر', nickname: 'Dodo', nicknameAr: 'دودو', seed: 21 },
-  { id: 'player-22', fullName: 'Farida Ashraf', fullNameAr: 'فريدة أشرف', nickname: 'Fofo', nicknameAr: 'فوفو', seed: 22 },
-  { id: 'player-23', fullName: 'Nada Ehab', fullNameAr: 'ندى إيهاب', nickname: 'Nody', nicknameAr: 'نودي', seed: 23 },
-  { id: 'player-24', fullName: 'Yasmin Mourad', fullNameAr: 'ياسمين مراد', nickname: 'Yaso', nicknameAr: 'ياسو', seed: 24 },
-  { id: 'player-25', fullName: 'Laila Kamel', fullNameAr: 'ليلى كامل', nickname: 'Lulu', nicknameAr: 'لولو', seed: 25 },
-  { id: 'player-26', fullName: 'Rana Sherif', fullNameAr: 'رنا شريف', nickname: 'Rouny', nicknameAr: 'روني', seed: 26 },
-  { id: 'player-27', fullName: 'Habiba Osama', fullNameAr: 'حبيبة أسامة', nickname: 'Bibo', nicknameAr: 'بيبو', seed: 27 },
+  { fullName: 'Omar Hassan', fullNameAr: 'عمر حسن', nickname: 'The Fox', nicknameAr: 'الثعلب', email: 'omar.hassan@players.casino' },
+  { fullName: 'Youssef Adel', fullNameAr: 'يوسف عادل', nickname: 'Joe', nicknameAr: 'جو', email: 'youssef.adel@players.casino' },
+  { fullName: 'Mostafa Gamal', fullNameAr: 'مصطفى جمال', nickname: 'Tofa', nicknameAr: 'توفة', email: 'mostafa.gamal@players.casino' },
+  { fullName: 'Karim Nabil', fullNameAr: 'كريم نبيل', nickname: 'K-Nab', nicknameAr: 'كيمو', email: 'karim.nabil@players.casino' },
+  { fullName: 'Ahmed Samir', fullNameAr: 'أحمد سمير', nickname: 'Sammoora', nicknameAr: 'سمورة', email: 'ahmed.samir@players.casino' },
+  { fullName: 'Mahmoud Fathy', fullNameAr: 'محمود فتحي', nickname: 'Abu Fathy', nicknameAr: 'أبو فتحي', email: 'mahmoud.fathy@players.casino' },
+  { fullName: 'Ali Tarek', fullNameAr: 'علي طارق', nickname: 'Ali Baba', nicknameAr: 'علي بابا', email: 'ali.tarek@players.casino' },
+  { fullName: 'Hossam Ragab', fullNameAr: 'حسام رجب', nickname: 'Hoss', nicknameAr: 'حس', email: 'hossam.ragab@players.casino' },
+  { fullName: 'Ibrahim Zaki', fullNameAr: 'إبراهيم زكي', nickname: 'Brahim', nicknameAr: 'إبراهيمو', email: 'ibrahim.zaki@players.casino' },
+  { fullName: 'Khaled Mansour', fullNameAr: 'خالد منصور', nickname: 'Khaldoon', nicknameAr: 'خلدون', email: 'khaled.mansour@players.casino' },
+  { fullName: 'Tamer Essam', fullNameAr: 'تامر عصام', nickname: 'Timo', nicknameAr: 'تيمو', email: 'tamer.essam@players.casino' },
+  { fullName: 'Sherif Magdy', fullNameAr: 'شريف مجدي', nickname: 'Sheriff', nicknameAr: 'الشريف', email: 'sherif.magdy@players.casino' },
+  { fullName: 'Amr Wael', fullNameAr: 'عمرو وائل', nickname: 'Amoora', nicknameAr: 'عمورة', email: 'amr.wael@players.casino' },
+  { fullName: 'Hany Salah', fullNameAr: 'هاني صلاح', nickname: 'Hanoon', nicknameAr: 'حنون', email: 'hany.salah@players.casino' },
+  { fullName: 'Walid Anwar', fullNameAr: 'وليد أنور', nickname: 'Wally', nicknameAr: 'والي', email: 'walid.anwar@players.casino' },
+  { fullName: 'Mina Girgis', fullNameAr: 'مينا جرجس', nickname: 'Mino', nicknameAr: 'مينو', email: 'mina.girgis@players.casino' },
+  { fullName: 'Fady Samy', fullNameAr: 'فادي سامي', nickname: 'Fadi', nicknameAr: 'فادو', email: 'fady.samy@players.casino' },
+  { fullName: 'Nour El-Din Hesham', fullNameAr: 'نور الدين هشام', nickname: 'Nouro', nicknameAr: 'نورو', email: 'nour.hesham@players.casino' },
+  { fullName: 'Salma Reda', fullNameAr: 'سلمى رضا', nickname: 'Salsabeel', nicknameAr: 'سلسبيل', email: 'salma.reda@players.casino' },
+  { fullName: 'Mariam Hatem', fullNameAr: 'مريم حاتم', nickname: 'Mimi', nicknameAr: 'ميمي', email: 'mariam.hatem@players.casino' },
+  { fullName: 'Dina Yasser', fullNameAr: 'دينا ياسر', nickname: 'Dodo', nicknameAr: 'دودو', email: 'dina.yasser@players.casino' },
+  { fullName: 'Farida Ashraf', fullNameAr: 'فريدة أشرف', nickname: 'Fofo', nicknameAr: 'فوفو', email: 'farida.ashraf@players.casino' },
+  { fullName: 'Nada Ehab', fullNameAr: 'ندى إيهاب', nickname: 'Nody', nicknameAr: 'نودي', email: 'nada.ehab@players.casino' },
+  { fullName: 'Yasmin Mourad', fullNameAr: 'ياسمين مراد', nickname: 'Yaso', nicknameAr: 'ياسو', email: 'yasmin.mourad@players.casino' },
+  { fullName: 'Laila Kamel', fullNameAr: 'ليلى كامل', nickname: 'Lulu', nicknameAr: 'لولو', email: 'laila.kamel@players.casino' },
+  { fullName: 'Rana Sherif', fullNameAr: 'رنا شريف', nickname: 'Rouny', nicknameAr: 'روني', email: 'rana.sherif@players.casino' },
+  { fullName: 'Habiba Osama', fullNameAr: 'حبيبة أسامة', nickname: 'Bibo', nicknameAr: 'بيبو', email: 'habiba.osama@players.casino' },
 ];
 
-export function createSeedSnapshot(): DatabaseSnapshot {
-  const segments: Segment[] = [
-    // Music and singing (1-5)
+const FIRST_NAMES_M: Array<[string, string, string, string]> = [
+  ['Ziad', 'زياد', 'Zizo', 'زيزو'],
+  ['Seif', 'سيف', 'Sefo', 'سيفو'],
+  ['Adam', 'آدم', 'Adom', 'أدوم'],
+  ['Ramy', 'رامي', 'Ramo', 'رامو'],
+  ['Bassem', 'باسم', 'Beso', 'بيسو'],
+  ['Hazem', 'حازم', 'Hazo', 'حازو'],
+  ['Adham', 'أدهم', 'Adhoom', 'أدهوم'],
+  ['Mohab', 'مهاب', 'Hoba', 'هوبا'],
+  ['Marwan', 'مروان', 'Maro', 'مارو'],
+  ['Yehia', 'يحيى', 'Yoyo', 'يويو'],
+  ['Shady', 'شادي', 'Shado', 'شادو'],
+  ['Ayman', 'أيمن', 'Eimo', 'إيمو'],
+  ['Medhat', 'مدحت', 'Mido', 'ميدو'],
+  ['Samer', 'سامر', 'Sam', 'سام'],
+  ['Eslam', 'إسلام', 'Sola', 'سولا'],
+  ['Moataz', 'معتز', 'Zizo-M', 'ميزو'],
+  ['Belal', 'بلال', 'Bilo', 'بيلو'],
+  ['Tarek', 'طارق', 'Tito', 'تيتو'],
+  ['Mohamed', 'محمد', 'Mo', 'مو'],
+  ['Hassan', 'حسن', 'Hasso', 'حسو'],
+  ['Nader', 'نادر', 'Nado', 'نادو'],
+  ['Wael', 'وائل', 'Welo', 'ويلو'],
+  ['Hatem', 'حاتم', 'Hato', 'حاتو'],
+  ['Essam', 'عصام', 'Esso', 'عصو'],
+];
+
+const FIRST_NAMES_F: Array<[string, string, string, string]> = [
+  ['Malak', 'ملك', 'Moka', 'موكا'],
+  ['Nourhan', 'نورهان', 'Noura', 'نورا'],
+  ['Hana', 'هنا', 'Hano', 'هانو'],
+  ['Jana', 'جنى', 'Jiji', 'جيجي'],
+  ['Rawan', 'روان', 'Roro', 'رورو'],
+  ['Menna', 'منة', 'Meno', 'مينو'],
+  ['Sara', 'سارة', 'Saso', 'ساسو'],
+  ['Yara', 'يارا', 'Yoyo-Y', 'ياري'],
+  ['Reem', 'ريم', 'Rima', 'ريما'],
+  ['Hager', 'هاجر', 'Gogo', 'جوجو'],
+  ['Nour', 'نور', 'Nony', 'نوني'],
+  ['Mai', 'مي', 'Maya', 'مايا'],
+  ['Aya', 'آية', 'Ayoush', 'أيوش'],
+  ['Esraa', 'إسراء', 'Soso', 'سوسو'],
+  ['Donia', 'دنيا', 'Dody', 'دودي'],
+  ['Logy', 'لوجي', 'Lolo', 'لولو'],
+  ['Talia', 'تاليا', 'Tota', 'توتا'],
+  ['Karma', 'كارما', 'Koko', 'كوكو'],
+  ['Zeina', 'زينة', 'Zizi', 'زيزي'],
+  ['Shahd', 'شهد', 'Shosho', 'شوشو'],
+];
+
+const LAST_NAMES: Array<[string, string]> = [
+  ['El-Sayed', 'السيد'],
+  ['Mansour', 'منصور'],
+  ['Ibrahim', 'إبراهيم'],
+  ['El-Masry', 'المصري'],
+  ['Gamal', 'جمال'],
+  ['Farouk', 'فاروق'],
+  ['Nassar', 'نصار'],
+  ['Khattab', 'خطاب'],
+  ['Shawky', 'شوقي'],
+  ['Suleiman', 'سليمان'],
+  ['Fawzy', 'فوزي'],
+  ['Barakat', 'بركات'],
+  ['Helmy', 'حلمي'],
+  ['Zayed', 'زايد'],
+  ['Rostom', 'رستم'],
+  ['Allam', 'علام'],
+  ['Sabry', 'صبري'],
+  ['El-Shazly', 'الشاذلي'],
+  ['Abdelrahman', 'عبد الرحمن'],
+  ['Badr', 'بدر'],
+  ['Galal', 'جلال'],
+  ['Diab', 'دياب'],
+  ['Lotfy', 'لطفي'],
+  ['Raafat', 'رأفت'],
+  ['Mekky', 'مكي'],
+  ['Saleh', 'صالح'],
+  ['Rashad', 'رشاد'],
+  ['El-Gendy', 'الجندي'],
+  ['Hamdy', 'حمدي'],
+  ['Metwally', 'متولي'],
+];
+
+export function formatFakePhone(index1Based: number): {
+  phone: string;
+  whatsapp: string;
+} {
+  const padded = String(index1Based).padStart(4, '0');
+  return {
+    phone: `010-0000-${padded}`,
+    whatsapp: `+20100000${padded}`,
+  };
+}
+
+export function deterministicAvatarKey(seedNum: number): string {
+  return AVATAR_LIBRARY_KEYS[(Math.abs(seedNum - 1)) % AVATAR_LIBRARY_KEYS.length];
+}
+
+/**
+ * Procedurally generates N realistic fictional tournament players (default 720)
+ * plus the special guest participant Marwan Serry (`player-marwan`).
+ */
+export function generateProceduralPlayers(count: number): Player[] {
+  const safeCount = Math.max(4, count);
+  const createdAt = '2027-02-20T12:00:00.000Z';
+  const emptyStats = () => ({
+    matchesPlayed: 0,
+    gamesPlayed: 0,
+    wins: 0,
+    losses: 0,
+    totalPoints: 0,
+    groupPoints: 0,
+    yellowCards: 0,
+    redCards: 0,
+    absences: 0,
+  });
+
+  const players: Player[] = [];
+
+  for (let i = 0; i < safeCount; i++) {
+    const seed = i + 1;
+    const id = `player-${seed}`;
+    const contactPhone = formatFakePhone(seed);
+    const avatarKey = deterministicAvatarKey(seed);
+
+    if (i < INITIAL_27_PLAYERS.length) {
+      const base = INITIAL_27_PLAYERS[i];
+      players.push({
+        id,
+        fullName: base.fullName,
+        fullNameAr: base.fullNameAr,
+        nickname: base.nickname,
+        nicknameAr: base.nicknameAr,
+        avatarSeed: `seed-${seed}-${base.nickname.toLowerCase().replace(/\s+/g, '')}`,
+        avatar: { photoUrl: null, avatarKey },
+        contact: {
+          phone: contactPhone.phone,
+          whatsapp: contactPhone.whatsapp,
+          email: base.email,
+        },
+        phone: contactPhone.phone,
+        email: base.email,
+        seed,
+        isGuest: false,
+        isHost: false,
+        status: 'registered',
+        stats: emptyStats(),
+        createdAt,
+      });
+    } else {
+      const idx = i - INITIAL_27_PLAYERS.length;
+      const isFemale = idx % 2 === 1;
+      const pool = isFemale ? FIRST_NAMES_F : FIRST_NAMES_M;
+      const firstTuple = pool[Math.floor(idx / 2) % pool.length];
+      const lastTuple = LAST_NAMES[(idx * 7 + Math.floor(idx / pool.length)) % LAST_NAMES.length];
+      const fullName = `${firstTuple[0]} ${lastTuple[0]}`;
+      const fullNameAr = `${firstTuple[1]} ${lastTuple[1]}`;
+      const suffix = Math.floor(idx / (pool.length * 2)) + 1;
+      const nickname = suffix > 1 ? `${firstTuple[2]} ${suffix}` : firstTuple[2];
+      const nicknameAr = suffix > 1 ? `${firstTuple[3]} ${suffix}` : firstTuple[3];
+      const email = `player${String(seed).padStart(3, '0')}@players.casino`;
+
+      players.push({
+        id,
+        fullName,
+        fullNameAr,
+        nickname,
+        nicknameAr,
+        avatarSeed: `seed-${seed}-${firstTuple[2].toLowerCase().replace(/\s+/g, '')}`,
+        avatar: { photoUrl: null, avatarKey },
+        contact: {
+          phone: contactPhone.phone,
+          whatsapp: contactPhone.whatsapp,
+          email,
+        },
+        phone: contactPhone.phone,
+        email,
+        seed,
+        isGuest: false,
+        isHost: false,
+        status: 'registered',
+        stats: emptyStats(),
+        createdAt,
+      });
+    }
+  }
+
+  // Special guest participant: Marwan Serry (name only, no photo, excluded from rankings/standings/stats)
+  players.push({
+    id: MARWAN_PLAYER_ID,
+    fullName: 'Marwan Serry',
+    fullNameAr: 'مروان سري',
+    nickname: 'The Host',
+    nicknameAr: 'المقدّم والنجم',
+    avatarSeed: 'marwan-serry-golden-seat',
+    avatar: { photoUrl: null, avatarKey: 'avatar-01' },
+    contact: {
+      phone: '010-0000-0000',
+      whatsapp: '+201000000000',
+      email: 'final-host@casinoelal3ab.com',
+    },
+    phone: '010-0000-0000',
+    email: 'final-host@casinoelal3ab.com',
+    seed: 0,
+    isGuest: true,
+    isHost: true,
+    status: 'finalist',
+    stats: emptyStats(),
+    createdAt,
+  });
+
+  return players;
+}
+
+export function createSegmentsSeed(): Segment[] {
+  return [
     {
       id: 'seg-1',
       nameEn: 'A Song by the Artist',
       nameAr: 'أغنية للفنان / للفنانة',
       category: 'music',
-      descriptionEn: 'The host names a singer; the first player to buzz and sing a valid line from their catalog takes the points.',
-      descriptionAr: 'يذكر المقدم اسم مطرب أو مطربة، وأول لاعب يضغط الجرس ويغني مقطعاً صحيحاً يحصد النقاط.',
+      descriptionEn: 'The host names a singer; the first player to buzz and sing a valid line from their catalog takes the point.',
+      descriptionAr: 'يذكر المقدم اسم مطرب أو مطربة، وأول لاعب يضغط الجرس ويغني مقطعاً صحيحاً يحصد النقطة.',
       durationSec: 45,
-      presetPoints: [10, 5, -5],
+      presetPoints: [1, -1],
       order: 1,
     },
     {
@@ -209,7 +315,7 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       descriptionEn: 'Identify or perform a hit track recorded by an iconic Arab or international musical group before time runs out.',
       descriptionAr: 'تعرّف على أغنية شهيرة لفرقة موسيقية عربية أو عالمية أو غنِّ مقطعاً منها قبل انتهاء الوقت.',
       durationSec: 45,
-      presetPoints: [10, 5, -5],
+      presetPoints: [1, -1],
       order: 2,
     },
     {
@@ -220,7 +326,7 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       descriptionEn: 'A random everyday word appears on screen—buzz in and sing real lyrics containing that exact word.',
       descriptionAr: 'تظهر كلمة عشوائية على الشاشة، وعليك الضغط سريعاً وغناء كوبليه حقيقي يحتوي على هذه الكلمة بالضبط.',
       durationSec: 30,
-      presetPoints: [10, 5, -5],
+      presetPoints: [1, -1],
       order: 3,
     },
     {
@@ -231,7 +337,7 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       descriptionEn: 'Listen to a short audio hook or backwards lyric clue and decode the original track title first.',
       descriptionAr: 'استمع إلى جملة موسيقية أو كلمات مقلوبة واكشف اسم الأغنية الأصلية قبل منافسيك.',
       durationSec: 60,
-      presetPoints: [10, 5, -5],
+      presetPoints: [1, -1],
       order: 4,
     },
     {
@@ -239,14 +345,12 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       nameEn: 'Guess the Singer / Track',
       nameAr: 'تخمين المغني أو الأغنية',
       category: 'music',
-      descriptionEn: 'Rapid-fire musical clues where players earn full points for naming both the vocalist and the song.',
-      descriptionAr: 'تلميحات موسيقية سريعة يحصل فيها اللاعب على النقاط الكاملة عند تسمية المطرب والأغنية معاً.',
+      descriptionEn: 'Rapid-fire musical clues where players score for naming both the vocalist and the song.',
+      descriptionAr: 'تلميحات موسيقية سريعة يحصل فيها اللاعب على النقطة عند تسمية المطرب والأغنية معاً.',
       durationSec: 45,
-      presetPoints: [10, 5, -5],
+      presetPoints: [1, -1],
       order: 5,
     },
-
-    // Wordplay and speed (6-9)
     {
       id: 'seg-6',
       nameEn: 'Reversed Words',
@@ -255,7 +359,7 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       descriptionEn: 'Flip the letters of spoken words in your head and pronounce the reversed word cleanly under pressure.',
       descriptionAr: 'اقلب حروف الكلمات المنطوقة في ذهنك وانطق الكلمة معكوسة بدقة وتحت ضغط الوقت.',
       durationSec: 45,
-      presetPoints: [10, 5, -5],
+      presetPoints: [1, -1],
       order: 6,
     },
     {
@@ -266,7 +370,7 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       descriptionEn: 'Chain associations and witty verbal pivots without hesitating, repeating a word, or breaking rhythm.',
       descriptionAr: 'سلسلة من الروابط اللفظية السريعة دون تردد أو تكرار أو كسر الإيقاع.',
       durationSec: 60,
-      presetPoints: [10, 5, -5],
+      presetPoints: [1, -1],
       order: 7,
     },
     {
@@ -277,7 +381,7 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       descriptionEn: 'Decode clever riddles and indirect descriptions as clues narrow from vague to unmistakable.',
       descriptionAr: 'فكّ شفرة الأوصاف الذكية والتلميحات المتدرجة من الغموض إلى الوضوح بأسرع وقت.',
       durationSec: 60,
-      presetPoints: [10, 5, -5],
+      presetPoints: [1, -1],
       order: 8,
     },
     {
@@ -288,11 +392,9 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       descriptionEn: 'Beat the countdown by naming as many valid items in the target category as you can before buzzing out.',
       descriptionAr: 'سابق العد التنازلي بتعداد أكبر قدر ممكن من الإجابات الصحيحة داخل الفئة المطلوبة.',
       durationSec: 45,
-      presetPoints: [10, 5, -5],
+      presetPoints: [1, -1],
       order: 9,
     },
-
-    // Pop culture, cinema and characters (10-13)
     {
       id: 'seg-10',
       nameEn: 'Egyptian Cinema and Series Trivia',
@@ -301,7 +403,7 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       descriptionEn: 'Iconic scenes, Ramadan drama classics, and unforgettable characters from Egyptian screen history.',
       descriptionAr: 'مشاهد خالدة، مسلسلات رمضانية شهيرة، وشخصيات لا تُنسى من تاريخ السينما والدراما المصرية.',
       durationSec: 60,
-      presetPoints: [10, 5, -5],
+      presetPoints: [1, -1],
       order: 10,
     },
     {
@@ -312,7 +414,7 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       descriptionEn: 'World box-office hits, legendary directors, plot twists, and Oscar-winning performances.',
       descriptionAr: 'أشهر الأفلام العالمية، المخرجون الكبار، الحبكات الدرامية، والأعمال الحائزة على الجوائز.',
       durationSec: 60,
-      presetPoints: [10, 5, -5],
+      presetPoints: [1, -1],
       order: 11,
     },
     {
@@ -323,7 +425,7 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       descriptionEn: 'Connect historical icons, celebrities, or fictional characters to their signature cities and landmarks.',
       descriptionAr: 'اربط بين الشخصيات الشهيرة أو الخيالية والمدن أو الأماكن المرتبطة بها.',
       durationSec: 60,
-      presetPoints: [10, 5, -5],
+      presetPoints: [1, -1],
       order: 12,
     },
     {
@@ -334,11 +436,9 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       descriptionEn: 'Famous one-liners from comedies, plays, and football commentary—name the speaker and work.',
       descriptionAr: 'إفيهات ومقولات شهيرة من المسرحيات والأفلام والتعليق الرياضي—اذكر صاحب المقولة والعمل.',
       durationSec: 45,
-      presetPoints: [10, 5, -5],
+      presetPoints: [1, -1],
       order: 13,
     },
-
-    // General and special (14-16)
     {
       id: 'seg-14',
       nameEn: 'General Knowledge',
@@ -347,7 +447,7 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       descriptionEn: 'High-stakes trivia spanning geography, history, science, sports, and Ramadan traditions.',
       descriptionAr: 'معلومات عامة سريعة تشمل الجغرافيا والتاريخ والعلوم والرياضة والتقاليد الرمضانية.',
       durationSec: 60,
-      presetPoints: [10, 5, -5],
+      presetPoints: [1, -1],
       order: 14,
     },
     {
@@ -355,10 +455,10 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       nameEn: 'Audience and Fan Questions',
       nameAr: 'فقرة الجمهور / السوشيال ميديا',
       category: 'special',
-      descriptionEn: 'Wildcard questions submitted by live studio guests and social media followers with bonus stakes.',
-      descriptionAr: 'أسئلة مفاجئة من جمهور الاستوديو ومتابعي السوشيال ميديا بنقاط مضاعفة.',
+      descriptionEn: 'Wildcard questions submitted by live studio guests and social media followers.',
+      descriptionAr: 'أسئلة مفاجئة من جمهور الاستوديو ومتابعي السوشيال ميديا.',
       durationSec: 60,
-      presetPoints: [15, 10, -5],
+      presetPoints: [1, -1],
       order: 15,
     },
     {
@@ -366,20 +466,181 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       nameEn: 'Tie-Breaker and Penalty Challenge',
       nameAr: 'جولة التحدي / الحسم',
       category: 'special',
-      descriptionEn: 'Sudden-death showdown activated when qualifying seats are tied—one decisive buzz settles the table.',
-      descriptionAr: 'جولة الحسم الفاصلة عند التعادل على بطاقات التأهل—ضغطة جرس واحدة تحسم الفائز.',
+      descriptionEn: 'Sudden-death showdown activated whenever a match ends tied—one decisive point settles the winner.',
+      descriptionAr: 'جولة الحسم الفاصلة عند انتهاء المباراة بالتعادل—نقطة حاسمة واحدة تحدد الفائز.',
       durationSec: 30,
-      presetPoints: [15, 5, -5],
+      presetPoints: [1, -1],
       order: 16,
     },
   ];
+}
 
-  const users: User[] = [
+export function createDemoSeedState(
+  demoPlayerIds: [string, string] = ['player-1', 'player-2']
+): {
+  game: Match;
+  match: Match;
+  scoreEvents: ScoreEvent[];
+  buzzEvents: BuzzEvent[];
+  matchEvents: MatchLifecycleEvent[];
+} {
+  const [dp1, dp2] = demoPlayerIds;
+  const demoSegments = ['seg-1', 'seg-3', 'seg-6', 'seg-10', 'seg-13', 'seg-15'];
+  const baseMs = Date.parse('2027-03-05T21:00:00.000Z');
+  const matchId = 'game-demo';
+
+  const match: Match = {
+    id: matchId,
+    type: 'group',
+    roundId: 'round-demo',
+    round: 1,
+    slot: 1,
+    isGroupTieBreak: false,
+    participants: [
+      { slotIndex: 0, playerId: dp1, guest: false, isBye: false, feeder: { kind: 'fixed', playerId: dp1 } },
+      { slotIndex: 1, playerId: dp2, guest: false, isBye: false, feeder: { kind: 'fixed', playerId: dp2 } },
+    ],
+    playerIds: [dp1, dp2],
+    tableNumber: 1,
+    tableName: 'Pitch Live Table — Exhibition 1v1 Showcase',
+    tableNameAr: 'طاولة العرض المباشر — تجربة البث (١ ضد ١)',
+    scheduledAt: '2027-03-05T21:00:00.000Z',
+    startedAt: '2027-03-05T21:01:00.000Z',
+    status: 'live',
+    result: null,
+    judgeUserId: 'user-scorer-1',
+    scorerUserId: 'user-scorer-1',
+    currentSegmentIndex: 2,
+    segmentIds: demoSegments,
+    isFinal: false,
+    isDemo: true,
+    activeBuzzPlayerId: dp2,
+    replayEpoch: 0,
+    version: 1,
+    timer: {
+      status: 'paused',
+      durationSec: 45,
+      remainingSec: 32,
+      endsAt: null,
+    },
+  };
+
+  const matchEvents: MatchLifecycleEvent[] = [
+    {
+      id: 'me-demo-start',
+      matchId,
+      type: 'started',
+      byUserId: 'user-scorer-1',
+      replayEpoch: 0,
+      createdAt: new Date(baseMs + 60_000).toISOString(),
+    },
+  ];
+
+  const scoreEvents: ScoreEvent[] = [
+    {
+      id: 'score-demo-5',
+      matchId,
+      gameId: matchId,
+      segmentId: 'seg-6',
+      playerId: dp2,
+      delta: 1,
+      note: 'Reversed Arabic proverb on first buzz',
+      kind: 'point',
+      byUserId: 'user-scorer-1',
+      replayEpoch: 0,
+      createdAt: new Date(baseMs + 5 * 60_000).toISOString(),
+    },
+    {
+      id: 'score-demo-4',
+      matchId,
+      gameId: matchId,
+      segmentId: 'seg-3',
+      playerId: dp1,
+      delta: -1,
+      note: 'Yellow card (−1): Early buzz before prompt',
+      kind: 'yellow',
+      byUserId: 'user-scorer-1',
+      replayEpoch: 0,
+      createdAt: new Date(baseMs + 4 * 60_000).toISOString(),
+    },
+    {
+      id: 'score-demo-3',
+      matchId,
+      gameId: matchId,
+      segmentId: 'seg-3',
+      playerId: dp1,
+      delta: 1,
+      note: 'Put the word in a Ramadan anthem',
+      kind: 'point',
+      byUserId: 'user-scorer-1',
+      replayEpoch: 0,
+      createdAt: new Date(baseMs + 3 * 60_000).toISOString(),
+    },
+    {
+      id: 'score-demo-2',
+      matchId,
+      gameId: matchId,
+      segmentId: 'seg-1',
+      playerId: dp2,
+      delta: 1,
+      note: 'Classic track answered fast',
+      kind: 'point',
+      byUserId: 'user-scorer-1',
+      replayEpoch: 0,
+      createdAt: new Date(baseMs + 2 * 60_000).toISOString(),
+    },
+    {
+      id: 'score-demo-1',
+      matchId,
+      gameId: matchId,
+      segmentId: 'seg-1',
+      playerId: dp1,
+      delta: 1,
+      note: 'Opening buzz winner',
+      kind: 'point',
+      byUserId: 'user-scorer-1',
+      replayEpoch: 0,
+      createdAt: new Date(baseMs + 90_000).toISOString(),
+    },
+  ];
+
+  const buzzEvents: BuzzEvent[] = [
+    {
+      id: 'buzz-demo-2',
+      matchId,
+      gameId: matchId,
+      segmentId: 'seg-6',
+      playerId: dp2,
+      byUserId: 'user-scorer-1',
+      cleared: false,
+      replayEpoch: 0,
+      createdAt: new Date(baseMs + 5 * 60_000).toISOString(),
+    },
+    {
+      id: 'buzz-demo-1',
+      matchId,
+      gameId: matchId,
+      segmentId: 'seg-3',
+      playerId: dp1,
+      byUserId: 'user-scorer-1',
+      cleared: false,
+      replayEpoch: 0,
+      createdAt: new Date(baseMs + 3 * 60_000).toISOString(),
+    },
+  ];
+
+  return { game: match, match, scoreEvents, buzzEvents, matchEvents };
+}
+
+export function createDefaultUsers(): User[] {
+  return [
     {
       id: 'user-admin',
       name: 'Admin',
       nameAr: 'مدير البطولة',
       email: 'admin@casinoelal3ab.com',
+      phone: '010-9000-0000',
+      whatsapp: '+201090000000',
       role: 'superAdmin',
       language: 'en',
       titleEn: 'Tournament Director (Super Admin)',
@@ -390,46 +651,56 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       name: 'Scorer 1',
       nameAr: 'حكم طاولة ١',
       email: 'scorer1@casinoelal3ab.com',
+      phone: '010-9000-0001',
+      whatsapp: '+201090000001',
       role: 'scorer',
       language: 'en',
-      titleEn: 'Lead Table Scorer (Table 1 & Live R2)',
-      titleAr: 'حكم النقاط الرئيسي (طاولة ١ والمباشر)',
+      titleEn: 'Lead Stage Judge (Tables 1–3)',
+      titleAr: 'حكم المسرح الرئيسي (طاولات ١–٣)',
     },
     {
       id: 'user-scorer-2',
       name: 'Scorer 2',
       nameAr: 'حكم طاولة ٢',
       email: 'scorer2@casinoelal3ab.com',
+      phone: '010-9000-0002',
+      whatsapp: '+201090000002',
       role: 'scorer',
       language: 'en',
-      titleEn: 'Stage Scorer (Table 2)',
-      titleAr: 'حكم نقاط (طاولة ٢)',
+      titleEn: 'Stage Judge (Tables 4–6)',
+      titleAr: 'حكم طاولة (طاولات ٤–٦)',
     },
     {
       id: 'user-scorer-3',
       name: 'Scorer 3',
       nameAr: 'حكم طاولة ٣',
       email: 'scorer3@casinoelal3ab.com',
+      phone: '010-9000-0003',
+      whatsapp: '+201090000003',
       role: 'scorer',
       language: 'en',
-      titleEn: 'Stage Scorer (Table 3)',
-      titleAr: 'حكم نقاط (طاولة ٣)',
+      titleEn: 'Stage Judge (Tables 7–9)',
+      titleAr: 'حكم طاولة (طاولات ٧–٩)',
     },
     {
       id: 'user-scorer-4',
       name: 'Scorer 4',
       nameAr: 'حكم طاولة ٤',
       email: 'scorer4@casinoelal3ab.com',
+      phone: '010-9000-0004',
+      whatsapp: '+201090000004',
       role: 'scorer',
       language: 'en',
-      titleEn: 'Final & Reserve Scorer',
-      titleAr: 'حكم النهائي والاحتياط',
+      titleEn: 'Final & Reserve Judge (Tables 10–12)',
+      titleAr: 'حكم النهائي والاحتياط (طاولات ١٠–١٢)',
     },
     {
       id: 'user-checkin',
       name: 'Gate Staff',
       nameAr: 'مسؤول استقبال اللاعبين',
       email: 'checkin@casinoelal3ab.com',
+      phone: '010-9000-0010',
+      whatsapp: '+201090000010',
       role: 'checkIn',
       language: 'en',
       titleEn: 'VIP & Player Check-In Desk',
@@ -440,6 +711,8 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       name: 'Content Editor',
       nameAr: 'محرر المحتوى والفقرات',
       email: 'content@casinoelal3ab.com',
+      phone: '010-9000-0011',
+      whatsapp: '+201090000011',
       role: 'content',
       language: 'en',
       titleEn: 'Show Producer & Content Manager',
@@ -453,8 +726,8 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       role: 'player',
       playerId: 'player-1',
       language: 'en',
-      titleEn: 'Semi-Finalist Contestant',
-      titleAr: 'متسابق متأهل لنصف النهائي',
+      titleEn: 'Group 1 Contestant',
+      titleAr: 'متسابق المجموعة ١',
     },
     {
       id: 'user-player-4',
@@ -464,8 +737,8 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       role: 'player',
       playerId: 'player-4',
       language: 'en',
-      titleEn: 'Live Round 2 Contestant',
-      titleAr: 'متسابق في المباراة المباشرة',
+      titleEn: 'Group Stage Contestant',
+      titleAr: 'متسابق دور المجموعات',
     },
     {
       id: 'user-player-19',
@@ -475,45 +748,216 @@ export function createSeedSnapshot(): DatabaseSnapshot {
       role: 'player',
       playerId: 'player-19',
       language: 'en',
-      titleEn: 'Round 2 Contestant',
-      titleAr: 'متسابقة في الدور الثاني',
+      titleEn: 'Group Stage Contestant',
+      titleAr: 'متسابقة دور المجموعات',
     },
   ];
+}
 
-  const rounds: Round[] = [
+export function createSponsorsSeed(): Sponsor[] {
+  return [
     {
-      id: 'round-1',
-      name: { en: 'Round 1 — Opening Tables', ar: 'الدور الأول — طاولات التصفيات' },
+      id: 'sponsor-1',
+      name: 'Title Partner Slot (Placeholder)',
+      nameAr: 'الراعي الرسمي الرئيسي (مساحة مبدئية)',
+      tier: 'presenting',
+      tierLabelEn: 'Presenting Title Partner',
+      tierLabelAr: 'شريك اللقب الرئيسي',
+      logoText: 'YOUR BRAND HERE',
+      blurb: 'Headline naming rights across the entire Ramadan tournament, studio broadcast frame, and all 720-player digital brackets.',
+      blurbAr: 'حقوق التسمية الرئيسية للبطولة بالكامل وإطار شاشة البث المباشر وجميع جداول التصفيات.',
+      benefitsEn: [
+        'Primary branding on the Main Stage & Big Screen frame',
+        'Co-branded segments during the Grand Final with Marwan Serry',
+        'Dedicated showcase card on all public spectator routes',
+        'Contact us for tailored Ramadan sponsorship packages',
+      ],
+      benefitsAr: [
+        'الظهور الرئيسي على المسرح وشاشة البث الكبرى',
+        'رعاية مشتركة لفقرات النهائي الكبير مع مروان سري',
+        'بطاقة عرض مميزة في جميع صفحات الجمهور المباشرة',
+        'تواصل معنا لتخصيص باقة الرعاية الرمضانية',
+      ],
       order: 1,
-      advancePerGame: 1,
-      status: 'live',
     },
     {
-      id: 'round-2',
-      name: { en: 'Round 2 — Quarter-Final Tables', ar: 'الدور الثاني — ربع النهائي' },
+      id: 'sponsor-2',
+      name: 'Final Night Showcase Partner (Placeholder)',
+      nameAr: 'شريك ليلة النهائي الكبير (مساحة مبدئية)',
+      tier: 'finalNight',
+      tierLabelEn: 'Final Night Partner',
+      tierLabelAr: 'شريك ليلة النهائي',
+      logoText: 'FINAL NIGHT PARTNER',
+      blurb: 'Exclusive ownership of the Grand Final showdown featuring the top 2 finalists against Marwan Serry.',
+      blurbAr: 'رعاية حصرية لمواجهة النهائي الكبير التي تجمع المتأهلين الاثنين أمام مروان سري.',
+      benefitsEn: [
+        'Exclusive branding on the Grand Final broadcast & countdown',
+        'On-stage trophy & prize handover moment',
+        'Contact us for availability and deliverables',
+      ],
+      benefitsAr: [
+        'ظهور حصري على بث النهائي الكبير والعد التنازلي',
+        'لحظة تسليم الكأس والجائزة على المسرح الرئيسي',
+        'تواصل معنا للتفاصيل والمزايا المتاحة',
+      ],
       order: 2,
-      advancePerGame: 1,
-      status: 'live',
     },
     {
-      id: 'round-semi',
-      name: { en: 'Semi-Final — The Golden Qualifier', ar: 'نصف النهائي — تصفية المقعدين' },
+      id: 'sponsor-3',
+      name: 'Challenge Segment Partner (Placeholder)',
+      nameAr: 'شريك فقرات التحدي (مساحة مبدئية)',
+      tier: 'segment',
+      tierLabelEn: 'Segment Partner',
+      tierLabelAr: 'راعي الفقرات',
+      logoText: 'SEGMENT SPONSOR',
+      blurb: 'Own signature rapid-fire music, cinema, or sudden-death tie-breaker segments across every match.',
+      blurbAr: 'تملّك فقرات الغناء والسينما أو جولة الحسم الفاصلة طوال ليالي البطولة.',
+      benefitsEn: [
+        'Sponsor callout on live segment title cards on venue screens',
+        'Featured presence across spectator schedule & live feeds',
+        'Contact us to claim your favorite segment category',
+      ],
+      benefitsAr: [
+        'ذكر اسم الراعي على شاشات عرض عناوين الفقرات المباشرة',
+        'تواجد مميز في جدول المباريات وسجل النتائج',
+        'تواصل معنا لحجز فئة الفقرات المفضلة لعلامتك',
+      ],
       order: 3,
-      advancePerGame: 2,
-      status: 'upcoming',
     },
     {
-      id: 'round-final',
-      name: { en: 'The Grand Final — vs. Marwan Serry', ar: 'النهائي الكبير — في مواجهة مروان سري' },
+      id: 'sponsor-4',
+      name: 'Hospitality & Community Partner (Placeholder)',
+      nameAr: 'شريك الضيافة والمجتمع (مساحة مبدئية)',
+      tier: 'community',
+      tierLabelEn: 'Community Partner',
+      tierLabelAr: 'شريك المجتمع',
+      logoText: 'COMMUNITY PARTNER',
+      blurb: 'Power the Ramadan Suhoor lounge, contestant check-in experience, and fan community activations.',
+      blurbAr: 'رعاية سحور اللاعبين وتجربة استقبال الجمهور وتفعيلات السوشيال ميديا.',
+      benefitsEn: [
+        'Venue lounge activation and contestant welcome kit',
+        'Digital recognition across the tournament platform',
+        'Contact us for partnership options',
+      ],
+      benefitsAr: [
+        'تفعيل ميداني في صالة الضيافة وحقائب استقبال اللاعبين',
+        'إبراز رقمي على منصة البطولة طوال الشهر',
+        'تواصل معنا لمعرفة خيارات الشراكة',
+      ],
       order: 4,
-      advancePerGame: 1,
-      status: 'upcoming',
     },
   ];
+}
 
-  const stdSegments = ['seg-1', 'seg-3', 'seg-6', 'seg-10', 'seg-13', 'seg-14'];
-  const r2Segments = ['seg-2', 'seg-4', 'seg-7', 'seg-10', 'seg-12', 'seg-15'];
-  const finalSegments = [
+export function createContentItemsSeed(): ContentItem[] {
+  const nowIso = '2027-02-28T18:00:00.000Z';
+  return [
+    {
+      id: 'content-1',
+      key: 'announcement-live',
+      category: 'announcement',
+      titleEn: 'Group Stage Live Across 12 Tables!',
+      titleAr: 'دور المجموعات مباشر الآن عبر ١٢ طاولة!',
+      bodyEn: '720 players drawn into 240 groups of 3 are battling in 1v1 round-robin matches. Top winner from each group advances to the 256-slot knockout bracket!',
+      bodyAr: '٧٢٠ لاعباً موزعين على ٢٤٠ مجموعة من ٣ لاعبين يتنافسون بنظام الدوري (١ ضد ١). يتأهل متصدر كل مجموعة إلى التصفيات الإقصائية!',
+      badgeEn: 'LIVE UPDATE',
+      badgeAr: 'تحديث مباشر',
+      order: 1,
+      updatedAt: nowIso,
+    },
+    {
+      id: 'content-2',
+      key: 'rule-format',
+      category: 'rule',
+      titleEn: 'Groups → Single-Elimination Knockouts → 1v1v1 Grand Final',
+      titleAr: 'المجموعات ← الإقصائيات (١ ضد ١) ← النهائي الكبير (٣ لاعبين)',
+      bodyEn: 'Contestants are drawn into groups of 3 and play 1v1 round-robin matches (3 group points per win, zero draws). Group winners enter the 1v1 single-elimination knockout bracket seeded by group number (with best-winner BYEs where needed), culminating in the 2 surviving finalists facing Marwan Serry in a 3-player Grand Final.',
+      bodyAr: 'يُقسّم المتسابقون إلى مجموعات من ٣ لاعبين ويلعبون مباريات فردية (١ ضد ١) بنظام الدوري (٣ نقاط للفوز ولا يوجد تعادل). يتأهل المتصدرون إلى الإقصائيات الفردية وصولاً إلى النهائي الكبير بين المتأهلَين الاثنين ومروان سري.',
+      badgeEn: 'FORMAT',
+      badgeAr: 'نظام البطولة',
+      order: 2,
+      updatedAt: nowIso,
+    },
+    {
+      id: 'content-3',
+      key: 'rule-scoring',
+      category: 'rule',
+      titleEn: 'Scoring, Yellow & Red Cards, and No Draws',
+      titleAr: 'احتساب النقاط، البطاقات الصفراء والحمراء، ومنع التعادل',
+      bodyEn: 'Judges award +1 or −1 points per play, plus Yellow cards (−1) and Red cards (−2) tracked in every match and tournament record. If a match ends level, a sudden-death Tie-Breaker segment immediately decides the winner. Marking a player absent in a 1v1 results in an immediate walkover victory.',
+      bodyAr: 'يمنح الحكام +١ أو −١ نقطة، بالإضافة إلى البطاقة الصفراء (−١) والبطاقة الحمراء (−٢) المحسوبة في سجل المباراة والبطولة. في حال التعادل تُفتح جولة حسم فاصلة فوراً. وفي حال غياب لاعب في مباراة ١ ضد ١ يُحتسب فوز انسحابي فوري للمنافس.',
+      badgeEn: 'SCORING',
+      badgeAr: 'النقاط والبطاقات',
+      order: 3,
+      updatedAt: nowIso,
+    },
+    {
+      id: 'content-4',
+      key: 'rule-surprise',
+      category: 'rule',
+      titleEn: 'Surprise Segments & Fair Play',
+      titleAr: 'مفاجأة الفقرات واللعب النظيف',
+      bodyEn: 'Specific match segments remain hidden from players until they go live on stage so every contestant competes on pure wit, music memory, and speed. Zero gambling or real-money wagering — strictly a Ramadan skill & trivia celebration.',
+      bodyAr: 'تبقى فقرات كل مباراة مفاجأة غير ظاهرة للمتسابقين حتى انطلاقها مباشرة على المسرح لضمان تكافؤ الفرص. مسابقة معلومات وترفيه رمضانية بالكامل بدون أي مراهنات.',
+      badgeEn: 'FAIR PLAY',
+      badgeAr: 'اللعب النظيف',
+      order: 4,
+      updatedAt: nowIso,
+    },
+    {
+      id: 'content-5',
+      key: 'schedule-blurb',
+      category: 'scheduleBlurb',
+      titleEn: 'Ramadan 2027 Nights Schedule (Editable Placeholder)',
+      titleAr: 'جدول ليالي رمضان ٢٠٢٧ (مواعيد مبدئية قابلة للتعديل)',
+      bodyEn: 'Matches run nightly across 12 live studio tables in 30-minute conflict-free slots. Exact dates, venue, and Grand Final broadcast time are editable placeholders in Admin Settings.',
+      bodyAr: 'تُقام المباريات يومياً عبر ١٢ طاولة مباشرة بفترات ٣٠ دقيقة دون أي تعارض في المواعيد. التواريخ والمكان وموعد النهائي مبدئية وقابلة للتعديل من إعدادات البطولة.',
+      badgeEn: 'SCHEDULE',
+      badgeAr: 'الجدول',
+      order: 5,
+      updatedAt: nowIso,
+    },
+  ];
+}
+
+export function buildBracketConfigCompat(t: TournamentSettings) {
+  const groupsCount = Math.max(1, Math.floor(t.totalPlayers / Math.max(2, t.groupSize)));
+  const qualifiers = groupsCount * t.advancePerGroup;
+  return {
+    totalPlayers: t.totalPlayers,
+    playersPerGame: 2,
+    round1Games: groupsCount * ((t.groupSize * (t.groupSize - 1)) / 2),
+    round2Games: Math.max(1, Math.ceil(qualifiers / 2)),
+    semiGames: 2,
+    semiAdvanceCount: 1,
+  };
+}
+
+/**
+ * Generates a full, event-sourced, invariant-clean DatabaseSnapshot.
+ * Default preset: 720 players (240 groups of 3, 720 group matches, 256-slot KO + Marwan Final).
+ * Also supports 12 and 48 presets (and any custom settings).
+ */
+export function createSeedSnapshot(options: CreateSeedOptions = {}): DatabaseSnapshot {
+  const tournament: TournamentSettings = {
+    totalPlayers: options.totalPlayers ?? 720,
+    groupSize: options.groupSize ?? 3,
+    advancePerGroup: options.advancePerGroup ?? 1,
+    pointsPerGroupWin: options.pointsPerGroupWin ?? 3,
+    tablesCount: options.tablesCount ?? 12,
+    slotMinutes: options.slotMinutes ?? 30,
+    includeFinalWithMarwan: options.includeFinalWithMarwan ?? true,
+  };
+  const includeDemoProgress = options.includeDemoProgress ?? true;
+
+  const segments = createSegmentsSeed();
+  const users = createDefaultUsers();
+  const players = generateProceduralPlayers(tournament.totalPlayers);
+  const sponsors = createSponsorsSeed();
+  const contentItems = createContentItemsSeed();
+
+  const stdSegIds = ['seg-1', 'seg-3', 'seg-6', 'seg-10', 'seg-13', 'seg-14'];
+  const finalSegIds = [
     'seg-1',
     'seg-3',
     'seg-4',
@@ -524,813 +968,405 @@ export function createSeedSnapshot(): DatabaseSnapshot {
     'seg-15',
   ];
 
-  // Games:
-  // Pod A: G1 (p1,p2,p3 -> p1 wins), G2 (p7,p8,p9 -> p7 wins), G3 (p13,p14,p15 -> p13 wins) => R2 G10 (p1,p7,p13 -> p1 wins!)
-  // Pod B: G4 (p4,p5,p6 -> p4 wins), G5 (p10,p11,p12 -> p10 wins), G6 (p16,p17,p18 -> p18 wins) => R2 G11 (p4,p10,p18 -> LIVE!)
-  // Pod C: G7 (p19,p20,p21 -> p19 wins), G8 (p22,p23,p24 -> p22 wins), G9 (p25,p26,p27 -> SCHEDULED) => R2 G12 (p19,p22,p25 -> SCHEDULED)
-  const games: Game[] = [
-    {
-      id: 'game-1',
-      roundId: 'round-1',
-      tableName: 'Table 1 — Lantern Court',
-      tableNameAr: 'طاولة ١ — قاعة الفانوس',
-      scheduledAt: '2026-11-16T20:00:00.000Z',
-      startedAt: '2026-11-16T20:02:00.000Z',
-      finishedAt: '2026-11-16T20:42:00.000Z',
-      status: 'finished',
-      scorerUserId: 'user-scorer-1',
-      playerIds: ['player-1', 'player-2', 'player-3'],
-      currentSegmentIndex: 5,
-      segmentIds: stdSegments,
-      winnerPlayerId: 'player-1',
-      advancingPlayerIds: ['player-1'],
-      isFinal: false,
-      podOrder: 1,
-      timer: { status: 'idle', durationSec: 60, remainingSec: 0 },
+  // 1. Groups & Round 1 (Group Stage)
+  const groupRound: Round = {
+    id: 'round-groups',
+    name: {
+      en: 'Group Stage — 1v1 Round-Robin',
+      ar: 'دور المجموعات — دوري ١ ضد ١',
     },
-    {
-      id: 'game-2',
-      roundId: 'round-1',
-      tableName: 'Table 2 — Crescent Lounge',
-      tableNameAr: 'طاولة ٢ — صالون الهلال',
-      scheduledAt: '2026-11-16T20:00:00.000Z',
-      startedAt: '2026-11-16T20:03:00.000Z',
-      finishedAt: '2026-11-16T20:45:00.000Z',
-      status: 'finished',
-      scorerUserId: 'user-scorer-2',
-      playerIds: ['player-7', 'player-8', 'player-9'],
-      currentSegmentIndex: 5,
-      segmentIds: stdSegments,
-      winnerPlayerId: 'player-7',
-      advancingPlayerIds: ['player-7'],
-      isFinal: false,
-      podOrder: 2,
-      timer: { status: 'idle', durationSec: 60, remainingSec: 0 },
-    },
-    {
-      id: 'game-3',
-      roundId: 'round-1',
-      tableName: 'Table 3 — Velvet Stage',
-      tableNameAr: 'طاولة ٣ — المسرح المخملي',
-      scheduledAt: '2026-11-16T21:00:00.000Z',
-      startedAt: '2026-11-16T21:01:00.000Z',
-      finishedAt: '2026-11-16T21:40:00.000Z',
-      status: 'finished',
-      scorerUserId: 'user-scorer-3',
-      playerIds: ['player-13', 'player-14', 'player-15'],
-      currentSegmentIndex: 5,
-      segmentIds: stdSegments,
-      winnerPlayerId: 'player-13',
-      advancingPlayerIds: ['player-13'],
-      isFinal: false,
-      podOrder: 3,
-      timer: { status: 'idle', durationSec: 60, remainingSec: 0 },
-    },
-    {
-      id: 'game-4',
-      roundId: 'round-1',
-      tableName: 'Table 4 — Gold Majlis',
-      tableNameAr: 'طاولة ٤ — المجلس الذهبي',
-      scheduledAt: '2026-11-16T21:00:00.000Z',
-      startedAt: '2026-11-16T21:04:00.000Z',
-      finishedAt: '2026-11-16T21:48:00.000Z',
-      status: 'finished',
-      scorerUserId: 'user-scorer-1',
-      playerIds: ['player-4', 'player-5', 'player-6'],
-      currentSegmentIndex: 5,
-      segmentIds: stdSegments,
-      winnerPlayerId: 'player-4',
-      advancingPlayerIds: ['player-4'],
-      isFinal: false,
-      podOrder: 4,
-      timer: { status: 'idle', durationSec: 60, remainingSec: 0 },
-    },
-    {
-      id: 'game-5',
-      roundId: 'round-1',
-      tableName: 'Table 5 — Starlight Hall',
-      tableNameAr: 'طاولة ٥ — قاعة النجوم',
-      scheduledAt: '2026-11-17T20:00:00.000Z',
-      startedAt: '2026-11-17T20:01:00.000Z',
-      finishedAt: '2026-11-17T20:39:00.000Z',
-      status: 'finished',
-      scorerUserId: 'user-scorer-2',
-      playerIds: ['player-10', 'player-11', 'player-12'],
-      currentSegmentIndex: 5,
-      segmentIds: stdSegments,
-      winnerPlayerId: 'player-10',
-      advancingPlayerIds: ['player-10'],
-      isFinal: false,
-      podOrder: 5,
-      timer: { status: 'idle', durationSec: 60, remainingSec: 0 },
-    },
-    {
-      id: 'game-6',
-      roundId: 'round-1',
-      tableName: 'Table 6 — Nile Royale',
-      tableNameAr: 'طاولة ٦ — نايل رويال',
-      scheduledAt: '2026-11-17T20:00:00.000Z',
-      startedAt: '2026-11-17T20:05:00.000Z',
-      finishedAt: '2026-11-17T20:47:00.000Z',
-      status: 'finished',
-      scorerUserId: 'user-scorer-3',
-      playerIds: ['player-16', 'player-17', 'player-18'],
-      currentSegmentIndex: 5,
-      segmentIds: stdSegments,
-      winnerPlayerId: 'player-18',
-      advancingPlayerIds: ['player-18'],
-      isFinal: false,
-      podOrder: 6,
-      timer: { status: 'idle', durationSec: 60, remainingSec: 0 },
-    },
-    {
-      id: 'game-7',
-      roundId: 'round-1',
-      tableName: 'Table 7 — Emerald Club',
-      tableNameAr: 'طاولة ٧ — النادي الزمردي',
-      scheduledAt: '2026-11-17T21:00:00.000Z',
-      startedAt: '2026-11-17T21:02:00.000Z',
-      finishedAt: '2026-11-17T21:44:00.000Z',
-      status: 'finished',
-      scorerUserId: 'user-scorer-1',
-      playerIds: ['player-19', 'player-20', 'player-21'],
-      currentSegmentIndex: 5,
-      segmentIds: stdSegments,
-      winnerPlayerId: 'player-19',
-      advancingPlayerIds: ['player-19'],
-      isFinal: false,
-      podOrder: 7,
-      timer: { status: 'idle', durationSec: 60, remainingSec: 0 },
-    },
-    {
-      id: 'game-8',
-      roundId: 'round-1',
-      tableName: 'Table 8 — Cairo Crown',
-      tableNameAr: 'طاولة ٨ — تاج القاهرة',
-      scheduledAt: '2026-11-17T21:00:00.000Z',
-      startedAt: '2026-11-17T21:06:00.000Z',
-      finishedAt: '2026-11-17T21:50:00.000Z',
-      status: 'finished',
-      scorerUserId: 'user-scorer-2',
-      playerIds: ['player-22', 'player-23', 'player-24'],
-      currentSegmentIndex: 5,
-      segmentIds: stdSegments,
-      winnerPlayerId: 'player-22',
-      advancingPlayerIds: ['player-22'],
-      isFinal: false,
-      podOrder: 8,
-      timer: { status: 'idle', durationSec: 60, remainingSec: 0 },
-    },
-    {
-      id: 'game-9',
-      roundId: 'round-1',
-      tableName: 'Table 9 — Sovereign Deck',
-      tableNameAr: 'طاولة ٩ — جناح النخبة',
-      scheduledAt: '2026-11-18T21:30:00.000Z',
-      status: 'scheduled',
-      scorerUserId: 'user-scorer-3',
-      playerIds: ['player-25', 'player-26', 'player-27'],
-      currentSegmentIndex: 0,
-      segmentIds: stdSegments,
-      isFinal: false,
-      podOrder: 9,
-      timer: { status: 'idle', durationSec: 45, remainingSec: 45 },
-    },
+    order: 1,
+    stage: 'group',
+    advancePerGame: tournament.advancePerGroup,
+    status: 'upcoming',
+  };
 
-    // Round 2 (3 games)
-    {
-      id: 'game-10',
-      roundId: 'round-2',
-      tableName: 'Quarter-Final A — Main Stage',
-      tableNameAr: 'ربع النهائي أ — المسرح الرئيسي',
-      scheduledAt: '2026-11-18T19:00:00.000Z',
-      startedAt: '2026-11-18T19:02:00.000Z',
-      finishedAt: '2026-11-18T19:49:00.000Z',
-      status: 'finished',
-      scorerUserId: 'user-scorer-2',
-      playerIds: ['player-1', 'player-7', 'player-13'],
-      currentSegmentIndex: 5,
-      segmentIds: r2Segments,
-      winnerPlayerId: 'player-1',
-      advancingPlayerIds: ['player-1'],
-      isFinal: false,
-      podOrder: 1,
-      timer: { status: 'idle', durationSec: 60, remainingSec: 0 },
-    },
-    {
-      id: 'game-11',
-      roundId: 'round-2',
-      tableName: 'Quarter-Final B — Main Stage (LIVE)',
-      tableNameAr: 'ربع النهائي ب — المسرح الرئيسي (مباشر)',
-      scheduledAt: '2026-11-18T20:15:00.000Z',
-      startedAt: '2026-11-18T20:16:00.000Z',
-      status: 'live',
-      scorerUserId: 'user-scorer-1',
-      playerIds: ['player-4', 'player-10', 'player-18'],
-      currentSegmentIndex: 3,
-      segmentIds: r2Segments,
-      isFinal: false,
-      activeBuzzPlayerId: 'player-4',
-      podOrder: 2,
-      timer: { status: 'paused', durationSec: 60, remainingSec: 38 },
-    },
-    {
-      id: 'game-12',
-      roundId: 'round-2',
-      tableName: 'Quarter-Final C — Main Stage',
-      tableNameAr: 'ربع النهائي ج — المسرح الرئيسي',
-      scheduledAt: '2026-11-19T20:00:00.000Z',
-      status: 'scheduled',
-      scorerUserId: 'user-scorer-3',
-      playerIds: ['player-19', 'player-22', 'player-25'],
-      currentSegmentIndex: 0,
-      segmentIds: r2Segments,
-      isFinal: false,
-      podOrder: 3,
-      timer: { status: 'idle', durationSec: 45, remainingSec: 45 },
-    },
+  const groups: Group[] = generateGroups(players, tournament, {
+    preserveOrder: true,
+    roundId: groupRound.id,
+  });
 
-    // Semi-Final (1 game, top 2 advance)
-    {
-      id: 'game-13',
-      roundId: 'round-semi',
-      tableName: 'The Golden Semi-Final (Top 2 Advance)',
-      tableNameAr: 'نصف النهائي الذهبي (يتأهل الأول والثاني)',
-      scheduledAt: '2026-11-20T21:00:00.000Z',
-      status: 'scheduled',
-      scorerUserId: 'user-scorer-4',
-      playerIds: ['player-1', 'player-4', 'player-19'],
-      currentSegmentIndex: 0,
-      segmentIds: r2Segments,
-      isFinal: false,
-      podOrder: 1,
-      timer: { status: 'idle', durationSec: 45, remainingSec: 45 },
-    },
-
-    // The Grand Final (2 Finalists + Marwan Serry)
-    {
-      id: 'game-14',
-      roundId: 'round-final',
-      tableName: 'The Grand Final — Against Marwan Serry',
-      tableNameAr: 'النهائي الكبير — في مواجهة مروان سري',
-      scheduledAt: '2026-11-22T22:00:00.000Z',
-      status: 'scheduled',
-      scorerUserId: 'user-scorer-4',
-      playerIds: ['player-1', 'player-19', 'player-marwan'],
-      currentSegmentIndex: 0,
-      segmentIds: finalSegments,
-      isFinal: true,
-      isDemo: false,
-      podOrder: 1,
-      timer: { status: 'idle', durationSec: 45, remainingSec: 45 },
-    },
-  ];
-
-  const demoSeed = createDemoSeedState();
-
-  // Build realistic ScoreEvents for finished games (G1..G8, G10) + Live Game (G11)
-  const scoreEvents: ScoreEvent[] = [];
-  const buzzEvents: BuzzEvent[] = [];
-  const auditEntries: AuditEntry[] = [];
-
-  const finishedConfigs: Array<{
-    gameId: string;
-    scorerId: string;
-    baseTime: string;
-    players: [string, string, string];
-    scoresPerSeg: Array<[number, number, number]>;
-    segments: string[];
-  }> = [
-    {
-      gameId: 'game-1',
-      scorerId: 'user-scorer-1',
-      baseTime: '2026-11-16T20:10:00.000Z',
-      players: ['player-1', 'player-2', 'player-3'],
-      scoresPerSeg: [
-        [10, 5, 0],
-        [10, 0, 5],
-        [5, 10, -5],
-        [10, 5, 5],
-        [10, 5, 0],
-        [10, 5, 5],
-      ],
-      segments: stdSegments,
-    },
-    {
-      gameId: 'game-2',
-      scorerId: 'user-scorer-2',
-      baseTime: '2026-11-16T20:12:00.000Z',
-      players: ['player-7', 'player-8', 'player-9'],
-      scoresPerSeg: [
-        [10, 0, 5],
-        [5, 10, 0],
-        [10, 5, 0],
-        [10, 0, 5],
-        [5, 5, 10],
-        [10, 5, -5],
-      ],
-      segments: stdSegments,
-    },
-    {
-      gameId: 'game-3',
-      scorerId: 'user-scorer-3',
-      baseTime: '2026-11-16T21:10:00.000Z',
-      players: ['player-13', 'player-14', 'player-15'],
-      scoresPerSeg: [
-        [10, 5, 0],
-        [10, 5, 0],
-        [0, 10, 5],
-        [10, 0, 5],
-        [10, 5, -5],
-        [5, 5, 10],
-      ],
-      segments: stdSegments,
-    },
-    {
-      gameId: 'game-4',
-      scorerId: 'user-scorer-1',
-      baseTime: '2026-11-16T21:15:00.000Z',
-      players: ['player-4', 'player-5', 'player-6'],
-      scoresPerSeg: [
-        [10, 5, 0],
-        [10, 5, 5],
-        [10, -5, 5],
-        [5, 10, 0],
-        [10, 5, 5],
-        [10, 0, 5],
-      ],
-      segments: stdSegments,
-    },
-    {
-      gameId: 'game-5',
-      scorerId: 'user-scorer-2',
-      baseTime: '2026-11-17T20:10:00.000Z',
-      players: ['player-10', 'player-11', 'player-12'],
-      scoresPerSeg: [
-        [10, 5, 0],
-        [5, 5, 10],
-        [10, 0, 5],
-        [10, 5, 0],
-        [10, 5, 5],
-        [5, 10, -5],
-      ],
-      segments: stdSegments,
-    },
-    {
-      gameId: 'game-6',
-      scorerId: 'user-scorer-3',
-      baseTime: '2026-11-17T20:15:00.000Z',
-      players: ['player-16', 'player-17', 'player-18'],
-      scoresPerSeg: [
-        [5, 0, 10],
-        [0, 5, 10],
-        [10, 5, 5],
-        [5, -5, 10],
-        [0, 10, 10],
-        [5, 5, 10],
-      ],
-      segments: stdSegments,
-    },
-    {
-      gameId: 'game-7',
-      scorerId: 'user-scorer-1',
-      baseTime: '2026-11-17T21:10:00.000Z',
-      players: ['player-19', 'player-20', 'player-21'],
-      scoresPerSeg: [
-        [10, 5, 0],
-        [10, 0, 5],
-        [10, 5, 5],
-        [5, 10, 0],
-        [10, 5, -5],
-        [10, 5, 5],
-      ],
-      segments: stdSegments,
-    },
-    {
-      gameId: 'game-8',
-      scorerId: 'user-scorer-2',
-      baseTime: '2026-11-17T21:14:00.000Z',
-      players: ['player-22', 'player-23', 'player-24'],
-      scoresPerSeg: [
-        [10, 5, 0],
-        [5, 10, 0],
-        [10, 5, 5],
-        [10, 0, 5],
-        [10, -5, 5],
-        [5, 5, 5],
-      ],
-      segments: stdSegments,
-    },
-    {
-      gameId: 'game-10',
-      scorerId: 'user-scorer-2',
-      baseTime: '2026-11-18T19:08:00.000Z',
-      players: ['player-1', 'player-7', 'player-13'],
-      scoresPerSeg: [
-        [10, 5, 0],
-        [10, 5, 5],
-        [5, 10, 0],
-        [10, 5, -5],
-        [10, 0, 10],
-        [15, 10, 5],
-      ],
-      segments: r2Segments,
-    },
-  ];
-
-  let eventCounter = 1;
-  let buzzCounter = 1;
-  let auditCounter = 1;
-
-  for (const cfg of finishedConfigs) {
-    const startMs = new Date(cfg.baseTime).getTime();
-
-    cfg.scoresPerSeg.forEach((segScores, segIdx) => {
-      const segId = cfg.segments[segIdx];
-      segScores.forEach((pts, pIdx) => {
-        if (pts === 0) return;
-        const playerId = cfg.players[pIdx];
-        const ts = new Date(startMs + (segIdx * 5 + pIdx) * 60_000).toISOString();
-
-        if (pts > 0) {
-          buzzEvents.push({
-            id: `buzz-${buzzCounter++}`,
-            gameId: cfg.gameId,
-            segmentId: segId,
-            playerId,
-            byUserId: cfg.scorerId,
-            cleared: false,
-            createdAt: ts,
-          });
-        }
-
-        const scoreId = `score-${eventCounter++}`;
-        scoreEvents.push({
-          id: scoreId,
-          gameId: cfg.gameId,
-          segmentId: segId,
-          playerId,
-          delta: pts,
-          note: pts > 0 ? 'Correct answer on buzzer' : 'Penalty on wrong buzz',
-          kind: 'preset',
-          byUserId: cfg.scorerId,
-          createdAt: ts,
-        });
+  const groupMatches: Match[] = [];
+  let gSlot = 1;
+  for (const group of groups) {
+    const pairs = generateGroupRoundRobinPairs(group.playerIds);
+    pairs.forEach(([pA, pB], pairIdx) => {
+      const matchId = `match-g${group.number}-m${pairIdx + 1}`;
+      groupMatches.push({
+        id: matchId,
+        type: 'group',
+        groupId: group.id,
+        roundId: groupRound.id,
+        round: 1,
+        slot: gSlot++,
+        isGroupTieBreak: false,
+        participants: [
+          { slotIndex: 0, playerId: pA, feeder: { kind: 'fixed', playerId: pA } },
+          { slotIndex: 1, playerId: pB, feeder: { kind: 'fixed', playerId: pB } },
+        ],
+        playerIds: [pA, pB],
+        tableNumber: ((gSlot - 2) % tournament.tablesCount) + 1,
+        tableName: `Group ${group.number} · Match ${pairIdx + 1}`,
+        tableNameAr: `المجموعة ${group.number} · مباراة ${pairIdx + 1}`,
+        scheduledAt: '2027-03-05T19:00:00.000Z',
+        judgeUserId: 'user-scorer-1',
+        scorerUserId: 'user-scorer-1',
+        segmentIds: stdSegIds,
+        currentSegmentIndex: 0,
+        status: 'scheduled',
+        result: null,
+        isFinal: false,
+        isDemo: false,
+        podOrder: gSlot - 1,
+        replayEpoch: 0,
+        version: 1,
+        timer: { status: 'idle', durationSec: 45, remainingSec: 45 },
       });
-    });
-
-    const endIso = new Date(startMs + 34 * 60_000).toISOString();
-    auditEntries.push({
-      id: `audit-${auditCounter++}`,
-      actorUserId: cfg.scorerId,
-      action: 'game.finish',
-      entityType: 'game',
-      entityId: cfg.gameId,
-      summary: `Completed ${cfg.gameId.toUpperCase()} and confirmed winner advancement.`,
-      summaryAr: `تم إنهاء المباراة ${cfg.gameId.toUpperCase()} واعتماد تأهل الفائز.`,
-      before: { status: 'live' },
-      after: { status: 'finished', winnerPlayerId: cfg.players[0] },
-      createdAt: endIso,
     });
   }
 
-  // Live Game (game-11) events so the live game has rich activity right now
-  const liveGameEvents: Array<{
-    segId: string;
-    playerId: string;
-    delta: number;
-    note: string;
-    minutesAgo: number;
-  }> = [
-    { segId: 'seg-2', playerId: 'player-4', delta: 10, note: 'Named Wama track in 2s', minutesAgo: 22 },
-    { segId: 'seg-2', playerId: 'player-10', delta: 5, note: 'Bonus chorus line', minutesAgo: 20 },
-    { segId: 'seg-4', playerId: 'player-18', delta: 10, note: 'Decoded reversed Amr Diab hook', minutesAgo: 16 },
-    { segId: 'seg-4', playerId: 'player-4', delta: 10, note: 'Second reversed track solved', minutesAgo: 14 },
-    { segId: 'seg-7', playerId: 'player-10', delta: 10, note: 'Unbroken 12-word chain', minutesAgo: 10 },
-    { segId: 'seg-7', playerId: 'player-18', delta: -5, note: 'Repeated keyword under timer', minutesAgo: 8 },
-    { segId: 'seg-10', playerId: 'player-4', delta: 10, note: 'El Kit Kat quote & character', minutesAgo: 4 },
-    { segId: 'seg-10', playerId: 'player-18', delta: 10, note: 'Ramadan series trivia steal', minutesAgo: 2 },
-  ];
-
-  const refNow = new Date('2026-11-18T20:40:00.000Z').getTime();
-  liveGameEvents.forEach((ev) => {
-    const ts = new Date(refNow - ev.minutesAgo * 60_000).toISOString();
-    buzzEvents.push({
-      id: `buzz-${buzzCounter++}`,
-      gameId: 'game-11',
-      segmentId: ev.segId,
-      playerId: ev.playerId,
-      byUserId: 'user-scorer-1',
-      cleared: false,
-      createdAt: ts,
-    });
-    const scoreId = `score-${eventCounter++}`;
-    scoreEvents.push({
-      id: scoreId,
-      gameId: 'game-11',
-      segmentId: ev.segId,
-      playerId: ev.playerId,
-      delta: ev.delta,
-      note: ev.note,
-      kind: 'preset',
-      byUserId: 'user-scorer-1',
-      createdAt: ts,
-    });
-    auditEntries.push({
-      id: `audit-${auditCounter++}`,
-      actorUserId: 'user-scorer-1',
-      action: 'score.add',
-      entityType: 'score',
-      entityId: scoreId,
-      summary: `Applied ${ev.delta > 0 ? `+${ev.delta}` : ev.delta} pts to ${ev.playerId} in Quarter-Final B (${ev.note})`,
-      summaryAr: `تم تسجيل ${ev.delta > 0 ? `+${ev.delta}` : ev.delta} نقطة في ربع النهائي ب (${ev.note})`,
-      before: null,
-      after: { playerId: ev.playerId, delta: ev.delta, segmentId: ev.segId },
-      createdAt: ts,
-    });
+  // 2. Knockout + Grand Final skeleton
+  const koTree = generateKnockout(groups, tournament, {
+    startRoundOrder: 2,
+    defaultSegmentIds: stdSegIds,
+    finalSegmentIds: finalSegIds,
+    defaultJudgeUserId: 'user-scorer-1',
+    baseScheduledAtIso: '2027-03-14T20:00:00.000Z',
   });
 
-  // Compute accurate player stats and statuses from games + scoreEvents
-  const eliminatedIds = new Set<string>([
-    'player-2', 'player-3',
-    'player-8', 'player-9',
-    'player-14', 'player-15',
-    'player-5', 'player-6',
-    'player-11', 'player-12',
-    'player-16', 'player-17',
-    'player-20', 'player-21',
-    'player-23', 'player-24',
-    'player-7', 'player-13', // eliminated in R2 G10
-  ]);
+  const rounds: Round[] = [groupRound, ...koTree.rounds];
+  const rawTournamentMatches = [...groupMatches, ...koTree.matches];
 
-  const activeIds = new Set<string>([
-    'player-1', // won R1 G1 & R2 G10 -> Semi-finalist
-    'player-4', 'player-10', 'player-18', // playing live in R2 G11
-    'player-19', 'player-22', // won R1 G7 & G8, awaiting R2 G12
-  ]);
+  // 3. Conflict-free auto-schedule across tables & judges
+  const scheduledTournamentMatches = autoScheduleMatches(
+    rawTournamentMatches,
+    users,
+    tournament,
+    '2027-03-05T19:00:00.000Z'
+  );
 
-  const checkedInIds = new Set<string>(['player-25', 'player-26']);
-  // player-27 left as 'registered' so check-in staff has someone to check in during the demo!
+  // 4. Isolated Landing Page Demo match (always picks existing players from current roster)
+  const demoP1 = players.find((p) => p.id === 'player-1')?.id ?? players[0].id;
+  const demoP2 =
+    players.find((p) => p.id === 'player-19')?.id ??
+    players.find((p) => !p.isGuest && p.id !== demoP1)?.id ??
+    players[1].id;
+  const demoSeed = createDemoSeedState([demoP1, demoP2]);
 
-  const players: Player[] = RAW_PLAYERS.map((raw) => {
-    const pEvents = scoreEvents.filter((e) => e.playerId === raw.id);
-    const totalPoints = pEvents.reduce((acc, e) => acc + e.delta, 0);
-    const gamesPlayed = games.filter(
-      (g) =>
-        (g.status === 'finished' || g.status === 'live') &&
-        g.playerIds.includes(raw.id)
-    ).length;
-    const wins = games.filter(
-      (g) => g.status === 'finished' && g.winnerPlayerId === raw.id
-    ).length;
+  const matches: Match[] = [...scheduledTournamentMatches, demoSeed.match];
+  const scoreEvents: ScoreEvent[] = [...demoSeed.scoreEvents];
+  const absenceEvents: AbsenceEvent[] = [];
+  const buzzEvents: BuzzEvent[] = [...demoSeed.buzzEvents];
+  const matchEvents: MatchLifecycleEvent[] = [...demoSeed.matchEvents];
+  const checkInEvents: CheckInEvent[] = [];
+  const auditEntries: AuditEntry[] = [];
 
-    let status: Player['status'] = 'registered';
-    if (eliminatedIds.has(raw.id)) status = 'eliminated';
-    else if (activeIds.has(raw.id)) status = 'active';
-    else if (checkedInIds.has(raw.id)) status = 'checkedIn';
+  // 5. Populate realistic mid-tournament demo story via pure append-only events!
+  if (includeDemoProgress && groups.length >= 2) {
+    const completeGroupCount =
+      groups.length >= 20 ? 12 : Math.max(1, Math.floor(groups.length / 2));
+    const liveGroupCount = Math.min(3, Math.max(1, groups.length - completeGroupCount));
 
-    return {
-      id: raw.id,
-      fullName: raw.fullName,
-      fullNameAr: raw.fullNameAr,
-      nickname: raw.nickname,
-      nicknameAr: raw.nicknameAr,
-      avatarSeed: `seed-${raw.seed}-${raw.nickname.toLowerCase().replace(/\s+/g, '')}`,
-      phone: `+20 100 555 ${String(1000 + raw.seed)}`,
-      email: `${raw.fullName.toLowerCase().replace(/[^a-z]/g, '.')}@players.casino`,
-      status,
-      seed: raw.seed,
-      isHost: false,
-      stats: {
-        gamesPlayed,
-        wins,
-        totalPoints,
-      },
-      createdAt: '2026-11-10T12:00:00.000Z',
+    let evSeq = 1;
+    const baseStoryMs = Date.parse('2027-03-05T19:00:00.000Z');
+    const nextIso = () => new Date(baseStoryMs + evSeq++ * 30_000).toISOString();
+
+    const addPoint = (
+      matchId: string,
+      playerId: string,
+      delta: number,
+      kind: 'point' | 'yellow' | 'red',
+      byUserId: string,
+      segId: string,
+      note?: string
+    ) => {
+      scoreEvents.push({
+        id: `se-seed-${evSeq}`,
+        matchId,
+        gameId: matchId,
+        segmentId: segId,
+        playerId,
+        delta,
+        kind,
+        note,
+        byUserId,
+        replayEpoch: 0,
+        createdAt: nextIso(),
+      });
     };
-  });
 
-  // Add Marwan Serry's special Final Boss record (name only, no photo per AGENTS.md §10)
-  players.push({
-    id: 'player-marwan',
-    fullName: 'Marwan Serry',
-    fullNameAr: 'مروان سري',
-    nickname: 'The Final Boss',
-    nicknameAr: 'صاحب الكازينو',
-    avatarSeed: 'golden-seat-marwan',
-    phone: 'VIP-GOLDEN-SEAT',
-    email: 'marwan@finalnight.casino',
-    status: 'finalist',
-    seed: 0,
-    isHost: true,
-    stats: {
-      gamesPlayed: 0,
-      wins: 0,
-      totalPoints: 0,
-    },
-    createdAt: '2026-11-10T12:00:00.000Z',
-  });
+    // Complete groups 1..completeGroupCount (including a 3-way cycle in Group 4 and a walkover in Group 6!)
+    for (let gIdx = 0; gIdx < completeGroupCount; gIdx++) {
+      const group = groups[gIdx];
+      const gMatches = scheduledTournamentMatches.filter(
+        (m) => m.groupId === group.id
+      );
 
-  const sponsors: Sponsor[] = [
-    {
-      id: 'sponsor-1',
-      name: 'Nile Crown Telecom (Placeholder)',
-      nameAr: 'نايل كراون للاتصالات (نموذج راعٍ)',
-      tier: 'presenting',
-      tierLabelEn: 'Presenting Partner',
-      tierLabelAr: 'الراعي الرسمي الرئيسي',
-      logoText: 'NILE CROWN',
-      blurb: 'Title branding across the entire Ramadan tournament, stage marquee, and live broadcast.',
-      blurbAr: 'الرعاية الحصرية للبطولة بالكامل وعلى المسرح الرئيسي والبث المباشر.',
-      benefitsEn: [
-        '“Presented by” title lockup on Main Stage & Big Screen',
-        'Custom branded question segment in every knockout game',
-        'VIP hospitality lounge & on-stage Grand Final trophy presentation with Marwan Serry',
-        'Contact us for partnership package',
-      ],
-      benefitsAr: [
-        'اقتران الاسم بشعار البطولة الرئيسي وشاشة العرض العملاقة',
-        'فقرة أسئلة مخصصة باسم الراعي في جميع مباريات الإقصاء',
-        'جناح ضيافة لكبار الزوار والمشاركة في تسليم كأس النهائي مع مروان سري',
-        'تواصل معنا لتفاصيل الرعاية',
-      ],
-      order: 1,
-    },
-    {
-      id: 'sponsor-2',
-      name: 'Al-Futtaim Royal Oasis (Placeholder)',
-      nameAr: 'واحة الفطيم الملكية (نموذج راعٍ)',
-      tier: 'finalNight',
-      tierLabelEn: 'Final Night Partner',
-      tierLabelAr: 'شريك ليلة النهائي',
-      logoText: 'ROYAL OASIS',
-      blurb: 'Exclusive ownership of the Grand Final showdown featuring the top 2 finalists against Marwan Serry.',
-      blurbAr: 'رعاية ليلة النهائي الكبرى التي تجمع المتأهلين النهائيين في مواجهة مروان سري.',
-      benefitsEn: [
-        'Golden Seat & Final Night broadcast frame branding',
-        'Executive seating at the Final Night live taping',
-        'Full social reel & highlight cut integration',
-        'Contact us for partnership package',
-      ],
-      benefitsAr: [
-        'شعار الراعي على إطار المقعد الذهبي وبث ليلة النهائي',
-        'مقاعد خاصة لكبار الضيوف في تصوير ليلة النهائي',
-        'تغطية كاملة في مقاطع السوشيال ميديا والملخصات',
-        'تواصل معنا لتفاصيل الرعاية',
-      ],
-      order: 2,
-    },
-    {
-      id: 'sponsor-3',
-      name: 'Kahwa & Crème Roasters (Placeholder)',
-      nameAr: 'محمصة قهوة وكريم (نموذج راعٍ)',
-      tier: 'segment',
-      tierLabelEn: 'Segment Partner',
-      tierLabelAr: 'راعي الفقرات التفاعلية',
-      logoText: 'KAHWA & CREME',
-      blurb: 'Powering the high-speed buzzer segments, table timers, and player Suhoor lounge.',
-      blurbAr: 'رعاية فقرات السرعة والجرس ومؤقت الطاولات واستراحة السحور.',
-      benefitsEn: [
-        'Branded badge on Segment Timer & Scoreboard overlays',
-        'Product placement on contestant tables & Suhoor majlis',
-        'Contact us for partnership package',
-      ],
-      benefitsAr: [
-        'ظهور الشعار على مؤقت الفقرات ولوحة النتائج',
-        'تواجد المنتجات على طاولات المتسابقين ومجلس السحور',
-        'تواصل معنا لتفاصيل الرعاية',
-      ],
-      order: 3,
-    },
-    {
-      id: 'sponsor-4',
-      name: 'Cairo Creative Hub (Placeholder)',
-      nameAr: 'ملتقى القاهرة الإبداعي (نموذج راعٍ)',
-      tier: 'community',
-      tierLabelEn: 'Community Partner',
-      tierLabelAr: 'شريك المجتمع والجمهور',
-      logoText: 'CAIRO HUB',
-      blurb: 'Supporting the live audience trivia segment and community qualifiers across Ramadan.',
-      blurbAr: 'دعم فقرة أسئلة الجمهور والفعاليات المصاحبة طوال ليالي رمضان.',
-      benefitsEn: [
-        'Co-branded Audience & Social Media segment (#15)',
-        'Logo placement on public bracket & leaderboard pages',
-        'Contact us for partnership package',
-      ],
-      benefitsAr: [
-        'رعاية فقرة الجمهور والسوشيال ميديا (فقرة ١٥)',
-        'ظهور الشعار في صفحات الجدول والترتيب العام',
-        'تواصل معنا لتفاصيل الرعاية',
-      ],
-      order: 4,
-    },
-  ];
+      // Check-in players of completed groups
+      for (const pid of group.playerIds) {
+        checkInEvents.push({
+          id: `ci-seed-${evSeq}`,
+          playerId: pid,
+          status: 'checkedIn',
+          byUserId: 'user-checkin',
+          createdAt: nextIso(),
+        });
+      }
 
-  const contentItems: ContentItem[] = [
-    {
-      id: 'content-1',
-      key: 'hero-announcement',
-      category: 'announcement',
-      titleEn: 'Quarter-Final Table B is LIVE Now on the Main Stage!',
-      titleAr: 'مباراة ربع النهائي (ب) جارية الآن مباشرة على المسرح الرئيسي!',
-      bodyEn: 'Karim "K-Nab", Khaled "Khaldoon", and Nour "Nouro" are battling for the second seat in the Golden Semi-Final.',
-      bodyAr: 'منافسة مشتعلة بين كريم "كيمو" وخالد "خلدون" ونور "نورو" لحسم المقعد الثاني في نصف النهائي الذهبي.',
-      badgeEn: 'LIVE TONIGHT',
-      badgeAr: 'مباشر الليلة',
-      order: 1,
-      updatedAt: '2026-11-18T20:15:00.000Z',
-    },
-    {
-      id: 'content-2',
-      key: 'rule-three-player',
-      category: 'rule',
-      titleEn: 'Three Players, One Table, Pure Speed & Wit',
-      titleAr: 'ثلاثة لاعبين، طاولة واحدة، سرعة وبديهة خالصة',
-      bodyEn: 'Every session features exactly 3 contestants and 1 dedicated table scorer playing across 6 to 8 curated segments.',
-      bodyAr: 'تضم كل مباراة ٣ متسابقين وحكم طاولة مخصص يتنافسون عبر ٦ إلى ٨ فقرات متنوعة.',
-      badgeEn: 'CORE FORMAT',
-      badgeAr: 'نظام اللعب',
-      order: 2,
-      updatedAt: '2026-11-15T12:00:00.000Z',
-    },
-    {
-      id: 'content-3',
-      key: 'rule-buzzer-scoring',
-      category: 'rule',
-      titleEn: 'Stage Buzzer & Segment Point Presets',
-      titleAr: 'جرس المسرح ونقاط الفقرات الفورية',
-      bodyEn: 'The scorer locks in who buzzed first. Correct answers earn +10 or +5 points; wrong interrupts risk a -5 penalty.',
-      bodyAr: 'يحدد الحكم أول من ضغط الجرس. الإجابات الصحيحة تمنح +١٠ أو +٥ نقاط، والإجابة الخاطئة قد تخصم -٥ نقاط.',
-      badgeEn: 'SCORING',
-      badgeAr: 'احتساب النقاط',
-      order: 3,
-      updatedAt: '2026-11-15T12:00:00.000Z',
-    },
-    {
-      id: 'content-4',
-      key: 'rule-final-marwan',
-      category: 'rule',
-      titleEn: 'The Grand Final: Two Finalists vs. Marwan Serry',
-      titleAr: 'النهائي الكبير: المتأهلان في مواجهة مروان سري',
-      bodyEn: 'In the Semi-Final, the top 2 players advance together to face Marwan Serry himself in a 3-seat finale under the spotlights.',
-      bodyAr: 'في نصف النهائي يتأهل صاحبا المركزين الأول والثاني معاً لمواجهة مروان سري شخصياً على طاولة النهائي.',
-      badgeEn: 'THE FINAL',
-      badgeAr: 'ليلة النهائي',
-      order: 4,
-      updatedAt: '2026-11-15T12:00:00.000Z',
-    },
-    {
-      id: 'content-5',
-      key: 'schedule-blurb-main',
-      category: 'scheduleBlurb',
-      titleEn: 'Four Nights of Ramadan Showdowns (Placeholder Schedule)',
-      titleAr: 'أربع ليالٍ من المنافسات الرمضانية (جدول مبدئي قابل للتعديل)',
-      bodyEn: 'All dates, call times, and studio tables below are editable placeholders for the Ramadan 2027 pitch.',
-      bodyAr: 'جميع المواعيد والتوقيتات والطاولات أدناه هي بيانات مبدئية قابلة للتعديل من لوحة التحكم لعرض رمضان ٢٠٢٧.',
-      badgeEn: 'RAMADAN 2027',
-      badgeAr: 'رمضان ٢٠٢٧',
-      order: 5,
-      updatedAt: '2026-11-15T12:00:00.000Z',
-    },
-  ];
+      gMatches.forEach((m, mIdx) => {
+        const p0 = m.participants[0].playerId!;
+        const p1 = m.participants[1].playerId!;
+
+        // Special demo story: Group 6 Match 3 -> walkover due to absence!
+        if (group.number === 6 && mIdx === 2) {
+          absenceEvents.push({
+            id: `abs-seed-${evSeq}`,
+            matchId: m.id,
+            playerId: p1,
+            action: 'marked',
+            reason: 'No-show at table call',
+            byUserId: m.judgeUserId,
+            replayEpoch: 0,
+            createdAt: nextIso(),
+          });
+          auditEntries.push({
+            id: `audit-seed-${evSeq}`,
+            actorUserId: m.judgeUserId,
+            action: 'match.markAbsent',
+            entityType: 'absence',
+            entityId: m.id,
+            summary: `Marked ${p1} absent in ${m.tableName} — walkover victory awarded to ${p0}.`,
+            summaryAr: `تم تسجيل غياب ${p1} في ${m.tableNameAr} — فوز انسحابي لـ ${p0}.`,
+            before: { status: 'scheduled' },
+            after: { status: 'finished', resultType: 'walkover', winnerId: p0 },
+            automatic: false,
+            createdAt: nextIso(),
+          });
+          return;
+        }
+
+        matchEvents.push({
+          id: `me-seed-start-${evSeq}`,
+          matchId: m.id,
+          type: 'started',
+          byUserId: m.judgeUserId,
+          replayEpoch: 0,
+          createdAt: nextIso(),
+        });
+
+        // Special demo story: Group 4 -> 3-way cycle (A beats B, B beats C, C beats A; A wins on points diff!)
+        if (group.number === 4 && gMatches.length === 3) {
+          if (mIdx === 0) {
+            // A vs B -> A wins 5-1 (+4 diff)
+            for (let k = 0; k < 5; k++) addPoint(m.id, p0, 1, 'point', m.judgeUserId, stdSegIds[k % stdSegIds.length]);
+            addPoint(m.id, p1, 1, 'point', m.judgeUserId, stdSegIds[1]);
+          } else if (mIdx === 1) {
+            // B vs C -> B wins 3-2 (+1 diff)
+            for (let k = 0; k < 3; k++) addPoint(m.id, p0, 1, 'point', m.judgeUserId, stdSegIds[k % stdSegIds.length]);
+            for (let k = 0; k < 2; k++) addPoint(m.id, p1, 1, 'point', m.judgeUserId, stdSegIds[k % stdSegIds.length]);
+          } else {
+            // A vs C -> C wins 3-2 (so C beats A by 1; final diffs: A=+3, B=-3, C=0 -> A qualifies!)
+            for (let k = 0; k < 2; k++) addPoint(m.id, p0, 1, 'point', m.judgeUserId, stdSegIds[k % stdSegIds.length]);
+            for (let k = 0; k < 3; k++) addPoint(m.id, p1, 1, 'point', m.judgeUserId, stdSegIds[k % stdSegIds.length]);
+          }
+        } else {
+          // Standard realistic 1v1 scorelines with occasional yellow/red cards
+          const winnerPid = mIdx === 1 ? p0 : p0;
+          const loserPid = winnerPid === p0 ? p1 : p0;
+          const winPts = 4 + ((group.number + mIdx) % 3);
+          const losePts = 2 + ((group.number + mIdx) % 2);
+
+          for (let k = 0; k < winPts; k++) {
+            addPoint(m.id, winnerPid, 1, 'point', m.judgeUserId, stdSegIds[k % stdSegIds.length]);
+          }
+          for (let k = 0; k < losePts; k++) {
+            addPoint(m.id, loserPid, 1, 'point', m.judgeUserId, stdSegIds[(k + 1) % stdSegIds.length]);
+          }
+          if ((group.number + mIdx) % 3 === 0) {
+            addPoint(
+              m.id,
+              loserPid,
+              -1,
+              'yellow',
+              m.judgeUserId,
+              stdSegIds[2],
+              'Yellow card (−1): False buzz'
+            );
+          }
+          if (group.number % 5 === 0 && mIdx === 0) {
+            addPoint(
+              m.id,
+              loserPid,
+              -2,
+              'red',
+              m.judgeUserId,
+              stdSegIds[4],
+              'Red card (−2): Unsportsmanlike interruption'
+            );
+          }
+        }
+
+        matchEvents.push({
+          id: `me-seed-fin-${evSeq}`,
+          matchId: m.id,
+          type: 'finished',
+          byUserId: m.judgeUserId,
+          replayEpoch: 0,
+          createdAt: nextIso(),
+        });
+        m.currentSegmentIndex = stdSegIds.length - 1;
+      });
+    }
+
+    // Live matches in next liveGroupCount groups (1 live match per group => disjoint players!)
+    for (let offset = 0; offset < liveGroupCount; offset++) {
+      const group = groups[completeGroupCount + offset];
+      if (!group) break;
+      const gMatches = scheduledTournamentMatches.filter(
+        (m) => m.groupId === group.id
+      );
+      if (gMatches.length === 0) continue;
+
+      for (const pid of group.playerIds) {
+        checkInEvents.push({
+          id: `ci-seed-${evSeq}`,
+          playerId: pid,
+          status: 'checkedIn',
+          byUserId: 'user-checkin',
+          createdAt: nextIso(),
+        });
+      }
+
+      // Finish match 1 of the group, make match 2 LIVE (so players don't overlap live matches!)
+      const m0 = gMatches[0];
+      const liveM = gMatches[1] ?? gMatches[0];
+
+      if (m0 && m0.id !== liveM.id) {
+        const p0 = m0.participants[0].playerId!;
+        const p1 = m0.participants[1].playerId!;
+        matchEvents.push({
+          id: `me-seed-start-${evSeq}`,
+          matchId: m0.id,
+          type: 'started',
+          byUserId: m0.judgeUserId,
+          replayEpoch: 0,
+          createdAt: nextIso(),
+        });
+        addPoint(m0.id, p0, 1, 'point', m0.judgeUserId, stdSegIds[0]);
+        addPoint(m0.id, p0, 1, 'point', m0.judgeUserId, stdSegIds[1]);
+        addPoint(m0.id, p0, 1, 'point', m0.judgeUserId, stdSegIds[2]);
+        addPoint(m0.id, p1, 1, 'point', m0.judgeUserId, stdSegIds[1]);
+        matchEvents.push({
+          id: `me-seed-fin-${evSeq}`,
+          matchId: m0.id,
+          type: 'finished',
+          byUserId: m0.judgeUserId,
+          replayEpoch: 0,
+          createdAt: nextIso(),
+        });
+        m0.currentSegmentIndex = stdSegIds.length - 1;
+      }
+
+      const lp0 = liveM.participants[0].playerId!;
+      const lp1 = liveM.participants[1].playerId!;
+      matchEvents.push({
+        id: `me-seed-live-${evSeq}`,
+        matchId: liveM.id,
+        type: 'started',
+        byUserId: liveM.judgeUserId,
+        replayEpoch: 0,
+        createdAt: nextIso(),
+      });
+      addPoint(liveM.id, lp0, 1, 'point', liveM.judgeUserId, stdSegIds[0], 'Fast buzzer answer');
+      addPoint(liveM.id, lp0, 1, 'point', liveM.judgeUserId, stdSegIds[1]);
+      addPoint(liveM.id, lp1, 1, 'point', liveM.judgeUserId, stdSegIds[1]);
+      addPoint(liveM.id, lp1, -1, 'yellow', liveM.judgeUserId, stdSegIds[2], 'Yellow card (−1)');
+      addPoint(liveM.id, lp1, 1, 'point', liveM.judgeUserId, stdSegIds[2]);
+      liveM.currentSegmentIndex = 2;
+      liveM.timer = { status: 'paused', durationSec: 45, remainingSec: 28, endsAt: null };
+      buzzEvents.push({
+        id: `buzz-seed-${evSeq}`,
+        matchId: liveM.id,
+        gameId: liveM.id,
+        segmentId: stdSegIds[2],
+        playerId: lp0,
+        byUserId: liveM.judgeUserId,
+        cleared: false,
+        replayEpoch: 0,
+        createdAt: nextIso(),
+      });
+    }
+
+    auditEntries.push({
+      id: `audit-seed-init`,
+      actorUserId: 'user-admin',
+      action: 'tournament.generate',
+      entityType: 'bracket',
+      entityId: 'tournament-bracket',
+      summary: `Generated ${tournament.totalPlayers}-player tournament: ${groups.length} groups of ${tournament.groupSize}, ${groupMatches.length} group matches, ${koTree.matches.length} knockout/final matches (${koTree.byesCount} BYEs).`,
+      summaryAr: `تم توليد بطولة ${tournament.totalPlayers} لاعب: ${groups.length} مجموعة (${tournament.groupSize} لاعبين)، ${groupMatches.length} مباراة مجموعات و${koTree.matches.length} مباراة إقصائية.`,
+      before: null,
+      after: {
+        totalPlayers: tournament.totalPlayers,
+        groupsCount: groups.length,
+        matchesCount: scheduledTournamentMatches.length,
+        byesCount: koTree.byesCount,
+      },
+      automatic: false,
+      createdAt: new Date(baseStoryMs).toISOString(),
+    });
+  }
 
   const settings: Settings = {
     id: 'global-settings',
     eventName: 'Casino El Al3ab — Ramadan Tournament',
-    eventNameAr: 'بطولة كازينو الألعاب الرمضانية',
-    eventDates: 'Ramadan 2027 · Nights 14–18 (Placeholder)',
-    eventDatesAr: 'رمضان ٢٠٢٧ · الليالي ١٤ إلى ١٨ (موعد مبدئي)',
+    eventNameAr: 'كازينو الألعاب — بطولة رمضان الكبرى',
+    eventDates: 'Ramadan 2027 (Placeholder Dates)',
+    eventDatesAr: 'رمضان ٢٠٢٧ (مواعيد مبدئية)',
     finalNightIso: '2027-03-22T21:00:00.000Z',
-    venue: 'Grand Nile Studio, Cairo (Placeholder Venue)',
-    venueAr: 'استوديو النيل الكبير، القاهرة (موقع مبدئي)',
-    prizeText: 'Grand Championship Trophy + Sponsor Prize Package (Placeholder)',
-    prizeTextAr: 'كأس البطولة الذهبي + جوائز الرعاة الكبرى (قيمة مبدئية)',
-    contactEmail: 'partnerships@casinoelal3ab-pitch.com',
+    venue: 'Cairo Grand Studio Arena (Placeholder Venue)',
+    venueAr: 'استوديو القاهرة الكبرى (موقع مبدئي)',
+    prizeText: 'Grand Trophy + Championship Prize Package (Placeholder)',
+    prizeTextAr: 'كأس البطولة وحزمة الجوائز الكبرى (مبدئية)',
+    contactEmail: 'partnerships@casinoelal3ab-demo.com',
     defaultLanguage: 'en',
     useArabicIndicDigits: false,
     delightersEnabled: false,
     soundEnabled: false,
-    bracketConfig: {
-      totalPlayers: 27,
-      playersPerGame: 3,
-      round1Games: 9,
-      round2Games: 3,
-      semiGames: 1,
-      semiAdvanceCount: 2,
-    },
-    updatedAt: '2026-11-18T06:00:00.000Z',
+    tournament,
+    bracketConfig: buildBracketConfigCompat(tournament),
+    updatedAt: '2027-02-28T18:00:00.000Z',
   };
+
+  // 6. Run pure engine propagation so ALL derived fields (winners, statuses, standings,
+  //    qualifiers, knockout slots, round statuses, player stats/status) are 100% consistent!
+  const propagated = propagateWinners({
+    players,
+    groups,
+    rounds,
+    matches,
+    scoreEvents,
+    absenceEvents,
+    buzzEvents,
+    matchEvents,
+    checkInEvents,
+    settings: tournament,
+  });
 
   return {
     version: SEED_VERSION,
-    players,
+    players: propagated.players,
     users,
-    rounds,
+    groups,
+    rounds: propagated.rounds,
     segments,
-    games: [...games, demoSeed.game],
-    scoreEvents: [...demoSeed.scoreEvents, ...scoreEvents],
-    buzzEvents: [...demoSeed.buzzEvents, ...buzzEvents],
-    auditEntries,
+    matches: propagated.matches,
+    scoreEvents: scoreEvents.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+    absenceEvents: absenceEvents.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+    buzzEvents: buzzEvents.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+    matchEvents: matchEvents.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
+    checkInEvents: checkInEvents.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
+    auditEntries: auditEntries.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
     sponsors,
     contentItems,
     settings,
