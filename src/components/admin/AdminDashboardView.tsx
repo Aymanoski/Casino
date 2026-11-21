@@ -631,7 +631,9 @@ export function AdminDashboardView() {
                               <div className="flex min-w-0 items-center gap-2">
                                 <PlayerAvatar
                                   name={p ? localizeText(lang, p.fullName, p.fullNameAr) : pid}
+                                  playerId={p?.id ?? pid}
                                   avatarSeed={p?.avatarSeed ?? pid}
+                                  avatar={p?.avatar}
                                   size="xs"
                                   isHost={p?.isHost}
                                 />

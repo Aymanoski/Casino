@@ -9,13 +9,14 @@ import { LiveBadge } from './LiveBadge';
 import { MarqueeBulbs } from './MarqueeBulbs';
 import { PlayerAvatar } from './PlayerAvatar';
 
-import type { MatchStatus } from '@/lib/schemas';
+import type { Avatar as AvatarType, MatchStatus } from '@/lib/schemas';
 
 export interface BracketPlayerSlot {
   id?: string;
   name: string;
   nickname?: string;
   avatarSeed?: string;
+  avatar?: AvatarType | null;
   score?: number;
   yellowCards?: number;
   redCards?: number;
@@ -219,7 +220,9 @@ export const BracketNode = React.memo(function BracketNode({
                 {!slot.isBye && (
                   <PlayerAvatar
                     name={slot.name}
+                    playerId={slot.id}
                     avatarSeed={slot.avatarSeed ?? slot.name}
+                    avatar={slot.avatar}
                     size="xs"
                     isHost={slot.isHost}
                     className="hidden @2xs:inline-flex"

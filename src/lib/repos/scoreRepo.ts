@@ -4,6 +4,7 @@ import type {
   Player,
   ScoreEvent,
   ScoreEventKind,
+  UserRole,
 } from '@/lib/schemas';
 import {
   computeLeaderboard,
@@ -13,6 +14,7 @@ import {
 } from '@/lib/engine';
 import { commands, type CascadePolicy } from '@/lib/commands';
 import { storage } from '@/lib/storage';
+import { redactScoreEventForRole, resolveViewerRole } from './permissions';
 
 export interface LeaderboardEntry {
   rank: number;
@@ -37,11 +39,16 @@ export const scoreRepo = {
     scorerUserId?: string;
     order?: 'newest' | 'oldest';
     includeDemo?: boolean;
+    viewerRole?: UserRole | 'visitor' | null;
+    actorUserId?: string | null;
   }): Promise<ScoreEvent[]> {
     const matchFilter = options?.matchId ?? options?.gameId;
+    const needsRoleResolution = Boolean(
+      options?.viewerRole || options?.actorUserId
+    );
 
-    // Fast indexed path for single-match or single-player lookups (scales to 100k+ events!)
-    if (matchFilter && !options?.roundId) {
+    // Fast indexed path for single-match lookups when no role redaction is needed
+    if (matchFilter && !options?.roundId && !needsRoleResolution) {
       let events = await storage.getScoreEventsByMatch(matchFilter);
       if (options?.playerId) {
         events = events.filter((e) => e.playerId === options.playerId);
@@ -57,6 +64,8 @@ export const scoreRepo = {
     }
 
     const db = await storage.readSnapshot();
+    const effectiveRole = resolveViewerRole(db, options);
+    const matchMap = new Map(db.matches.map((m) => [m.id, m]));
     const demoMatchIds = new Set(
       db.matches.filter((m) => m.isDemo).map((m) => m.id)
     );
@@ -85,19 +94,57 @@ export const scoreRepo = {
       return options?.order === 'oldest' ? -diff : diff;
     });
 
-    return events;
+    if (!effectiveRole) {
+      return events;
+    }
+    return events.map((ev) =>
+      redactScoreEventForRole(ev, matchMap.get(ev.matchId), effectiveRole)
+    );
   },
 
-  async listByGame(gameId: string): Promise<ScoreEvent[]> {
-    return this.list({ matchId: gameId, order: 'newest' });
+  async listByGame(
+    gameId: string,
+    options?: {
+      viewerRole?: UserRole | 'visitor' | null;
+      actorUserId?: string | null;
+    }
+  ): Promise<ScoreEvent[]> {
+    return this.list({
+      matchId: gameId,
+      order: 'newest',
+      viewerRole: options?.viewerRole,
+      actorUserId: options?.actorUserId,
+    });
   },
 
-  async listByMatch(matchId: string): Promise<ScoreEvent[]> {
-    return this.list({ matchId, order: 'newest' });
+  async listByMatch(
+    matchId: string,
+    options?: {
+      viewerRole?: UserRole | 'visitor' | null;
+      actorUserId?: string | null;
+    }
+  ): Promise<ScoreEvent[]> {
+    return this.list({
+      matchId,
+      order: 'newest',
+      viewerRole: options?.viewerRole,
+      actorUserId: options?.actorUserId,
+    });
   },
 
-  async listByPlayer(playerId: string): Promise<ScoreEvent[]> {
-    return this.list({ playerId, order: 'newest' });
+  async listByPlayer(
+    playerId: string,
+    options?: {
+      viewerRole?: UserRole | 'visitor' | null;
+      actorUserId?: string | null;
+    }
+  ): Promise<ScoreEvent[]> {
+    return this.list({
+      playerId,
+      order: 'newest',
+      viewerRole: options?.viewerRole,
+      actorUserId: options?.actorUserId,
+    });
   },
 
   async listBuzzByGame(gameId: string): Promise<BuzzEvent[]> {

@@ -16,6 +16,7 @@
  */
 
 import {
+  AVATAR_LIBRARY_KEYS,
   MARWAN_PLAYER_ID,
   type AbsenceEvent,
   type AuditEntry,
@@ -160,6 +161,70 @@ function createAuditRecord(input: {
     after: input.after ?? null,
     automatic: input.automatic ?? false,
     createdAt: nextIsoTimestamp(),
+  };
+}
+
+const ALLOWED_AVATAR_KEY_SET = new Set<string>(AVATAR_LIBRARY_KEYS);
+export const MAX_AVATAR_PHOTO_BYTES = 310 * 1024; // ~300KB max (with small base64 header tolerance)
+const ALLOWED_IMAGE_DATA_URL_PREFIXES = [
+  'data:image/jpeg;base64,',
+  'data:image/jpg;base64,',
+  'data:image/png;base64,',
+  'data:image/webp;base64,',
+] as const;
+
+export function estimateDataUrlByteSize(dataUrl: string): number {
+  const commaIdx = dataUrl.indexOf(',');
+  if (commaIdx === -1) return dataUrl.length;
+  const base64 = dataUrl.slice(commaIdx + 1).trim();
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+}
+
+export function validatePlayerAvatarInput(
+  avatar: Avatar,
+  targetPlayer: Player
+): Avatar {
+  const rawKey = avatar.avatarKey?.trim() || targetPlayer.avatar.avatarKey || deterministicAvatarKey(targetPlayer.seed || 1);
+  if (!ALLOWED_AVATAR_KEY_SET.has(rawKey)) {
+    throw new CommandValidationError(
+      `Invalid 3D avatar key "${rawKey}". Expected one of avatar-01..avatar-24.`
+    );
+  }
+
+  const rawPhoto = avatar.photoUrl?.trim() ? avatar.photoUrl.trim() : null;
+  if (rawPhoto) {
+    if (
+      targetPlayer.isGuest ||
+      targetPlayer.isHost ||
+      targetPlayer.id === MARWAN_PLAYER_ID
+    ) {
+      throw new CommandValidationError(
+        'Marwan Serry is a name-only guest host and cannot have a profile photo.'
+      );
+    }
+
+    const lower = rawPhoto.toLowerCase();
+    const hasAllowedMime = ALLOWED_IMAGE_DATA_URL_PREFIXES.some((prefix) =>
+      lower.startsWith(prefix)
+    );
+    if (!hasAllowedMime) {
+      throw new CommandValidationError(
+        'Invalid image file type. Only JPEG, PNG, and WebP profile photos are allowed.'
+      );
+    }
+
+    const byteSize = estimateDataUrlByteSize(rawPhoto);
+    if (byteSize > MAX_AVATAR_PHOTO_BYTES) {
+      throw new CommandValidationError(
+        `Profile photo is too large (${Math.round(byteSize / 1024)}KB). Maximum allowed size is 300KB.`
+      );
+    }
+  }
+
+  return {
+    photoUrl: rawPhoto,
+    avatarKey: rawKey,
   };
 }
 
@@ -3866,6 +3931,9 @@ export const commands = {
       const nextPhone = input.patch.phone ?? before.contact.phone;
       const nextWa = input.patch.whatsapp ?? before.contact.whatsapp;
       const nextEmail = input.patch.email ?? before.contact.email;
+      const nextAvatar = input.patch.avatar
+        ? validatePlayerAvatarInput(input.patch.avatar, before)
+        : before.avatar;
 
       const updated: Player = {
         ...before,
@@ -3874,7 +3942,7 @@ export const commands = {
         nickname: input.patch.nickname ?? before.nickname,
         nicknameAr: input.patch.nicknameAr ?? before.nicknameAr,
         seed: input.patch.seed ?? before.seed,
-        avatar: input.patch.avatar ?? before.avatar,
+        avatar: nextAvatar,
         contact: { phone: nextPhone, whatsapp: nextWa, email: nextEmail },
         phone: nextPhone,
         email: nextEmail,
@@ -3889,8 +3957,22 @@ export const commands = {
           entityId: updated.id,
           summary: `Updated player profile for ${updated.fullName}`,
           summaryAr: `تم تحديث بيانات اللاعب ${updated.fullNameAr}`,
-          before: { fullName: before.fullName, phone: before.phone, email: before.email },
-          after: { fullName: updated.fullName, phone: updated.phone, email: updated.email },
+          before: {
+            fullName: before.fullName,
+            nickname: before.nickname,
+            phone: before.phone,
+            email: before.email,
+            avatarKey: before.avatar.avatarKey,
+            hasPhoto: Boolean(before.avatar.photoUrl),
+          },
+          after: {
+            fullName: updated.fullName,
+            nickname: updated.nickname,
+            phone: updated.phone,
+            email: updated.email,
+            avatarKey: updated.avatar.avatarKey,
+            hasPhoto: Boolean(updated.avatar.photoUrl),
+          },
         })
       );
 
@@ -3915,19 +3997,41 @@ export const commands = {
       if (idx === -1) return { result: null, nextDb: db, broadcasts: [] };
 
       const before = db.players[idx];
-      const updated: Player = { ...before, avatar: input.avatar };
+      const validatedAvatar = validatePlayerAvatarInput(input.avatar, before);
+      const updated: Player = { ...before, avatar: validatedAvatar };
       db.players[idx] = updated;
+
+      const photoRemoved = Boolean(before.avatar.photoUrl && !validatedAvatar.photoUrl);
+      const photoUploaded = Boolean(validatedAvatar.photoUrl && validatedAvatar.photoUrl !== before.avatar.photoUrl);
 
       db.auditEntries.unshift(
         createAuditRecord({
           actorUserId: input.actorUserId,
-          action: 'player.updateAvatar',
+          action: photoRemoved
+            ? 'player.removePhoto'
+            : photoUploaded
+              ? 'player.uploadPhoto'
+              : 'player.updateAvatar',
           entityType: 'player',
           entityId: updated.id,
-          summary: `Updated avatar for ${updated.fullName}`,
-          summaryAr: `تم تحديث صورة اللاعب ${updated.fullNameAr}`,
-          before: { avatarKey: before.avatar.avatarKey, hasPhoto: Boolean(before.avatar.photoUrl) },
-          after: { avatarKey: updated.avatar.avatarKey, hasPhoto: Boolean(updated.avatar.photoUrl) },
+          summary: photoRemoved
+            ? `Removed profile photo for ${updated.fullName} (reverted to 3D avatar ${updated.avatar.avatarKey})`
+            : photoUploaded
+              ? `Updated profile photo for ${updated.fullName}`
+              : `Changed 3D avatar for ${updated.fullName} to ${updated.avatar.avatarKey}`,
+          summaryAr: photoRemoved
+            ? `تم حذف الصورة الشخصية للاعب ${updated.fullNameAr}`
+            : photoUploaded
+              ? `تم تحديث الصورة الشخصية للاعب ${updated.fullNameAr}`
+              : `تم تغيير الأفاتار ثلاثي الأبعاد للاعب ${updated.fullNameAr}`,
+          before: {
+            avatarKey: before.avatar.avatarKey,
+            hasPhoto: Boolean(before.avatar.photoUrl),
+          },
+          after: {
+            avatarKey: updated.avatar.avatarKey,
+            hasPhoto: Boolean(updated.avatar.photoUrl),
+          },
         })
       );
 
@@ -3935,6 +4039,92 @@ export const commands = {
         result: updated,
         nextDb: db,
         broadcasts: [{ event: 'player.updated', payload: { playerId: updated.id } }],
+      };
+    });
+  },
+
+  async updateOwnPlayerProfile(input: {
+    playerId: string;
+    patch: {
+      nickname?: string;
+      nicknameAr?: string;
+      avatar?: Avatar;
+    };
+    actorUserId: string;
+  }): Promise<Player | null> {
+    return commitCommand(input.actorUserId, (_beforeDb, db) => {
+      assertRepoPermission(db, input.actorUserId, 'player.updateOwnProfile', {
+        targetPlayerId: input.playerId,
+      });
+      const idx = db.players.findIndex((p) => p.id === input.playerId);
+      if (idx === -1) return { result: null, nextDb: db, broadcasts: [] };
+
+      const before = db.players[idx];
+      const nextNick = input.patch.nickname !== undefined
+        ? input.patch.nickname.trim()
+        : before.nickname;
+      if (!nextNick) {
+        throw new CommandValidationError('Nickname cannot be empty.');
+      }
+      const nextNickAr = input.patch.nicknameAr !== undefined
+        ? input.patch.nicknameAr.trim() || nextNick
+        : before.nicknameAr;
+
+      const nextAvatar = input.patch.avatar
+        ? validatePlayerAvatarInput(input.patch.avatar, before)
+        : before.avatar;
+
+      const updated: Player = {
+        ...before,
+        nickname: nextNick,
+        nicknameAr: nextNickAr,
+        avatar: nextAvatar,
+      };
+      db.players[idx] = updated;
+
+      // Sync linked player user display name if one exists
+      const uIdx = db.users.findIndex((u) => u.playerId === updated.id);
+      if (uIdx !== -1) {
+        const u = db.users[uIdx];
+        db.users[uIdx] = {
+          ...u,
+          name: `${updated.fullName} "${updated.nickname}"`,
+          nameAr: `${updated.fullNameAr} "${updated.nicknameAr}"`,
+        };
+      }
+
+      db.auditEntries.unshift(
+        createAuditRecord({
+          actorUserId: input.actorUserId,
+          action: 'player.updateOwnProfile',
+          entityType: 'player',
+          entityId: updated.id,
+          summary: `Updated profile/avatar for ${updated.fullName} ("${updated.nickname}")`,
+          summaryAr: `تم تحديث الملف الشخصي والصورة للاعب ${updated.fullNameAr} ("${updated.nicknameAr}")`,
+          before: {
+            nickname: before.nickname,
+            nicknameAr: before.nicknameAr,
+            avatarKey: before.avatar.avatarKey,
+            hasPhoto: Boolean(before.avatar.photoUrl),
+          },
+          after: {
+            nickname: updated.nickname,
+            nicknameAr: updated.nicknameAr,
+            avatarKey: updated.avatar.avatarKey,
+            hasPhoto: Boolean(updated.avatar.photoUrl),
+          },
+        })
+      );
+
+      return {
+        result: updated,
+        nextDb: db,
+        broadcasts: [
+          { event: 'player.updated', payload: { playerId: updated.id } },
+          ...(uIdx !== -1
+            ? [{ event: 'user.updated' as RealtimeEventName, payload: { userId: db.users[uIdx].id } }]
+            : []),
+        ],
       };
     });
   },

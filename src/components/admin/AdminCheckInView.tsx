@@ -423,7 +423,9 @@ export function AdminCheckInView() {
                             <div className="flex min-w-0 items-center gap-2.5">
                               <PlayerAvatar
                                 name={localizeText(lang, p.fullName, p.fullNameAr)}
+                                playerId={p.id}
                                 avatarSeed={p.avatarSeed}
+                                avatar={p.avatar}
                                 size="sm"
                               />
                               <div className="min-w-0">
@@ -483,7 +485,9 @@ export function AdminCheckInView() {
                   <div className="flex min-w-0 items-center gap-3">
                     <PlayerAvatar
                       name={localizeText(lang, p.fullName, p.fullNameAr)}
+                      playerId={p.id}
                       avatarSeed={p.avatarSeed}
+                      avatar={p.avatar}
                       size="sm"
                     />
                     <div className="min-w-0">

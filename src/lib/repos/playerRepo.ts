@@ -117,6 +117,22 @@ export const playerRepo = {
     });
   },
 
+  async updateOwnProfile(
+    id: string,
+    patch: {
+      nickname?: string;
+      nicknameAr?: string;
+      avatar?: Avatar;
+    },
+    actorUserId: string
+  ): Promise<Player | null> {
+    return commands.updateOwnPlayerProfile({
+      playerId: id,
+      patch,
+      actorUserId,
+    });
+  },
+
   /**
    * Records gate arrival check-in via append-only CheckInEvent.
    */

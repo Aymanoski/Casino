@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Crown, Minus, Plus } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { cn, formatNumber } from '@/lib/utils';
+import type { Avatar as AvatarType } from '@/lib/schemas';
 import { PlayerAvatar } from './PlayerAvatar';
 import { ScoreChip, type ScoreChipTone } from './ScoreChip';
 import { AnimatedNumber } from './AnimatedNumber';
@@ -12,9 +13,11 @@ import { Badge } from '@/components/ui/badge';
 
 export interface ScoreboardRowProps {
   rank: number;
+  playerId?: string;
   name: string;
   nickname?: string;
   avatarSeed?: string;
+  avatar?: AvatarType | null;
   score: number;
   recentDelta?: number | null;
   gamesPlayed?: number;
@@ -36,9 +39,11 @@ export interface ScoreboardRowProps {
  */
 export function ScoreboardRow({
   rank,
+  playerId,
   name,
   nickname,
   avatarSeed,
+  avatar,
   score,
   recentDelta = null,
   gamesPlayed,
@@ -110,7 +115,9 @@ export function ScoreboardRow({
 
         <PlayerAvatar
           name={name}
+          playerId={playerId}
           avatarSeed={avatarSeed}
+          avatar={avatar}
           size="sm"
           isHost={isHost}
           className="hidden @2xs:inline-flex"

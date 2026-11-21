@@ -541,7 +541,9 @@ export function BigScreenLeaderboardView() {
 
                       <PlayerAvatar
                         name={pName}
+                        playerId={entry.player.id}
                         avatarSeed={entry.player.avatarSeed}
+                        avatar={entry.player.avatar}
                         size="lg"
                         buzzed={isHighlighted}
                         className="h-11 w-11 xl:h-14 xl:w-14 3xl:h-[4.5rem] 3xl:w-[4.5rem] shrink-0"
@@ -829,7 +831,9 @@ export function BigScreenLeaderboardView() {
 
                         <PlayerAvatar
                           name={pName}
+                          playerId={entry.player.id}
                           avatarSeed={entry.player.avatarSeed}
+                          avatar={entry.player.avatar}
                           size="sm"
                           buzzed={isHighlighted}
                           className="hidden xs:inline-flex h-10 w-10 xl:h-12 xl:w-12 3xl:h-16 3xl:w-16 shrink-0"

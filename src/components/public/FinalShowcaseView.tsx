@@ -7,6 +7,7 @@ import {
   Calendar,
   Clock,
   Crown,
+  Lock,
   MapPin,
   MonitorPlay,
   Sparkles,
@@ -78,7 +79,7 @@ export function FinalShowcaseView() {
       const [settings, rounds, games, players, segments] = await Promise.all([
         settingsRepo.get(),
         roundRepo.list(),
-        gameRepo.list(),
+        gameRepo.list({ viewerRole: 'visitor' }),
         playerRepo.list({ includeHost: true }),
         segmentRepo.list(),
       ]);
@@ -191,11 +192,12 @@ export function FinalShowcaseView() {
     const seatCenter = buildSeat(hostId, 2, true);
     const seatRight = buildSeat(challengerIds[1], 1, false);
 
-    const finalSegments: Segment[] = finalGame
-      ? finalGame.segmentIds
-          .map((id) => segmentMap.get(id))
-          .filter((s): s is Segment => Boolean(s))
-      : [];
+    const finalSegments: Segment[] =
+      finalGame && finalGame.status === 'finished'
+        ? finalGame.segmentIds
+            .map((id) => segmentMap.get(id))
+            .filter((s): s is Segment => Boolean(s))
+        : [];
 
     const roadRounds = [...data.rounds]
       .sort((a, b) => a.order - b.order)
@@ -410,10 +412,13 @@ export function FinalShowcaseView() {
                   </div>
 
                   <Badge variant="muted">
-                    {formatNumber(finalSegments.length || 8, {
-                      useArabicIndicDigits: useArabicIndic,
-                    })}{' '}
-                    {lang === 'ar' ? 'فقرات نهائية' : 'Final Segments'}
+                    {isFinalFinished
+                      ? `${formatNumber(finalSegments.length || 8, {
+                          useArabicIndicDigits: useArabicIndic,
+                        })} ${lang === 'ar' ? 'فقرات ملعوبة' : 'Segments Played'}`
+                      : lang === 'ar'
+                        ? 'فقرات مفاجئة تُكشف مباشرة'
+                        : 'Surprise Live Segments'}
                   </Badge>
                 </div>
 
@@ -518,7 +523,9 @@ export function FinalShowcaseView() {
                           <div className="flex flex-col items-center text-center gap-3 py-2">
                             <PlayerAvatar
                               name={seat.name}
+                              playerId={seat.id}
                               avatarSeed={seat.avatarSeed}
+                              avatar={seat.avatar}
                               size={isCenter ? 'xl' : 'lg'}
                               isHost={isCenter}
                             />
@@ -789,7 +796,55 @@ export function FinalShowcaseView() {
             </Button>
           </div>
 
-          {finalSegments.length === 0 ? (
+          {!isFinalFinished ? (
+            <div className="rounded-card border-[3px] border-outline bg-white p-6 sm:p-8 text-ink shadow-sticker-lg">
+              <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-start gap-4 min-w-0">
+                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-pill border-[2.5px] border-outline bg-gold-gradient text-red-900 shadow-sticker-sm">
+                    <Lock className="h-6 w-6" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="gold">
+                        {lang === 'ar'
+                          ? 'مفاجأة المسرح المباشر'
+                          : 'SURPRISE STAGE LINEUP'}
+                      </Badge>
+                      <Badge variant="red">
+                        {lang === 'ar'
+                          ? 'سرية حتى انتهاء النهائي'
+                          : 'CONFIDENTIAL UNTIL FINISHED'}
+                      </Badge>
+                    </div>
+                    <h3 className="font-display text-2xl sm:text-3xl text-red-900 leading-tight">
+                      {lang === 'ar'
+                        ? 'فقرات النهائي تبقى مفاجأة حتى تُكشف مباشرة على المسرح'
+                        : 'Final Segments Stay Secret Until Revealed Live on Stage'}
+                    </h3>
+                    <p className="text-sm sm:text-base text-ink-muted leading-relaxed max-w-2xl">
+                      {lang === 'ar'
+                        ? 'لضمان تكافؤ الفرص ومنع التحضير المسبق، لا تُعلن فقرات النهائي الكبير قبل المباراة. تُكشف كل فقرة لحظة بلحظة على شاشة العرض العملاقة، ويُنشر السجل الكامل للفقرات هنا فور تتويج البطل.'
+                        : 'To keep the championship showdown a true test of spontaneous wit for both finalists and Marwan Serry, the Grand Final segments are never disclosed in advance. Each challenge appears live on the Big Screen and unlocks here after the Final finishes.'}
+                    </p>
+                  </div>
+                </div>
+
+                <Button variant="red" size="lg" asChild className="shrink-0">
+                  <Link href="/segments">
+                    <span>
+                      {lang === 'ar'
+                        ? 'كيف تعمل فقرات البرنامج؟'
+                        : 'Explore General Segment Rules'}
+                    </span>
+                    <ArrowRight
+                      className="h-4 w-4 rtl:rotate-180"
+                      aria-hidden="true"
+                    />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          ) : finalSegments.length === 0 ? (
             <EmptyState
               title={
                 lang === 'ar'

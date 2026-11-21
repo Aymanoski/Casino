@@ -14,6 +14,7 @@ import {
 import { useI18n } from '@/lib/i18n';
 import { cn, formatNumber } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import type { Avatar as AvatarType } from '@/lib/schemas';
 import { PlayerAvatar } from './PlayerAvatar';
 import { AnimatedNumber } from './AnimatedNumber';
 import { MarqueeBulbs } from './MarqueeBulbs';
@@ -28,6 +29,7 @@ export interface PlayerPanelProps {
   name: string;
   nickname?: string;
   avatarSeed?: string;
+  avatar?: AvatarType | null;
   score: number;
   rank?: number;
   yellowCards?: number;
@@ -74,9 +76,11 @@ export interface PlayerPanelProps {
  * - Scorer controls (+1, −1, Yellow −1, Red −2, Buzz) >= 56px tall; Contact & Absent >= 44px
  */
 export function PlayerPanel({
+  playerId,
   name,
   nickname,
   avatarSeed,
+  avatar,
   score,
   rank,
   yellowCards = 0,
@@ -252,7 +256,9 @@ export function PlayerPanel({
       >
         <PlayerAvatar
           name={name}
+          playerId={playerId}
           avatarSeed={avatarSeed}
+          avatar={avatar}
           size={isLargeScreen ? 'xl' : 'lg'}
           isHost={isHost}
           buzzed={isBuzzed && !isAbsent}

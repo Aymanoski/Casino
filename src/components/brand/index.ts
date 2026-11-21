@@ -10,6 +10,7 @@ export * from './SectionHeading';
 export * from './LiveBadge';
 export * from './ScoreChip';
 export * from './AnimatedNumber';
+export * from './AvatarLibrary3D';
 export * from './PlayerAvatar';
 export * from './PlayerPanel';
 export * from './DisciplinaryCards';

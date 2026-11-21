@@ -1103,7 +1103,9 @@ export function SessionHistoryDrawer({
                                   player.fullName,
                                   player.fullNameAr
                                 )}
+                                playerId={player.id}
                                 avatarSeed={player.avatarSeed}
+                                avatar={player.avatar}
                                 size="sm"
                                 isHost={player.isHost}
                                 className="mt-0.5 h-9 w-9 shrink-0"

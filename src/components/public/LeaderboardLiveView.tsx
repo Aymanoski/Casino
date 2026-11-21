@@ -391,7 +391,9 @@ export function LeaderboardLiveView() {
                         entry.player.fullName,
                         entry.player.fullNameAr
                       )}
+                      playerId={entry.player.id}
                       avatarSeed={entry.player.avatarSeed}
+                      avatar={entry.player.avatar}
                       size={isFirst ? 'lg' : 'md'}
                     />
 
@@ -693,9 +695,11 @@ export function LeaderboardLiveView() {
                   >
                     <ScoreboardRow
                       rank={entry.rank}
+                      playerId={entry.player.id}
                       name={localizeText(lang, entry.player.fullName, entry.player.fullNameAr)}
                       nickname={localizeText(lang, entry.player.nickname, entry.player.nicknameAr)}
                       avatarSeed={entry.player.avatarSeed}
+                      avatar={entry.player.avatar}
                       score={entry.totalPoints}
                       recentDelta={delta}
                       gamesPlayed={entry.gamesPlayed}
@@ -727,6 +731,7 @@ export function LeaderboardLiveView() {
                       <div className="relative">
                         <ScoreboardRow
                           rank={entry.rank}
+                          playerId={entry.player.id}
                           name={localizeText(
                             lang,
                             entry.player.fullName,
@@ -738,6 +743,7 @@ export function LeaderboardLiveView() {
                             entry.player.nicknameAr
                           )}
                           avatarSeed={entry.player.avatarSeed}
+                          avatar={entry.player.avatar}
                           score={entry.totalPoints}
                           recentDelta={delta}
                           gamesPlayed={entry.gamesPlayed}

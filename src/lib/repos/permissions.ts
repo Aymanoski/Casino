@@ -1,6 +1,7 @@
 import type {
   DatabaseSnapshot,
   Match,
+  ScoreEvent,
   User,
   UserRole,
 } from '@/lib/schemas';
@@ -16,6 +17,7 @@ export type RepoAction =
   | 'player.manage'
   | 'player.checkIn'
   | 'player.updateOwnAvatar'
+  | 'player.updateOwnProfile'
   | 'user.manage'
   | 'bracket.manage'
   | 'game.operate'
@@ -215,6 +217,7 @@ export function canRolePerformAction(
     case 'contact.viewJudge':
       return role === 'player' || role === 'scorer';
     case 'player.updateOwnAvatar':
+    case 'player.updateOwnProfile':
       return role === 'player';
     case 'segment.editCopy':
     case 'content.manage':
@@ -349,17 +352,17 @@ export function assertRepoPermission(
     }
   }
 
-  // Player updating their own avatar only
+  // Player updating their own avatar or profile only
   if (
-    action === 'player.updateOwnAvatar' &&
+    (action === 'player.updateOwnAvatar' ||
+      action === 'player.updateOwnProfile') &&
     role === 'player' &&
-    context?.targetPlayerId &&
-    actor.playerId !== context.targetPlayerId
+    (!context?.targetPlayerId || actor.playerId !== context.targetPlayerId)
   ) {
     throw new PermissionDeniedError(
       action,
       role,
-      'Players may only update their own avatar.'
+      'Players may only update their own profile and avatar.'
     );
   }
 
@@ -367,18 +370,45 @@ export function assertRepoPermission(
 }
 
 /**
+ * Resolves the effective viewer role from either an explicit viewerRole
+ * or an actorUserId looked up against db.users.
+ */
+export function resolveViewerRole(
+  db: DatabaseSnapshot,
+  options?: {
+    viewerRole?: UserRole | 'visitor' | null;
+    actorUserId?: string | null;
+  }
+): UserRole | 'visitor' | null {
+  if (options?.viewerRole) {
+    return options.viewerRole;
+  }
+  if (options?.actorUserId) {
+    const actor = resolveActorUser(db, options.actorUserId);
+    return actor?.role ?? 'visitor';
+  }
+  return null;
+}
+
+/**
  * Repository-level segment secrecy filter (AGENTS.md §15.3):
- * Players MUST NOT receive segment names/order/IDs for upcoming or live matches
+ * Players and public visitors MUST NOT receive segment names/order/IDs for upcoming or live matches
  * so segments stay a surprise until finished (or shown live on venue Big Screen).
  */
 export function redactMatchForRole(
   match: Match,
   role?: UserRole | 'visitor' | null
 ): Match {
-  if (!role || role === 'superAdmin' || role === 'scorer' || role === 'content' || role === 'checkIn') {
+  if (
+    !role ||
+    role === 'superAdmin' ||
+    role === 'scorer' ||
+    role === 'content' ||
+    role === 'checkIn'
+  ) {
     return match;
   }
-  // For 'player' role (and public 'visitor' reads when explicitly scoped):
+  // For 'player' role (and public 'visitor' reads):
   // Hide segment lineup on matches that are NOT finished!
   if (match.status !== 'finished' && !match.isDemo) {
     return {
@@ -388,4 +418,32 @@ export function redactMatchForRole(
     };
   }
   return match;
+}
+
+/**
+ * Repository-level score event segment redaction (AGENTS.md §15.3):
+ * For 'player' and 'visitor' roles, hides segmentId on ScoreEvents belonging
+ * to unfinished matches so live score events cannot leak the active segment.
+ */
+export function redactScoreEventForRole(
+  event: ScoreEvent,
+  match: Match | undefined | null,
+  role?: UserRole | 'visitor' | null
+): ScoreEvent {
+  if (
+    !role ||
+    role === 'superAdmin' ||
+    role === 'scorer' ||
+    role === 'content' ||
+    role === 'checkIn'
+  ) {
+    return event;
+  }
+  if (!match || (match.status !== 'finished' && !match.isDemo)) {
+    return {
+      ...event,
+      segmentId: '',
+    };
+  }
+  return event;
 }

@@ -1,35 +1,28 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Eye, History, User as UserIcon } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
-import type { Player } from '@/lib/schemas';
-import { cn, formatNumber, localizeText } from '@/lib/utils';
+import type { Match, Player } from '@/lib/schemas';
+import { cn, localizeText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { PlayerCombobox } from '@/components/ui/player-combobox';
+import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
 
 export interface PlayerPortalChromeProps {
   players: Player[];
+  matches?: Match[];
   activePlayerId: string;
   onSelectPreviewPlayer?: (playerId: string) => void;
   useArabicIndicDigits?: boolean;
 }
 
-const FEATURED_PREVIEW_IDS: Array<{
-  id: string;
-  tagEn: string;
-  tagAr: string;
-}> = [
-  { id: 'player-1', tagEn: 'Semi-Finalist', tagAr: 'نصف النهائي' },
-  { id: 'player-4', tagEn: 'LIVE Now', tagAr: 'مباشر الآن' },
-  { id: 'player-19', tagEn: 'Upcoming R2', tagAr: 'قادمة د٢' },
-  { id: 'player-25', tagEn: 'Pre-Debut', tagAr: 'قبل أول مباراة' },
-];
-
 export function PlayerPortalChrome({
   players,
+  matches = [],
   activePlayerId,
   onSelectPreviewPlayer,
   useArabicIndicDigits = false,
@@ -49,21 +42,54 @@ export function PlayerPortalChrome({
       href: `/player${querySuffix}`,
       matchExact: true,
       basePath: '/player',
-      label: lang === 'ar' ? 'ملفي الشخصي والمباراة القادمة' : 'My Profile & Next Game',
+      label:
+        lang === 'ar'
+          ? 'ملفي الشخصي والمباراة القادمة'
+          : 'My Profile & Next Match',
       Icon: UserIcon,
     },
     {
       href: `/player/history${querySuffix}`,
       matchExact: false,
       basePath: '/player/history',
-      label: lang === 'ar' ? 'سجل مبارياتي ونقاط الفقرات' : 'My Game History',
+      label:
+        lang === 'ar'
+          ? 'سجل مبارياتي'
+          : 'My Match History',
       Icon: History,
     },
   ];
 
-  const contestants = players
-    .filter((p) => !p.isHost)
-    .sort((a, b) => a.seed - b.seed);
+  const contestants = useMemo(
+    () =>
+      players
+        .filter((p) => !p.isHost && !p.isGuest)
+        .sort((a, b) => a.seed - b.seed),
+    [players]
+  );
+
+  // Dynamically pick 4 showcase presets (1 with upcoming KO/Group match, 1 LIVE now, 1 Group Winner, 1 Pre-Debut)
+  const featuredPresets = useMemo(() => {
+    const liveMatch = matches.find(
+      (m) => !m.isDemo && (m.status === 'live' || m.status === 'needsTieBreak')
+    );
+    const livePlayerId =
+      liveMatch?.participants.find((pt) => pt.playerId)?.playerId ?? 'player-38';
+
+    const list: Array<{ id: string; tagEn: string; tagAr: string }> = [
+      { id: 'player-1', tagEn: 'Upcoming Knockout', tagAr: 'إقصائيات قادمة' },
+      { id: livePlayerId, tagEn: 'LIVE Now', tagAr: 'مباشر الآن' },
+      { id: 'player-19', tagEn: 'Group 7 Winner', tagAr: 'متصدر مجموعة ٧' },
+      { id: 'player-46', tagEn: 'Upcoming Group', tagAr: 'مباراة مجموعة قادمة' },
+    ];
+
+    const seen = new Set<string>();
+    return list.filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return contestants.some((c) => c.id === item.id);
+    });
+  }, [matches, contestants]);
 
   return (
     <div className="space-y-4">
@@ -114,34 +140,33 @@ export function PlayerPortalChrome({
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-2 text-sm font-extrabold text-red-900">
               <Eye className="h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
-              <label htmlFor="admin-player-preview-select">
+              <span>
                 {lang === 'ar'
                   ? 'معاينة بوابة المتسابق باسم:'
                   : 'Previewing Contestant Portal as:'}
-              </label>
+              </span>
             </div>
 
-            <div className="flex w-full min-w-0 flex-wrap items-center gap-2 lg:w-auto">
-              <select
-                id="admin-player-preview-select"
+            <div className="w-full lg:w-96">
+              <PlayerCombobox
+                players={contestants}
                 value={activePlayerId}
-                onChange={(e) => onSelectPreviewPlayer(e.target.value)}
-                className="min-h-[44px] w-full max-w-full min-w-0 sm:w-auto sm:min-w-[230px] rounded-input border-2 border-outline bg-white px-3 py-2 text-base font-bold text-ink focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-              >
-                {contestants.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    #{formatNumber(p.seed, { useArabicIndicDigits })}{' '}
-                    {localizeText(lang, p.fullName, p.fullNameAr)} — “
-                    {localizeText(lang, p.nickname, p.nicknameAr)}”
-                  </option>
-                ))}
-              </select>
+                onChange={(id) => {
+                  if (id) onSelectPreviewPlayer(id);
+                }}
+                useArabicIndicDigits={useArabicIndicDigits}
+                ariaLabel={
+                  lang === 'ar'
+                    ? 'اختر متسابقاً للمعاينة'
+                    : 'Select contestant to preview'
+                }
+              />
             </div>
           </div>
 
           {/* 1-Click Quick Showcase Presets */}
           <div className="flex flex-wrap items-center gap-1.5">
-            {FEATURED_PREVIEW_IDS.map((preset) => {
+            {featuredPresets.map((preset) => {
               const p = contestants.find((c) => c.id === preset.id);
               if (!p) return null;
               const isSelected = activePlayerId === p.id;
@@ -152,13 +177,23 @@ export function PlayerPortalChrome({
                   onClick={() => onSelectPreviewPlayer(p.id)}
                   aria-pressed={isSelected}
                   className={cn(
-                    'inline-flex max-w-full min-w-0 min-h-[44px] items-center gap-1.5 rounded-pill border-2 px-3 py-1 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
+                    'inline-flex max-w-full min-w-0 min-h-[44px] items-center gap-2 rounded-pill border-2 px-3 py-1 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
                     isSelected
                       ? 'border-outline bg-red-600 text-white shadow-sticker-sm'
                       : 'border-outline/30 bg-white text-red-900 hover:border-outline'
                   )}
                 >
-                  <span className="truncate">{localizeText(lang, p.fullName, p.fullNameAr)}</span>
+                  <PlayerAvatar
+                    name={localizeText(lang, p.fullName, p.fullNameAr)}
+                    playerId={p.id}
+                    avatarSeed={p.avatarSeed}
+                    avatar={p.avatar}
+                    size="xs"
+                    className="h-6 w-6"
+                  />
+                  <span className="truncate">
+                    {localizeText(lang, p.fullName, p.fullNameAr)}
+                  </span>
                   <span
                     className={cn(
                       'shrink-0 rounded-pill px-1.5 py-0.5 text-[10px] font-extrabold',

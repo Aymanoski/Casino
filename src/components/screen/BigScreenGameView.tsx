@@ -830,7 +830,9 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
 
                     <PlayerAvatar
                       name={pName}
+                      playerId={player.id}
                       avatarSeed={player.avatarSeed}
+                      avatar={player.avatar}
                       size="xl"
                       isHost={isHost}
                       className="h-[clamp(4.5rem,min(7vw,12dvh),8rem)] w-[clamp(4.5rem,min(7vw,12dvh),8rem)]"
@@ -983,7 +985,9 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                             finalStandings[0].player.fullName,
                             finalStandings[0].player.fullNameAr
                           )}
+                          playerId={finalStandings[0].player.id}
                           avatarSeed={finalStandings[0].player.avatarSeed}
+                          avatar={finalStandings[0].player.avatar}
                           size="xl"
                           isHost={Boolean(finalStandings[0].player.isHost)}
                           buzzed
@@ -1099,7 +1103,9 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                       />
                       <PlayerAvatar
                         name={pName}
+                        playerId={entry.player.id}
                         avatarSeed={entry.player.avatarSeed}
+                        avatar={entry.player.avatar}
                         size="md"
                         isHost={Boolean(entry.player.isHost)}
                       />
@@ -1286,6 +1292,7 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                       player.nicknameAr
                     )}
                     avatarSeed={player.avatarSeed}
+                    avatar={player.avatar}
                     score={totals[player.id] ?? 0}
                     yellowCards={yellowByPlayer[player.id] ?? 0}
                     redCards={redByPlayer[player.id] ?? 0}

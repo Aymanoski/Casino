@@ -268,6 +268,7 @@ export function BracketInteractiveView() {
             name: localizeText(lang, p.fullName, p.fullNameAr),
             nickname: localizeText(lang, p.nickname, p.nicknameAr),
             avatarSeed: p.avatarSeed,
+            avatar: p.avatar,
             score: showScores ? (totals[p.id] ?? 0) : undefined,
             isWinner: m.status === 'finished' && winnerId === p.id,
             isAdvancing: m.status === 'finished' && winnerId === p.id,
@@ -602,7 +603,9 @@ export function BracketInteractiveView() {
                               ? localizeText(lang, p.fullName, p.fullNameAr)
                               : part.placeholderLabelEn ?? 'TBD'
                           }
+                          playerId={p?.id}
                           avatarSeed={p?.avatarSeed ?? `tbd-${idx}`}
+                          avatar={p?.avatar}
                           size="sm"
                           isHost={Boolean(part.guest)}
                         />

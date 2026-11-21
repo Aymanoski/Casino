@@ -8,6 +8,7 @@ import { cn, formatNumber } from '@/lib/utils';
 import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
 import { CardCounterGroup } from '@/components/brand/DisciplinaryCards';
 import { MarqueeBulbs } from '@/components/brand/MarqueeBulbs';
+import type { Avatar as AvatarType } from '@/lib/schemas';
 import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
 import { ScoreChip, type ScoreChipTone } from '@/components/brand/ScoreChip';
 
@@ -21,6 +22,7 @@ export interface BroadcastPlayerCardProps {
   name: string;
   nickname?: string;
   avatarSeed?: string;
+  avatar?: AvatarType | null;
   score: number;
   rank: number;
   yellowCards?: number;
@@ -49,9 +51,11 @@ export interface BroadcastPlayerCardProps {
  * - Name-only geometric avatar medallion (never real photos)
  */
 export function BroadcastPlayerCard({
+  playerId,
   name,
   nickname,
   avatarSeed,
+  avatar,
   score,
   rank,
   yellowCards = 0,
@@ -246,7 +250,9 @@ export function BroadcastPlayerCard({
       <div className="relative z-10 my-auto flex flex-col @sm:flex-row items-center text-center @sm:text-start gap-2.5 sm:gap-4 2xl:gap-6 py-3 sm:py-4 2xl:py-6 [@media(max-height:520px)]:py-1.5 [@media(max-height:520px)]:flex-row [@media(max-height:520px)]:text-start">
         <PlayerAvatar
           name={name}
+          playerId={playerId}
           avatarSeed={avatarSeed}
+          avatar={avatar}
           size="xl"
           isHost={isHost}
           buzzed={isBuzzed}

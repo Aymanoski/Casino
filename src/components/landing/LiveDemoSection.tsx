@@ -618,7 +618,9 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
                           <div className="flex min-w-0 items-center gap-2.5">
                             <PlayerAvatar
                               name={displayName}
+                              playerId={player.id}
                               avatarSeed={player.avatarSeed}
+                              avatar={player.avatar}
                               size="sm"
                               buzzed={isBuzzed}
                               selected={isSelected}
@@ -937,6 +939,7 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
                         <ScoreboardRow
                           key={entry.player.id}
                           rank={idx + 1}
+                          playerId={entry.player.id}
                           name={localizeText(
                             lang,
                             entry.player.fullName,
@@ -948,6 +951,7 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
                             entry.player.nicknameAr
                           )}
                           avatarSeed={entry.player.avatarSeed}
+                          avatar={entry.player.avatar}
                           score={entry.score}
                           recentDelta={recentDeltaByPlayer[entry.player.id] ?? null}
                           isHighlighted={

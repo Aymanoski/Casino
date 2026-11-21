@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
+  Camera,
   CheckCircle2,
   Download,
   Eye,
@@ -56,6 +57,8 @@ import { DataTable, type DataTableColumn } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
+import { getAvatar3DDefinition } from '@/components/brand/AvatarLibrary3D';
+import { AvatarEditorDialog } from '@/components/player/AvatarEditorDialog';
 import { ScoreChip } from '@/components/brand/ScoreChip';
 import {
   CardCounterGroup,
@@ -144,11 +147,14 @@ export function AdminPlayersView() {
   const [csvText, setCsvText] = useState('');
   const [importing, setImporting] = useState(false);
 
-  // Profile Drawer
+  // Profile Drawer & Admin Avatar Studio
   const [profilePlayer, setProfilePlayer] = useState<Player | null>(null);
   const [profileHistory, setProfileHistory] = useState<ScoreEvent[]>([]);
   const [profileLoading, setProfileLoading] = useState(false);
   const [busyPlayerId, setBusyPlayerId] = useState<string | null>(null);
+  const [avatarStudioPlayer, setAvatarStudioPlayer] = useState<Player | null>(
+    null
+  );
 
   const mountedRef = useRef(true);
   const loadSeqRef = useRef(0);
@@ -454,6 +460,35 @@ export function AdminPlayersView() {
     }
   };
 
+  const handleAdminRemovePlayerPhoto = async (target: Player) => {
+    if (!user) return;
+    try {
+      await playerRepo.updateAvatar(
+        target.id,
+        {
+          photoUrl: null,
+          avatarKey: target.avatar.avatarKey,
+        },
+        user.id
+      );
+      toast({
+        variant: 'info',
+        title:
+          lang === 'ar'
+            ? 'تم حذف الصورة الشخصية للاعب'
+            : 'Removed player profile photo',
+        description: localizeText(lang, target.fullName, target.fullNameAr),
+      });
+      await loadData();
+    } catch (err) {
+      toast({
+        variant: 'negative',
+        title: lang === 'ar' ? 'تعذّر حذف الصورة' : 'Failed to remove photo',
+        description: err instanceof Error ? err.message : undefined,
+      });
+    }
+  };
+
   const handleDeletePlayer = async (player: Player) => {
     if (!user) return;
     try {
@@ -613,7 +648,9 @@ export function AdminPlayersView() {
           >
             <PlayerAvatar
               name={localizeText(lang, p.fullName, p.fullNameAr)}
+              playerId={p.id}
               avatarSeed={p.avatarSeed}
+              avatar={p.avatar}
               size="sm"
             />
             <div className="min-w-0">
@@ -708,6 +745,24 @@ export function AdminPlayersView() {
               title={lang === 'ar' ? 'الملف والسجل' : 'Profile & History'}
             >
               <Eye className="h-4 w-4 text-blue-600" />
+            </Button>
+            <Button
+              type="button"
+              variant="calm"
+              size="icon"
+              onClick={() => setAvatarStudioPlayer(p)}
+              aria-label={
+                lang === 'ar'
+                  ? `إدارة صورة ${p.fullNameAr}`
+                  : `Manage avatar for ${p.fullName}`
+              }
+              title={
+                lang === 'ar'
+                  ? 'الصورة الشخصية / الأفاتار 3D'
+                  : 'Photo / 3D Avatar'
+              }
+            >
+              <Camera className="h-4 w-4 text-red-700" />
             </Button>
             <Button
               type="button"
@@ -1206,7 +1261,9 @@ export function AdminPlayersView() {
                     profilePlayer.fullName,
                     profilePlayer.fullNameAr
                   )}
+                  playerId={profilePlayer.id}
                   avatarSeed={profilePlayer.avatarSeed}
+                  avatar={profilePlayer.avatar}
                   size="lg"
                 />
                 <div className="min-w-0">
@@ -1247,6 +1304,60 @@ export function AdminPlayersView() {
 
             {/* Drawer Body */}
             <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              {/* Super Admin Photo & 3D Avatar Management Strip */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-border-paper bg-paper p-3.5 text-xs">
+                <div className="space-y-0.5 min-w-0">
+                  <div className="font-extrabold text-red-900">
+                    {profilePlayer.avatar?.photoUrl
+                      ? lang === 'ar'
+                        ? 'صورة شخصية مرفوعة'
+                        : 'Custom Profile Photo Active'
+                      : lang === 'ar'
+                        ? `أفاتار 3D: ${getAvatar3DDefinition(profilePlayer.avatar?.avatarKey).nameAr}`
+                        : `3D Avatar: ${getAvatar3DDefinition(profilePlayer.avatar?.avatarKey).nameEn}`}
+                  </div>
+                  <div className="text-ink-muted">
+                    {lang === 'ar'
+                      ? 'يمكن لمدير البطولة استبدال الصورة أو حذفها أو تغيير الأفاتار ثلاثي الأبعاد.'
+                      : 'Super Admin can replace or remove the photo, or assign any 3D avatar.'}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setAvatarStudioPlayer(profilePlayer)}
+                    data-testid="admin-drawer-avatar-studio-btn"
+                  >
+                    <Camera className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>
+                      {lang === 'ar'
+                        ? 'تغيير الصورة / 3D'
+                        : 'Replace Photo / 3D'}
+                    </span>
+                  </Button>
+                  {profilePlayer.avatar?.photoUrl && (
+                    <Button
+                      type="button"
+                      variant="calm"
+                      size="sm"
+                      onClick={() =>
+                        void handleAdminRemovePlayerPhoto(profilePlayer)
+                      }
+                      className="text-negative"
+                      data-testid="admin-drawer-remove-photo-btn"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>
+                        {lang === 'ar' ? 'حذف الصورة' : 'Remove Photo'}
+                      </span>
+                    </Button>
+                  )}
+                </div>
+              </div>
+
               {/* Poker-Chip Stats */}
               <div className="grid grid-cols-3 gap-2.5">
                 <div className="flex flex-col items-center gap-1.5 rounded-card border border-border-paper bg-paper p-3 text-center">
@@ -1496,6 +1607,18 @@ export function AdminPlayersView() {
           </aside>
         </div>
       )}
+      {/* Super Admin Avatar & Photo Studio Dialog */}
+      <AvatarEditorDialog
+        open={Boolean(avatarStudioPlayer)}
+        onOpenChange={(open) => {
+          if (!open) setAvatarStudioPlayer(null);
+        }}
+        player={avatarStudioPlayer}
+        actorUserId={user?.id ?? 'user-admin'}
+        allowNicknameEdit={false}
+        useArabicIndicDigits={useArabicIndic}
+        onSaved={() => void loadData()}
+      />
     </div>
   );
 }

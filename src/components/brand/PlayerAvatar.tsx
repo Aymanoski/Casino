@@ -1,10 +1,27 @@
-import React from 'react';
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import type { Avatar as AvatarType } from '@/lib/schemas';
 import { cn } from '@/lib/utils';
+import {
+  Avatar3DArtwork,
+  getAvatar3DDefinition,
+  resolveDeterministicAvatarKey,
+} from './AvatarLibrary3D';
 
 export interface PlayerAvatarProps {
   name: string;
+  /** Optional player ID for deterministic 24-avatar fallback assignment */
+  playerId?: string;
   avatarSeed?: string;
+  /** Player.avatar object ({ photoUrl, avatarKey }) */
+  avatar?: AvatarType | null;
+  /** Direct photo URL override */
+  photoUrl?: string | null;
+  /** Direct 3D avatar key override ('avatar-01'..'avatar-24') */
+  avatarKey?: string | null;
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+  /** True for Marwan Serry guest finalist (strictly name-only Golden Seat emblem, never a photo) */
   isHost?: boolean;
   buzzed?: boolean;
   selected?: boolean;
@@ -20,36 +37,20 @@ const SIZE_CLASSES = {
   xl: { box: 'h-20 w-20', text: 'text-2xl' },
 };
 
-function hashSeed(input: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return Math.abs(h);
-}
-
-function getInitials(name: string): string {
-  const cleaned = name
-    .replace(/["'«»]/g, '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (cleaned.length === 0) return '★';
-  if (cleaned.length === 1) {
-    return cleaned[0].slice(0, 2).toUpperCase();
-  }
-  return `${cleaned[0][0]}${cleaned[cleaned.length - 1][0]}`.toUpperCase();
-}
-
 /**
- * PlayerAvatar
- * Generated geometric SVG pattern + initials in a thick outlined ring per DESIGN.md §6 & §9.
- * Uses only brand palette colors (red, maroon, blue, gold) with zero real-person photos.
+ * Shared Avatar / PlayerAvatar component (AGENTS.md §15.3 & DESIGN.md §6)
+ * Used everywhere across scoreboards, bracket, groups, big screen, admin, scorer, and player portal:
+ * - Renders the player's square-cropped uploaded photo (`<= 300KB`) when present (except Marwan Serry, who is always name-only)
+ * - Falls back to the deterministic 24-option 3D-style game-show avatar library (`avatar-01`..`avatar-24`)
+ * - Wrapped in the signature thick outlined ring with buzzed/selected/host states and optional rank chip
  */
 export const PlayerAvatar = React.memo(function PlayerAvatar({
   name,
+  playerId,
   avatarSeed,
+  avatar,
+  photoUrl,
+  avatarKey,
   size = 'md',
   isHost = false,
   buzzed = false,
@@ -57,28 +58,28 @@ export const PlayerAvatar = React.memo(function PlayerAvatar({
   rank,
   className,
 }: PlayerAvatarProps) {
-  const seed = hashSeed(avatarSeed || name || 'casino');
-  const patternVariant = seed % 6;
-  const initials = getInitials(name);
+  const candidatePhotoUrl = isHost
+    ? null
+    : (avatar?.photoUrl ?? photoUrl ?? null);
+  const [imgFailed, setImgFailed] = useState(false);
 
-  // High-contrast brand gradients ensuring crisp white/maroon initials
-  const bgAccents = [
-    'from-red-600 via-red-700 to-red-900',
-    'from-red-800 via-red-900 to-ink',
-    'from-blue-600 via-blue-800 to-red-900',
-    'from-red-400 via-red-600 to-red-800',
-    'from-gold-500 via-gold-600 to-red-800',
-    'from-red-700 via-red-800 to-red-900',
-  ];
+  useEffect(() => {
+    setImgFailed(false);
+  }, [candidatePhotoUrl]);
 
-  const bgGradient = isHost
-    ? 'from-gold-300 via-gold-500 to-gold-600'
-    : bgAccents[patternVariant];
-
+  const resolvedKey = resolveDeterministicAvatarKey(
+    playerId || avatarSeed || name || 'player-1',
+    avatar?.avatarKey ?? avatarKey
+  );
+  const def = getAvatar3DDefinition(resolvedKey);
   const dims = SIZE_CLASSES[size];
+  const showPhoto = Boolean(candidatePhotoUrl && !imgFailed && !isHost);
 
   return (
     <div
+      data-avatar-key={isHost ? 'golden-seat-host' : resolvedKey}
+      data-has-photo={showPhoto ? 'true' : 'false'}
+      title={isHost ? name : `${name} (${def.nameEn})`}
       className={cn(
         'relative inline-flex shrink-0 items-center justify-center rounded-pill select-none',
         dims.box,
@@ -88,8 +89,7 @@ export const PlayerAvatar = React.memo(function PlayerAvatar({
       {/* Thick Outlined Ring */}
       <div
         className={cn(
-          'relative flex h-full w-full items-center justify-center overflow-hidden rounded-pill border-[2.5px] bg-gradient-to-br transition-[box-shadow,border-color] duration-200',
-          bgGradient,
+          'relative flex h-full w-full items-center justify-center overflow-hidden rounded-pill border-[2.5px] bg-red-900 transition-[box-shadow,border-color] duration-200',
           isHost
             ? 'border-outline ring-2 ring-gold-300 shadow-glow-gold'
             : buzzed
@@ -99,81 +99,21 @@ export const PlayerAvatar = React.memo(function PlayerAvatar({
                 : 'border-outline shadow-sticker-sm'
         )}
       >
-        {/* Generated Geometric SVG Pattern Overlay */}
-        <svg
-          viewBox="0 0 64 64"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className={cn(
-            'pointer-events-none absolute inset-0 h-full w-full',
-            isHost ? 'text-red-900/25' : 'text-white/25'
-          )}
-          aria-hidden="true"
-        >
-          <circle
-            cx="32"
-            cy="32"
-            r="27"
-            stroke="currentColor"
-            strokeWidth="1.2"
-            strokeDasharray={isHost ? '3 2' : '4 3'}
+        {showPhoto ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={candidatePhotoUrl!}
+            alt={name}
+            onError={() => setImgFailed(true)}
+            className="h-full w-full object-cover"
           />
-
-          {patternVariant === 0 && (
-            <>
-              <polygon points="32,6 58,32 32,58 6,32" stroke="currentColor" strokeWidth="1.3" />
-              <polygon points="14,14 50,14 50,50 14,50" stroke="currentColor" strokeWidth="1" />
-            </>
-          )}
-
-          {patternVariant === 1 && (
-            <>
-              <circle cx="32" cy="32" r="20" stroke="currentColor" strokeWidth="1.3" />
-              <path d="M32 4V60M4 32H60M12 12L52 52M52 12L12 52" stroke="currentColor" strokeWidth="1" />
-            </>
-          )}
-
-          {patternVariant === 2 && (
-            <>
-              <polygon points="32,7 54,19 54,45 32,57 10,45 10,19" stroke="currentColor" strokeWidth="1.3" />
-              <polygon points="32,57 54,19 10,19" stroke="currentColor" strokeWidth="1" />
-            </>
-          )}
-
-          {patternVariant === 3 && (
-            <>
-              <circle cx="32" cy="18" r="14" stroke="currentColor" strokeWidth="1.1" />
-              <circle cx="32" cy="46" r="14" stroke="currentColor" strokeWidth="1.1" />
-              <circle cx="18" cy="32" r="14" stroke="currentColor" strokeWidth="1.1" />
-              <circle cx="46" cy="32" r="14" stroke="currentColor" strokeWidth="1.1" />
-            </>
-          )}
-
-          {patternVariant === 4 && (
-            <>
-              <polygon points="32,8 40,24 56,32 40,40 32,56 24,40 8,32 24,24" stroke="currentColor" strokeWidth="1.3" />
-              <circle cx="32" cy="32" r="10" stroke="currentColor" strokeWidth="1" />
-            </>
-          )}
-
-          {patternVariant === 5 && (
-            <>
-              <rect x="13" y="13" width="38" height="38" rx="6" stroke="currentColor" strokeWidth="1.2" />
-              <rect x="13" y="13" width="38" height="38" rx="6" transform="rotate(45 32 32)" stroke="currentColor" strokeWidth="1.2" />
-            </>
-          )}
-        </svg>
-
-        {/* Initials or Host Crown */}
-        <span
-          className={cn(
-            'relative z-10 font-display tracking-wide',
-            dims.text,
-            isHost ? 'text-red-900 text-lg' : 'text-white drop-shadow-[0_1px_1px_rgba(79,7,22,0.85)]'
-          )}
-        >
-          {isHost ? '♛' : initials}
-        </span>
+        ) : (
+          <Avatar3DArtwork
+            avatarKey={resolvedKey}
+            isHost={isHost}
+            className="h-full w-full"
+          />
+        )}
       </div>
 
       {/* Rank Corner Chip */}
@@ -192,3 +132,6 @@ export const PlayerAvatar = React.memo(function PlayerAvatar({
     </div>
   );
 });
+
+/** Shared Avatar alias per Change Request 1 Step 4 */
+export const Avatar = PlayerAvatar;

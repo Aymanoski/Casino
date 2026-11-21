@@ -89,7 +89,7 @@ export function SegmentsLibraryView() {
       try {
         const [segments, games, rounds, settings] = await Promise.all([
           segmentRepo.list(),
-          gameRepo.list(),
+          gameRepo.list({ viewerRole: 'visitor' }),
           roundRepo.list(),
           settingsRepo.get(),
         ]);
@@ -151,12 +151,14 @@ export function SegmentsLibraryView() {
     if (!data) return null;
     const roundMap = new Map(data.rounds.map((r) => [r.id, r]));
 
-    // Map each segment ID to the tournament games featuring it
+    // Map each segment ID ONLY to FINISHED tournament matches featuring it (AGENTS.md §15.3: zero upcoming/live segment leaks)
     const gamesBySegment = new Map<string, Game[]>();
     for (const seg of data.segments) {
       gamesBySegment.set(
         seg.id,
-        data.games.filter((g) => g.segmentIds.includes(seg.id))
+        data.games.filter(
+          (g) => g.status === 'finished' && g.segmentIds.includes(seg.id)
+        )
       );
     }
 
@@ -481,15 +483,11 @@ export function SegmentsLibraryView() {
                               : 'Auto-inserted on qualifying ties'
                             : featuredGames.length > 0
                               ? lang === 'ar'
-                                ? featuredGames.length === 1
-                                  ? 'في طاولة واحدة'
-                                  : featuredGames.length === 2
-                                    ? 'في طاولتين'
-                                    : `في ${formatNumber(featuredGames.length, { useArabicIndicDigits: useArabicIndic })} ${featuredGames.length <= 10 ? 'طاولات' : 'طاولة'}`
-                                : `Played in ${featuredGames.length} ${featuredGames.length === 1 ? 'table' : 'tables'}`
+                                ? `لُعبت في ${formatNumber(featuredGames.length, { useArabicIndicDigits: useArabicIndic })} مباريات منتهية`
+                                : `Played in ${featuredGames.length} finished ${featuredGames.length === 1 ? 'match' : 'matches'}`
                               : lang === 'ar'
-                                ? 'متاحة لاختيار المباريات'
-                                : 'Available in segment pool'}
+                                ? 'ضمن مكتبة البطولة (الفقرات القادمة سرية)'
+                                : 'In tournament pool (upcoming matches secret)'}
                         </span>
 
                         <Button
@@ -652,13 +650,13 @@ export function SegmentsLibraryView() {
                   </div>
                 </div>
 
-                {/* Tournament Tables Featuring This Segment */}
+                {/* Completed Tournament Matches Featuring This Segment (Zero upcoming/live leaks per §15.3) */}
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
                       {lang === 'ar'
-                        ? 'الطاولات التي تتضمن هذه الفقرة'
-                        : 'Tournament Tables Featuring This Segment'}
+                        ? 'المباريات المنتهية التي لُعبت فيها هذه الفقرة'
+                        : 'Completed Matches Where This Segment Was Played'}
                     </h3>
                     <span className="text-xs font-bold text-ink-muted tabular-nums">
                       {formatNumber(selectedGames.length, {
@@ -671,11 +669,11 @@ export function SegmentsLibraryView() {
                     <p className="rounded-input border border-dashed border-border-paper bg-paper p-3 text-xs text-ink-muted">
                       {seg.id === 'seg-16'
                         ? lang === 'ar'
-                          ? 'جولة الحسم الفاصلة غير مجدولة مسبقاً—يتم إدراجها تلقائياً في أي طاولة تنتهي بتعادل على بطاقة التأهل.'
-                          : 'Sudden-Death Tie-Breaker is never pre-scheduled—it auto-inserts into any table that ends tied across a qualifying cutoff.'
+                          ? 'جولة الحسم الفاصلة غير مجدولة مسبقاً—يتم إدراجها تلقائياً في أي مباراة تنتهي بالتعادل.'
+                          : 'Sudden-Death Tie-Breaker is never pre-scheduled—it auto-inserts into any match that ends tied.'
                         : lang === 'ar'
-                          ? 'هذه الفقرة متاحة ضمن المكتبة ولم تُعيّن بعد لطاولة محددة في الشجرة الحالية.'
-                          : 'This segment is ready in the library and not yet assigned to a table in the current bracket.'}
+                          ? 'لم تُحسم مباراة تتضمن هذه الفقرة بعد. تبقى فقرات المباريات القادمة والمباشرة سرية حتى انتهاء اللعب.'
+                          : 'No completed matches have featured this segment yet. Upcoming and live match segments stay secret until the match concludes.'}
                     </p>
                   ) : (
                     <div className="max-h-48 space-y-1.5 overflow-y-auto pe-1">

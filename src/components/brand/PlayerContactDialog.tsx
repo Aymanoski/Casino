@@ -196,7 +196,9 @@ export function PlayerContactDialog({
             {player && (
               <PlayerAvatar
                 name={playerName}
+                playerId={player.id}
                 avatarSeed={player.avatarSeed}
+                avatar={player.avatar}
                 size="md"
               />
             )}

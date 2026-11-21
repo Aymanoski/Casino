@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Clock,
   Crown,
+  Lock,
   Minus,
   MonitorPlay,
   Plus,
@@ -17,7 +18,7 @@ import {
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import {
-  gameRepo,
+  matchRepo,
   playerRepo,
   roundRepo,
   scoreRepo,
@@ -26,8 +27,8 @@ import {
 } from '@/lib/repos';
 import { realtime } from '@/lib/realtime';
 import type {
-  Game,
-  GameStatus,
+  Match,
+  MatchStatus,
   Player,
   Round,
   ScoreEvent,
@@ -60,14 +61,14 @@ import { PlayerPortalChrome } from './PlayerPortalChrome';
 
 interface HistoryDataset {
   players: Player[];
-  games: Game[];
+  games: Match[];
   rounds: Round[];
   segments: Segment[];
   scoreEvents: ScoreEvent[];
   settings: Settings;
 }
 
-type StatusFilter = 'all' | GameStatus;
+type StatusFilter = 'all' | MatchStatus;
 
 const HISTORY_PAGE_STEP = 15;
 
@@ -95,13 +96,14 @@ export function PlayerHistoryView() {
       if (showSpinner) setLoading(true);
       setError(null);
       try {
+        // Strictly pass viewerRole: 'player' so unfinished match segments are redacted at repo layer
         const [players, games, rounds, segments, scoreEvents, settings] =
           await Promise.all([
             playerRepo.list({ includeHost: true }),
-            gameRepo.list({ viewerRole: user?.role ?? 'visitor' }),
+            matchRepo.list({ viewerRole: 'player' }),
             roundRepo.list(),
             segmentRepo.list(),
-            scoreRepo.list({ order: 'oldest' }),
+            scoreRepo.list({ order: 'oldest', viewerRole: 'player' }),
             settingsRepo.get(),
           ]);
 
@@ -131,7 +133,9 @@ export function PlayerHistoryView() {
       if (
         msg.event === 'score.changed' ||
         msg.event === 'game.started' ||
+        msg.event === 'match.started' ||
         msg.event === 'game.finished' ||
+        msg.event === 'match.finished' ||
         msg.event === 'bracket.updated' ||
         msg.event === 'player.updated' ||
         msg.event === 'segment.updated' ||
@@ -148,10 +152,13 @@ export function PlayerHistoryView() {
     if (!data || initializedQueryRef.current) return;
     if (user?.role === 'superAdmin') {
       const qPlayer = searchParams.get('player');
-      if (qPlayer && data.players.some((p) => p.id === qPlayer && !p.isHost)) {
+      if (
+        qPlayer &&
+        data.players.some((p) => p.id === qPlayer && !p.isHost && !p.isGuest)
+      ) {
         setPreviewPlayerId(qPlayer);
       } else {
-        const firstReal = data.players.find((p) => !p.isHost);
+        const firstReal = data.players.find((p) => !p.isHost && !p.isGuest);
         if (firstReal) setPreviewPlayerId(firstReal.id);
       }
     }
@@ -191,11 +198,19 @@ export function PlayerHistoryView() {
 
     if (!player) return { player: null };
 
-    const allMyGames = data.games.filter((g) => g.playerIds.includes(player.id));
+    const allMyGames = data.games.filter(
+      (g) =>
+        g.playerIds.includes(player.id) ||
+        g.participants.some((pt) => pt.playerId === player.id)
+    );
     const myEvents = data.scoreEvents.filter((e) => e.playerId === player.id);
 
-    const positiveHits = myEvents.filter((e) => e.delta > 0 && e.kind !== 'undo').length;
-    const penaltyHits = myEvents.filter((e) => e.delta < 0 && e.kind !== 'undo').length;
+    const positiveHits = myEvents.filter(
+      (e) => e.delta > 0 && e.kind !== 'undo'
+    ).length;
+    const penaltyHits = myEvents.filter(
+      (e) => e.delta < 0 && e.kind !== 'undo'
+    ).length;
 
     const filteredGames = allMyGames
       .filter((g) => {
@@ -204,12 +219,16 @@ export function PlayerHistoryView() {
         return true;
       })
       .sort((a, b) => {
-        const ta = new Date(a.finishedAt ?? a.startedAt ?? a.scheduledAt).getTime();
-        const tb = new Date(b.finishedAt ?? b.startedAt ?? b.scheduledAt).getTime();
+        const ta = new Date(
+          a.finishedAt ?? a.startedAt ?? a.scheduledAt
+        ).getTime();
+        const tb = new Date(
+          b.finishedAt ?? b.startedAt ?? b.scheduledAt
+        ).getTime();
         return sortOrder === 'newest' ? tb - ta : ta - tb;
       });
 
-    // Build rich segment-by-segment structure for each match
+    // Build segment-by-segment structure ONLY for finished matches (AGENTS.md §15.3)
     const enrichedGames = filteredGames.map((game) => {
       const round = roundMap.get(game.roundId) ?? null;
       const totals = computeGameTotalsFromEvents(
@@ -219,7 +238,6 @@ export function PlayerHistoryView() {
       );
       const myScore = totals[player.id] ?? 0;
 
-      // Compute placement within this 3-player table
       const tableStandings = game.playerIds
         .map((pid, idx) => ({
           ...resolvePlayerDisplay(pid, playerMap, lang, idx),
@@ -231,28 +249,32 @@ export function PlayerHistoryView() {
         tableStandings.findIndex((s) => s.id === player.id) + 1;
 
       const gameMyEvents = myEvents.filter((e) => e.gameId === game.id);
+      const isFinished = game.status === 'finished';
 
       let runningTotal = 0;
-      const segmentBreakdown = game.segmentIds.map((segId, idx) => {
-        const seg = segmentMap.get(segId) ?? null;
-        const segEvents = gameMyEvents.filter((e) => e.segmentId === segId);
-        const segSubtotal = segEvents.reduce((sum, e) => sum + e.delta, 0);
-        runningTotal += segSubtotal;
-        return {
-          index: idx,
-          segId,
-          segment: seg,
-          events: segEvents,
-          subtotal: segSubtotal,
-          cumulative: runningTotal,
-          isCurrent:
-            game.status === 'live' && game.currentSegmentIndex === idx,
-        };
-      });
+      const segmentBreakdown = isFinished
+        ? game.segmentIds.map((segId, idx) => {
+            const seg = segmentMap.get(segId) ?? null;
+            const segEvents = gameMyEvents.filter(
+              (e) => e.segmentId === segId
+            );
+            const segSubtotal = segEvents.reduce((sum, e) => sum + e.delta, 0);
+            runningTotal += segSubtotal;
+            return {
+              index: idx,
+              segId,
+              segment: seg,
+              events: segEvents,
+              subtotal: segSubtotal,
+              cumulative: runningTotal,
+            };
+          })
+        : [];
 
       const isWon =
-        game.status === 'finished' &&
-        (game.winnerPlayerId === player.id ||
+        isFinished &&
+        (game.result?.winnerId === player.id ||
+          game.winnerPlayerId === player.id ||
           Boolean(game.advancingPlayerIds?.includes(player.id)));
 
       return {
@@ -277,11 +299,10 @@ export function PlayerHistoryView() {
     };
   }, [data, activePlayerId, roundFilter, statusFilter, sortOrder, lang]);
 
-  // Expand the most recent LIVE or FINISHED played match by default (fallback to first scheduled match)
+  // Expand the most recent FINISHED match by default so post-match segment history is immediately visible
   const defaultExpandedMatchId =
-    model?.enrichedGames?.find(
-      (item) => item.game.status === 'live' || item.game.status === 'finished'
-    )?.game.id ??
+    model?.enrichedGames?.find((item) => item.game.status === 'finished')?.game
+      .id ??
     model?.enrichedGames?.[0]?.game.id ??
     null;
 
@@ -323,6 +344,7 @@ export function PlayerHistoryView() {
       <div className="mx-auto max-w-content-wide px-safe py-8 space-y-6">
         <PlayerPortalChrome
           players={data.players}
+          matches={data.games}
           activePlayerId={activePlayerId}
           onSelectPreviewPlayer={handleSelectPreviewPlayer}
           useArabicIndicDigits={useArabicIndic}
@@ -335,7 +357,7 @@ export function PlayerHistoryView() {
           }
           description={
             lang === 'ar'
-              ? 'اختر متسابقاً لعرض تاريخ مبارياته ونقاط فقراته.'
+              ? 'اختر متسابقاً لعرض تاريخ مبارياته المنتهية.'
               : 'Select a contestant account to inspect their match history.'
           }
         />
@@ -350,6 +372,7 @@ export function PlayerHistoryView() {
     <div className="mx-auto max-w-content-wide px-safe py-6 sm:py-10 space-y-6">
       <PlayerPortalChrome
         players={data.players}
+        matches={data.games}
         activePlayerId={player.id}
         onSelectPreviewPlayer={handleSelectPreviewPlayer}
         useArabicIndicDigits={useArabicIndic}
@@ -361,7 +384,9 @@ export function PlayerHistoryView() {
           <div className="flex items-center gap-3.5 min-w-0">
             <PlayerAvatar
               name={localizeText(lang, player.fullName, player.fullNameAr)}
+              playerId={player.id}
               avatarSeed={player.avatarSeed}
+              avatar={player.avatar}
               size="lg"
             />
             <div className="min-w-0">
@@ -372,8 +397,8 @@ export function PlayerHistoryView() {
               </h1>
               <p className="text-sm text-ink-muted">
                 {lang === 'ar'
-                  ? 'تفصيل كامل لكل مباراة وفقرة مع التوقيت والتاريخ الدقيق لكل نقطة.'
-                  : 'Complete game-by-game and segment-by-segment score breakdown with exact dates and timestamps.'}
+                  ? 'تفصيل كامل للمباريات المنتهية فقرة بفقرة مع التوقيت والتاريخ الدقيق لكل نقطة.'
+                  : 'Complete post-match segment-by-segment score breakdown with exact dates and timestamps.'}
               </p>
             </div>
           </div>
@@ -394,7 +419,7 @@ export function PlayerHistoryView() {
                   useArabicIndicDigits: useArabicIndic,
                 })}{' '}
                 {lang === 'ar' ? 'فوز' : 'wins'} ·{' '}
-                {formatNumber(player.stats.gamesPlayed, {
+                {formatNumber(player.stats.matchesPlayed, {
                   useArabicIndicDigits: useArabicIndic,
                 })}{' '}
                 {lang === 'ar' ? 'مباراة' : 'played'}
@@ -445,7 +470,7 @@ export function PlayerHistoryView() {
               {formatNumber(allMyGamesCount ?? 0, {
                 useArabicIndicDigits: useArabicIndic,
               })}{' '}
-              {lang === 'ar' ? 'إجمالي الطاولات المسندة' : 'Total Assigned Tables'}
+              {lang === 'ar' ? 'إجمالي المباريات' : 'Total Assigned Matches'}
             </span>
           </Badge>
         </div>
@@ -486,8 +511,8 @@ export function PlayerHistoryView() {
             {(
               [
                 { v: 'all', en: 'All', ar: 'الكل' },
-                { v: 'live', en: 'Live', ar: 'مباشر' },
                 { v: 'finished', en: 'Finished', ar: 'منتهية' },
+                { v: 'live', en: 'Live', ar: 'مباشر' },
                 { v: 'scheduled', en: 'Scheduled', ar: 'قادمة' },
               ] as Array<{ v: StatusFilter; en: string; ar: string }>
             ).map((opt) => {
@@ -532,7 +557,7 @@ export function PlayerHistoryView() {
         </Button>
       </div>
 
-      {/* Game History Cards */}
+      {/* Match History Cards */}
       <div
         role="status"
         aria-live="polite"
@@ -558,8 +583,8 @@ export function PlayerHistoryView() {
           description={
             (allMyGamesCount ?? 0) === 0
               ? lang === 'ar'
-                ? 'ستظهر هنا كل المباريات ونقاطها فقرة بفقرة فور تعيينك على طاولة في الشجرة.'
-                : 'Your games and segment-by-segment score records will appear here once you are seated on a table.'
+                ? 'ستظهر هنا كل المباريات المنتهية ونقاطها فقرة بفقرة فور خوضها.'
+                : 'Your completed matches and segment-by-segment score records will appear here.'
               : lang === 'ar'
                 ? 'جرّب اختيار جميع الجولات والحالات لعرض كامل سجل مبارياتك.'
                 : 'Reset the round and status filters to view all of your matches.'
@@ -593,7 +618,8 @@ export function PlayerHistoryView() {
               referenceTime,
             }) => {
               const expanded = isGameExpanded(game.id);
-              const isLive = game.status === 'live';
+              const isLive =
+                game.status === 'live' || game.status === 'needsTieBreak';
               const isFinished = game.status === 'finished';
 
               return (
@@ -621,9 +647,14 @@ export function PlayerHistoryView() {
                           <LiveBadge surface="paper" size="sm" />
                         ) : isWon ? (
                           <Badge variant="gold">
-                            <Trophy className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            <Trophy
+                              className="h-3.5 w-3.5 shrink-0"
+                              aria-hidden="true"
+                            />
                             <span>
-                              {lang === 'ar' ? 'فائز ومتأهل' : 'Won & Advanced'}
+                              {lang === 'ar'
+                                ? 'فائز ومتأهل'
+                                : 'Won & Advanced'}
                             </span>
                           </Badge>
                         ) : isFinished ? (
@@ -638,9 +669,18 @@ export function PlayerHistoryView() {
                           </Badge>
                         )}
 
+                        <Badge variant="white" className="tabular-nums">
+                          {lang === 'ar'
+                            ? `طاولة #${formatNumber(game.tableNumber, { useArabicIndicDigits: useArabicIndic })}`
+                            : `Table #${formatNumber(game.tableNumber, { useArabicIndicDigits: useArabicIndic })}`}
+                        </Badge>
+
                         {game.isFinal && (
                           <Badge variant="gold">
-                            <Crown className="h-3 w-3 shrink-0" aria-hidden="true" />
+                            <Crown
+                              className="h-3 w-3 shrink-0"
+                              aria-hidden="true"
+                            />
                             <span>{lang === 'ar' ? 'النهائي' : 'FINAL'}</span>
                           </Badge>
                         )}
@@ -648,7 +688,9 @@ export function PlayerHistoryView() {
                         {game.result?.type === 'walkover' && (
                           <Badge variant="negative">
                             <span>
-                              {lang === 'ar' ? 'انسحاب (Walkover)' : 'WALKOVER'}
+                              {lang === 'ar'
+                                ? 'انسحاب (Walkover)'
+                                : 'WALKOVER'}
                             </span>
                           </Badge>
                         )}
@@ -666,7 +708,10 @@ export function PlayerHistoryView() {
 
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-medium text-ink-muted tabular-nums">
                         <span className="inline-flex items-center gap-1.5">
-                          <Calendar className="h-3.5 w-3.5 text-red-600" aria-hidden="true" />
+                          <Calendar
+                            className="h-3.5 w-3.5 text-red-600"
+                            aria-hidden="true"
+                          />
                           <span>
                             {formatPublicFullDateTime(
                               referenceTime,
@@ -675,19 +720,33 @@ export function PlayerHistoryView() {
                             )}
                           </span>
                         </span>
-                        <span className="inline-flex items-center gap-1.5">
-                          <Clock className="h-3.5 w-3.5 text-red-600" aria-hidden="true" />
-                          <span>
-                            {formatNumber(game.segmentIds.length, {
-                              useArabicIndicDigits: useArabicIndic,
-                            })}{' '}
-                            {lang === 'ar' ? 'فقرات' : 'segments'} ·{' '}
-                            {formatNumber(totalPlays, {
-                              useArabicIndicDigits: useArabicIndic,
-                            })}{' '}
-                            {lang === 'ar' ? 'حركات نقاط' : 'score events'}
+                        {isFinished ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <Clock
+                              className="h-3.5 w-3.5 text-red-600"
+                              aria-hidden="true"
+                            />
+                            <span>
+                              {formatNumber(game.segmentIds.length, {
+                                useArabicIndicDigits: useArabicIndic,
+                              })}{' '}
+                              {lang === 'ar' ? 'فقرات ملعوبة' : 'segments played'} ·{' '}
+                              {formatNumber(totalPlays, {
+                                useArabicIndicDigits: useArabicIndic,
+                              })}{' '}
+                              {lang === 'ar' ? 'حركات نقاط' : 'score events'}
+                            </span>
                           </span>
-                        </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-red-700 font-semibold">
+                            <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>
+                              {lang === 'ar'
+                                ? 'فقرات المباراة سرية حتى انتهاء اللعب'
+                                : 'Segments kept secret until match finishes'}
+                            </span>
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -697,7 +756,9 @@ export function PlayerHistoryView() {
                           {lang === 'ar' ? 'نقاطك بالمباراة' : 'Your Match Score'}
                         </div>
                         {game.status === 'scheduled' ? (
-                          <span className="font-display text-lg text-ink-muted">—</span>
+                          <span className="font-display text-lg text-ink-muted">
+                            —
+                          </span>
                         ) : (
                           <div className="flex items-baseline gap-1">
                             <AnimatedNumber
@@ -724,10 +785,10 @@ export function PlayerHistoryView() {
                     </div>
                   </button>
 
-                  {/* Expanded Body: Table Standings + Segment-by-Segment Breakdown */}
+                  {/* Expanded Body: Table Standings + (Finished: Segment Breakdown | Unfinished: Secrecy Notice) */}
                   {expanded && (
                     <div className="border-t-2 border-border-paper bg-paper/50 p-4 sm:p-5 space-y-5">
-                      {/* 3-Player Table Context Strip */}
+                      {/* Table Participants Strip with Shared PlayerAvatars */}
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-2">
                           {tableStandings.map((p, idx) => {
@@ -744,8 +805,20 @@ export function PlayerHistoryView() {
                                       : 'border-border-paper bg-white text-ink'
                                 )}
                               >
+                                <PlayerAvatar
+                                  name={p.name}
+                                  playerId={p.id}
+                                  avatarSeed={p.avatarSeed}
+                                  avatar={p.avatar}
+                                  size="xs"
+                                  isHost={p.isHost}
+                                  className="h-6 w-6"
+                                />
                                 <span className="shrink-0 tabular-nums text-red-700">
-                                  #{formatNumber(idx + 1, { useArabicIndicDigits: useArabicIndic })}
+                                  #
+                                  {formatNumber(idx + 1, {
+                                    useArabicIndicDigits: useArabicIndic,
+                                  })}
                                 </span>
                                 <span className="truncate">{p.name}</span>
                                 {game.status !== 'scheduled' && (
@@ -763,154 +836,183 @@ export function PlayerHistoryView() {
                         {isLive && (
                           <Button variant="red" size="sm" asChild>
                             <Link href={`/screen/${game.id}`}>
-                              <MonitorPlay className="h-4 w-4 shrink-0" aria-hidden="true" />
-                              <span>{lang === 'ar' ? 'شاشة العرض' : 'Big Screen'}</span>
+                              <MonitorPlay
+                                className="h-4 w-4 shrink-0"
+                                aria-hidden="true"
+                              />
+                              <span>
+                                {lang === 'ar' ? 'شاشة العرض' : 'Big Screen'}
+                              </span>
                             </Link>
                           </Button>
                         )}
                       </div>
 
-                      {/* Segment-by-Segment Points Breakdown */}
-                      <div className="space-y-2.5">
-                        <h3 className="text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
-                          {lang === 'ar'
-                            ? 'تفصيل النقاط فقرة بفقرة (مع الوقت والتاريخ)'
-                            : 'Segment-by-Segment Points Log (with Date & Time)'}
-                        </h3>
+                      {!isFinished ? (
+                        <div className="flex items-start gap-3 rounded-card border border-border-paper bg-white p-4 text-xs sm:text-sm text-ink-muted">
+                          <Lock
+                            className="mt-0.5 h-4 w-4 shrink-0 text-red-600"
+                            aria-hidden="true"
+                          />
+                          <div className="space-y-1">
+                            <p className="font-bold text-red-900">
+                              {lang === 'ar'
+                                ? 'تبقى فقرات المباراة مفاجأة حتى انتهاء اللعب'
+                                : 'Match Segments Stay Secret Until the Match Finishes'}
+                            </p>
+                            <p>
+                              {lang === 'ar'
+                                ? 'لحماية نزاهة المنافسة، لا تظهر أسماء أو ترتيب أو فئات الفقرات للمتسابقين في المباريات القادمة أو المباشرة. سيظهر السجل التفصيلي فقرة بفقرة هنا فور انتهاء المباراة.'
+                                : 'To keep every challenge a fair surprise, segment names, order, and categories are never shown for upcoming or live matches. Full segment-by-segment history unlocks automatically once the match finishes.'}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Segment-by-Segment Points Breakdown (Finished Matches Only) */
+                        <div className="space-y-2.5">
+                          <h3 className="text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
+                            {lang === 'ar'
+                              ? 'تفصيل النقاط فقرة بفقرة (مع الوقت والتاريخ)'
+                              : 'Segment-by-Segment Points Log (with Date & Time)'}
+                          </h3>
 
-                        <div className="divide-y divide-border-paper rounded-card border border-border-paper bg-white overflow-hidden">
-                          {segmentBreakdown.map((segRow) => {
-                            const cat = segRow.segment
-                              ? SEGMENT_CATEGORY_INFO[segRow.segment.category]
-                              : null;
+                          <div className="divide-y divide-border-paper rounded-card border border-border-paper bg-white overflow-hidden">
+                            {segmentBreakdown.map((segRow) => {
+                              const cat = segRow.segment
+                                ? SEGMENT_CATEGORY_INFO[segRow.segment.category]
+                                : null;
 
-                            return (
-                              <div
-                                key={`${segRow.segId}-${segRow.index}`}
-                                className={cn(
-                                  'p-3.5 sm:p-4 space-y-2.5',
-                                  segRow.isCurrent && 'bg-gold-200/45'
-                                )}
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="flex flex-wrap items-center gap-2 min-w-0">
-                                    <span className="font-score text-base font-black text-red-700 tabular-nums">
-                                      #{formatNumber(segRow.index + 1, {
-                                        useArabicIndicDigits: useArabicIndic,
-                                      })}
-                                    </span>
-                                    <span className="font-bold text-sm sm:text-base text-ink">
-                                      {segRow.segment
-                                        ? localizeText(
-                                            lang,
-                                            segRow.segment.nameEn,
-                                            segRow.segment.nameAr
-                                          )
-                                        : segRow.segId}
-                                    </span>
-                                    {cat && (
-                                      <Badge
-                                        variant={cat.badgeVariant}
-                                        className="px-2 py-0.5 text-[10px]"
-                                      >
-                                        {lang === 'ar' ? cat.labelAr : cat.labelEn}
-                                      </Badge>
-                                    )}
-                                    {segRow.isCurrent && (
-                                      <Badge variant="red" className="px-2 py-0.5 text-[10px]">
-                                        {lang === 'ar' ? 'الفقرة الحالية' : 'NOW PLAYING'}
-                                      </Badge>
-                                    )}
-                                  </div>
-
-                                  <div className="flex items-center gap-3 shrink-0">
-                                    <span
-                                      className={cn(
-                                        'inline-flex items-center gap-0.5 rounded-pill border px-2.5 py-0.5 font-score text-sm font-black tabular-nums',
-                                        segRow.subtotal > 0
-                                          ? 'border-positive bg-positive-soft text-positive-ink'
-                                          : segRow.subtotal < 0
-                                            ? 'border-outline bg-negative text-white'
-                                            : 'border-border-paper bg-paper text-ink-muted'
-                                      )}
-                                    >
-                                      {segRow.subtotal > 0 ? (
-                                        <Plus
-                                          className="h-3 w-3 stroke-[3]"
-                                          aria-hidden="true"
-                                        />
-                                      ) : segRow.subtotal < 0 ? (
-                                        <Minus
-                                          className="h-3 w-3 stroke-[3]"
-                                          aria-hidden="true"
-                                        />
-                                      ) : null}
-                                      <span>
-                                        {formatNumber(Math.abs(segRow.subtotal), {
+                              return (
+                                <div
+                                  key={`${segRow.segId}-${segRow.index}`}
+                                  className="p-3.5 sm:p-4 space-y-2.5"
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                                      <span className="font-score text-base font-black text-red-700 tabular-nums">
+                                        #
+                                        {formatNumber(segRow.index + 1, {
                                           useArabicIndicDigits: useArabicIndic,
                                         })}
                                       </span>
-                                    </span>
+                                      <Link
+                                        href={`/segments?segment=${encodeURIComponent(segRow.segId)}`}
+                                        className="font-display text-base sm:text-lg text-red-900 hover:underline break-words"
+                                      >
+                                        {segRow.segment
+                                          ? localizeText(
+                                              lang,
+                                              segRow.segment.nameEn,
+                                              segRow.segment.nameAr
+                                            )
+                                          : segRow.segId}
+                                      </Link>
+                                      {cat && (
+                                        <Badge
+                                          variant={cat.badgeVariant}
+                                          className="px-2 py-0.5 text-[10px]"
+                                        >
+                                          {lang === 'ar'
+                                            ? cat.labelAr
+                                            : cat.labelEn}
+                                        </Badge>
+                                      )}
+                                    </div>
 
-                                    {game.status !== 'scheduled' && (
-                                      <span className="text-xs font-bold text-ink-muted tabular-nums">
-                                        {lang === 'ar' ? 'التراكمي: ' : 'Total: '}
-                                        <strong className="text-red-900">
+                                    {/* Segment Subtotal & Running Total */}
+                                    <div className="flex items-center gap-3 text-xs font-bold tabular-nums">
+                                      <span
+                                        className={cn(
+                                          'inline-flex items-center gap-0.5 rounded-pill px-2 py-0.5',
+                                          segRow.subtotal > 0
+                                            ? 'bg-positive-soft text-positive-ink'
+                                            : segRow.subtotal < 0
+                                              ? 'bg-negative text-white'
+                                              : 'bg-paper text-ink-muted'
+                                        )}
+                                      >
+                                        {segRow.subtotal > 0 && (
+                                          <Plus
+                                            className="h-3 w-3 stroke-[3]"
+                                            aria-hidden="true"
+                                          />
+                                        )}
+                                        {segRow.subtotal < 0 && (
+                                          <Minus
+                                            className="h-3 w-3 stroke-[3]"
+                                            aria-hidden="true"
+                                          />
+                                        )}
+                                        <span>
+                                          {formatNumber(
+                                            Math.abs(segRow.subtotal),
+                                            {
+                                              useArabicIndicDigits:
+                                                useArabicIndic,
+                                            }
+                                          )}
+                                        </span>
+                                      </span>
+
+                                      <span className="text-ink-muted">
+                                        {lang === 'ar'
+                                          ? 'التراكمي:'
+                                          : 'Running:'}{' '}
+                                        <strong className="font-score text-base font-black text-red-900">
                                           {formatNumber(segRow.cumulative, {
-                                            useArabicIndicDigits: useArabicIndic,
+                                            useArabicIndicDigits:
+                                              useArabicIndic,
                                           })}
                                         </strong>
                                       </span>
-                                    )}
+                                    </div>
                                   </div>
-                                </div>
 
-                                {/* Individual ScoreEvents in this Segment */}
-                                {segRow.events.length === 0 ? (
-                                  <p className="text-xs text-ink-faint">
-                                    {game.status === 'scheduled'
-                                      ? lang === 'ar'
-                                        ? 'بانتظار بدء المباراة'
-                                        : 'Awaiting game start'
-                                      : lang === 'ar'
-                                        ? 'لم تُسجّل نقاط لك في هذه الفقرة'
-                                        : 'No points recorded in this segment'}
-                                  </p>
-                                ) : (
-                                  <div className="space-y-1.5 ps-3 border-s border-border-paper">
-                                    {segRow.events.map((ev) => {
-                                      const isPos = ev.delta >= 0;
-                                      const display = formatScoreEventDisplay(
-                                        ev,
-                                        lang,
-                                        useArabicIndic
-                                      );
-                                      return (
-                                        <div
-                                          key={ev.id}
-                                          className="flex flex-wrap items-center justify-between gap-2 text-xs"
-                                        >
-                                          <div className="flex flex-wrap items-center gap-2 min-w-0">
-                                            {display.cardType ? (
-                                              <span
-                                                className={cn(
-                                                  'inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-0.5 text-xs font-extrabold',
-                                                  display.cardType === 'yellow'
-                                                    ? 'border-outline bg-gold-400 text-red-900'
-                                                    : 'border-outline bg-negative text-white'
-                                                )}
-                                              >
-                                                <DisciplinaryCardIcon
-                                                  card={display.cardType}
-                                                  size="sm"
-                                                />
-                                                <span>{display.kindLabel}</span>
-                                              </span>
-                                            ) : (
-                                              <>
+                                  {/* Individual Timestamped Score Events in this Segment */}
+                                  {segRow.events.length === 0 ? (
+                                    <p className="text-xs text-ink-muted">
+                                      {lang === 'ar'
+                                        ? 'لا توجد حركات نقاط مسجلة لك في هذه الفقرة.'
+                                        : 'No score events recorded for you in this segment.'}
+                                    </p>
+                                  ) : (
+                                    <div className="space-y-1.5 pt-1">
+                                      {segRow.events.map((ev) => {
+                                        const isPos = ev.delta >= 0;
+                                        const display =
+                                          formatScoreEventDisplay(
+                                            ev,
+                                            lang,
+                                            useArabicIndic
+                                          );
+                                        return (
+                                          <div
+                                            key={ev.id}
+                                            className="flex flex-wrap items-center justify-between gap-2 rounded-input border border-border-paper bg-paper px-3 py-2 text-xs"
+                                          >
+                                            <div className="flex flex-wrap items-center gap-2 min-w-0">
+                                              {display.cardType ? (
+                                                <Badge
+                                                  variant={
+                                                    display.cardType ===
+                                                    'yellow'
+                                                      ? 'gold'
+                                                      : 'negative'
+                                                  }
+                                                  className="px-2 py-0.5 text-[11px] font-extrabold"
+                                                >
+                                                  <DisciplinaryCardIcon
+                                                    card={display.cardType}
+                                                    size="xs"
+                                                  />
+                                                  <span>
+                                                    {display.kindLabel}
+                                                  </span>
+                                                </Badge>
+                                              ) : (
                                                 <span
                                                   className={cn(
-                                                    'inline-flex items-center gap-0.5 rounded-pill border px-2 py-0.5 font-score text-xs font-black tabular-nums',
+                                                    'inline-flex items-center gap-0.5 rounded-pill border px-2 py-0.5 font-score text-sm font-black tabular-nums',
                                                     isPos
                                                       ? 'border-positive bg-positive-soft text-positive-ink'
                                                       : 'border-outline bg-negative text-white'
@@ -918,51 +1020,79 @@ export function PlayerHistoryView() {
                                                 >
                                                   {isPos ? (
                                                     <Plus
-                                                      className="h-2.5 w-2.5 stroke-[3]"
+                                                      className="h-3 w-3 stroke-[3]"
                                                       aria-hidden="true"
                                                     />
                                                   ) : (
                                                     <Minus
-                                                      className="h-2.5 w-2.5 stroke-[3]"
+                                                      className="h-3 w-3 stroke-[3]"
                                                       aria-hidden="true"
                                                     />
                                                   )}
                                                   <span>
-                                                    {formatNumber(Math.abs(ev.delta), {
-                                                      useArabicIndicDigits:
-                                                        useArabicIndic,
-                                                    })}
+                                                    {formatNumber(
+                                                      Math.abs(ev.delta),
+                                                      {
+                                                        useArabicIndicDigits:
+                                                          useArabicIndic,
+                                                      }
+                                                    )}
                                                   </span>
                                                 </span>
-                                                <span className="rounded-pill bg-paper-2 px-2 py-0.5 text-[10px] font-bold uppercase text-ink-muted">
-                                                  {display.kindLabel}
-                                                </span>
-                                              </>
-                                            )}
-                                            {display.userNote && (
-                                              <span className="min-w-0 break-all sm:break-words text-ink font-medium">
-                                                {display.userNote}
-                                              </span>
-                                            )}
-                                          </div>
+                                              )}
 
-                                          <span className="text-[11px] font-medium text-ink-muted tabular-nums shrink-0">
-                                            {formatPublicTimeOnly(
-                                              ev.createdAt,
-                                              lang,
-                                              useArabicIndic
-                                            )}
-                                          </span>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                                              {!display.cardType && (
+                                                <Badge
+                                                  variant="muted"
+                                                  className="px-2 py-0 text-[10px]"
+                                                >
+                                                  {display.kindLabel}
+                                                </Badge>
+                                              )}
+
+                                              {display.userNote && (
+                                                <span className="font-semibold text-ink break-words">
+                                                  “{display.userNote}”
+                                                </span>
+                                              )}
+
+                                              {ev.undoneByEventId && (
+                                                <Badge
+                                                  variant="negative"
+                                                  className="px-2 py-0 text-[10px]"
+                                                >
+                                                  {lang === 'ar'
+                                                    ? 'تم التراجع عنها'
+                                                    : 'Undone'}
+                                                </Badge>
+                                              )}
+                                            </div>
+
+                                            <span className="text-[11px] font-medium text-ink-muted tabular-nums">
+                                              {formatPublicFullDateTime(
+                                                ev.createdAt,
+                                                lang,
+                                                useArabicIndic
+                                              )}{' '}
+                                              (
+                                              {formatPublicTimeOnly(
+                                                ev.createdAt,
+                                                lang,
+                                                useArabicIndic
+                                              )}
+                                              )
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   )}
                 </article>
@@ -970,17 +1100,20 @@ export function PlayerHistoryView() {
             }
           )}
 
+          {/* Load More Matches Pagination Control */}
           {enrichedGames.length > visibleLimit && (
-            <div className="flex justify-center pt-2">
+            <div className="flex flex-col items-center justify-center gap-2 pt-2">
               <Button
                 variant="secondary"
                 size="md"
-                onClick={() => setVisibleLimit((n) => n + HISTORY_PAGE_STEP)}
+                onClick={() =>
+                  setVisibleLimit((prev) => prev + HISTORY_PAGE_STEP)
+                }
               >
                 <span>
                   {lang === 'ar'
-                    ? `عرض المزيد (${formatNumber(enrichedGames.length - visibleLimit, { useArabicIndicDigits: useArabicIndic })} متبقية)`
-                    : `Load more matches (${formatNumber(enrichedGames.length - visibleLimit, { useArabicIndicDigits: useArabicIndic })} remaining)`}
+                    ? `عرض المزيد من المباريات (${formatNumber(enrichedGames.length - visibleLimit, { useArabicIndicDigits: useArabicIndic })} متبقية)`
+                    : `Show More Matches (${formatNumber(enrichedGames.length - visibleLimit, { useArabicIndicDigits: useArabicIndic })} remaining)`}
                 </span>
               </Button>
             </div>

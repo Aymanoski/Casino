@@ -121,7 +121,9 @@ export function PlayerCombobox({
             <>
               <PlayerAvatar
                 name={localizeText(lang, selectedPlayer.fullName, selectedPlayer.fullNameAr)}
+                playerId={selectedPlayer.id}
                 avatarSeed={selectedPlayer.avatarSeed}
+                avatar={selectedPlayer.avatar}
                 size="xs"
                 isHost={selectedPlayer.isGuest || selectedPlayer.isHost}
               />
@@ -249,7 +251,9 @@ export function PlayerCombobox({
                     <span className="flex min-w-0 items-center gap-2">
                       <PlayerAvatar
                         name={localizeText(lang, p.fullName, p.fullNameAr)}
+                        playerId={p.id}
                         avatarSeed={p.avatarSeed}
+                        avatar={p.avatar}
                         size="xs"
                         isHost={p.isGuest || p.isHost}
                       />

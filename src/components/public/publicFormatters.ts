@@ -7,6 +7,7 @@ import {
   Zap,
 } from 'lucide-react';
 import type {
+  Avatar as AvatarType,
   Language,
   Player,
   ScoreEvent,
@@ -168,6 +169,7 @@ export interface ResolvedPlayerDisplay {
   name: string;
   nickname?: string;
   avatarSeed: string;
+  avatar?: AvatarType | null;
   isHost: boolean;
   isPlaceholder: boolean;
   player: Player | null;
@@ -186,7 +188,8 @@ export function resolvePlayerDisplay(
       name: localizeText(lang, found.fullName, found.fullNameAr),
       nickname: localizeText(lang, found.nickname, found.nicknameAr),
       avatarSeed: found.avatarSeed,
-      isHost: Boolean(found.isHost),
+      avatar: found.avatar,
+      isHost: Boolean(found.isHost || found.isGuest),
       isPlaceholder: false,
       player: found,
     };
@@ -204,6 +207,7 @@ export function resolvePlayerDisplay(
         : `Qualifier Seat #${slotIndex + 1}`,
     nickname: undefined,
     avatarSeed: playerId,
+    avatar: null,
     isHost: false,
     isPlaceholder: true,
     player: null,

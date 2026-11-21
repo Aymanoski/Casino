@@ -74,6 +74,7 @@ function buildSlotsForMatch(
           name: localizeText(lang, player.fullName, player.fullNameAr),
           nickname: localizeText(lang, player.nickname, player.nicknameAr),
           avatarSeed: player.avatarSeed,
+          avatar: player.avatar,
           score: showScores ? (totals[player.id] ?? 0) : undefined,
           isWinner: match.status === 'finished' && winnerId === player.id,
           isAdvancing: match.status === 'finished' && winnerId === player.id,

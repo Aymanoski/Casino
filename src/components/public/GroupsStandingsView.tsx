@@ -544,7 +544,9 @@ export function GroupsStandingsView({ embedded = false }: GroupsStandingsViewPro
                             <div className="flex items-center gap-2">
                               <PlayerAvatar
                                 name={p ? localizeText(lang, p.fullName, p.fullNameAr) : row.playerId}
+                                playerId={p?.id ?? row.playerId}
                                 avatarSeed={p?.avatarSeed ?? row.playerId}
+                                avatar={p?.avatar}
                                 size="xs"
                               />
                               <span className="font-bold text-red-900">

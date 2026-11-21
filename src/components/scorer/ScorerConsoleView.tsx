@@ -2313,6 +2313,7 @@ export function ScorerConsoleView({ matchId, gameId }: ScorerConsoleViewProps) {
                   name={localizeText(lang, player.fullName, player.fullNameAr)}
                   nickname={localizeText(lang, player.nickname, player.nicknameAr)}
                   avatarSeed={player.avatarSeed}
+                  avatar={player.avatar}
                   score={totals[player.id] ?? 0}
                   yellowCards={yellowCardsByPlayer[player.id] ?? 0}
                   redCards={redCardsByPlayer[player.id] ?? 0}
@@ -2482,6 +2483,7 @@ export function ScorerConsoleView({ matchId, gameId }: ScorerConsoleViewProps) {
                   name={localizeText(lang, player.fullName, player.fullNameAr)}
                   nickname={localizeText(lang, player.nickname, player.nicknameAr)}
                   avatarSeed={player.avatarSeed}
+                  avatar={player.avatar}
                   score={score}
                   rank={rank}
                   yellowCards={yellowCardsByPlayer[player.id] ?? 0}
@@ -2842,6 +2844,7 @@ export function ScorerConsoleView({ matchId, gameId }: ScorerConsoleViewProps) {
                     name={localizeText(lang, player.fullName, player.fullNameAr)}
                     nickname={localizeText(lang, player.nickname, player.nicknameAr)}
                     avatarSeed={player.avatarSeed}
+                    avatar={player.avatar}
                     score={totals[player.id] ?? 0}
                     rank={rankByPlayerId[player.id]}
                     yellowCards={yellowCardsByPlayer[player.id] ?? 0}

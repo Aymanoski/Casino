@@ -996,7 +996,9 @@ export function AdminGroupsView() {
                               </span>
                               <PlayerAvatar
                                 name={p ? localizeText(lang, p.fullName, p.fullNameAr) : row.playerId}
+                                playerId={p?.id ?? row.playerId}
                                 avatarSeed={p?.avatarSeed ?? row.playerId}
+                                avatar={p?.avatar}
                                 size="xs"
                               />
                               <div className="min-w-0">

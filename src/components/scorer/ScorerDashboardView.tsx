@@ -595,7 +595,9 @@ export function ScorerDashboardView() {
                           <div className="flex min-w-0 items-center gap-2.5">
                             <PlayerAvatar
                               name={localizeText(lang, player.fullName, player.fullNameAr)}
+                              playerId={player.id}
                               avatarSeed={player.avatarSeed}
+                              avatar={player.avatar}
                               size="sm"
                               isHost={player.isHost}
                               buzzed={isBuzzed}
@@ -822,7 +824,9 @@ export function ScorerDashboardView() {
                             <div className="flex min-w-0 items-center gap-2">
                               <PlayerAvatar
                                 name={localizeText(lang, player.fullName, player.fullNameAr)}
+                                playerId={player.id}
                                 avatarSeed={player.avatarSeed}
+                                avatar={player.avatar}
                                 size="sm"
                                 isHost={player.isHost}
                                 className="h-8 w-8"

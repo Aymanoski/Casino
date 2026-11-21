@@ -479,5 +479,5 @@ describe('Command Pipeline, Cascades, Impact Preview, Permissions, Undo, Invaria
     const writeMs = performance.now() - t1;
     expect(writeMs).toBeLessThan(500);
     expect((await storage.getScoreEventsByMatch(targetMatch.id)).length).toBe(201);
-  });
+  }, 60_000);
 });

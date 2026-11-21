@@ -19,7 +19,7 @@ import {
   type ScheduleConflict,
 } from '@/lib/engine';
 import { storage } from '@/lib/storage';
-import { redactMatchForRole } from './permissions';
+import { redactMatchForRole, resolveViewerRole } from './permissions';
 
 export type FinishGameResult = FinishMatchResult;
 
@@ -60,8 +60,10 @@ export const matchRepo = {
     type?: MatchType;
     includeDemo?: boolean;
     viewerRole?: UserRole | 'visitor' | null;
+    actorUserId?: string | null;
   }): Promise<Match[]> {
     const db = await storage.readSnapshot();
+    const effectiveRole = resolveViewerRole(db, options);
     let list = options?.includeDemo
       ? [...db.matches]
       : db.matches.filter((m) => !m.isDemo);
@@ -83,46 +85,78 @@ export const matchRepo = {
       list = list.filter((m) => m.type === options.type);
     }
 
-    return list.map((m) => redactMatchForRole(m, options?.viewerRole));
+    return list.map((m) => redactMatchForRole(m, effectiveRole));
   },
 
   async get(
     id: string,
-    options?: { viewerRole?: UserRole | 'visitor' | null }
+    options?: {
+      viewerRole?: UserRole | 'visitor' | null;
+      actorUserId?: string | null;
+    }
   ): Promise<Match | null> {
     const found = await storage.getMatch(id);
     if (!found) return null;
-    return redactMatchForRole(found, options?.viewerRole);
+    let effectiveRole = options?.viewerRole ?? null;
+    if (!effectiveRole && options?.actorUserId) {
+      const db = await storage.readSnapshot();
+      effectiveRole = resolveViewerRole(db, options);
+    }
+    return redactMatchForRole(found, effectiveRole);
   },
 
   async getByRound(
     roundId: string,
-    options?: { viewerRole?: UserRole | 'visitor' | null }
+    options?: {
+      viewerRole?: UserRole | 'visitor' | null;
+      actorUserId?: string | null;
+    }
   ): Promise<Match[]> {
     const matches = await storage.getMatchesByRound(roundId);
+    let effectiveRole = options?.viewerRole ?? null;
+    if (!effectiveRole && options?.actorUserId) {
+      const db = await storage.readSnapshot();
+      effectiveRole = resolveViewerRole(db, options);
+    }
     return matches
       .filter((m) => !m.isDemo)
-      .map((m) => redactMatchForRole(m, options?.viewerRole));
+      .map((m) => redactMatchForRole(m, effectiveRole));
   },
 
   async getByGroup(
     groupId: string,
-    options?: { viewerRole?: UserRole | 'visitor' | null }
+    options?: {
+      viewerRole?: UserRole | 'visitor' | null;
+      actorUserId?: string | null;
+    }
   ): Promise<Match[]> {
     const matches = await storage.getMatchesByGroup(groupId);
+    let effectiveRole = options?.viewerRole ?? null;
+    if (!effectiveRole && options?.actorUserId) {
+      const db = await storage.readSnapshot();
+      effectiveRole = resolveViewerRole(db, options);
+    }
     return matches
       .filter((m) => !m.isDemo)
-      .map((m) => redactMatchForRole(m, options?.viewerRole));
+      .map((m) => redactMatchForRole(m, effectiveRole));
   },
 
   async getByJudge(
     judgeUserId: string,
-    options?: { viewerRole?: UserRole | 'visitor' | null }
+    options?: {
+      viewerRole?: UserRole | 'visitor' | null;
+      actorUserId?: string | null;
+    }
   ): Promise<Match[]> {
     const matches = await storage.getMatchesByJudge(judgeUserId);
+    let effectiveRole = options?.viewerRole ?? null;
+    if (!effectiveRole && options?.actorUserId) {
+      const db = await storage.readSnapshot();
+      effectiveRole = resolveViewerRole(db, options);
+    }
     return matches
       .filter((m) => !m.isDemo)
-      .map((m) => redactMatchForRole(m, options?.viewerRole));
+      .map((m) => redactMatchForRole(m, effectiveRole));
   },
 
   async getByScorer(scorerUserId: string): Promise<Match[]> {

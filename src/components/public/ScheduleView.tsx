@@ -371,6 +371,7 @@ export function ScheduleView() {
                         ? part.placeholderLabelAr ?? `متأهل #${idx + 1}`
                         : part.placeholderLabelEn ?? `Qualifier #${idx + 1}`,
                     avatarSeed: `tbd-${idx}`,
+                    avatar: null,
                     isHost: Boolean(part.guest),
                     isPlaceholder: true,
                   };
@@ -392,7 +393,9 @@ export function ScheduleView() {
                 >
                   <PlayerAvatar
                     name={p.name}
+                    playerId={p.id}
                     avatarSeed={p.avatarSeed}
+                    avatar={p.avatar}
                     size="xs"
                     isHost={p.isHost}
                   />

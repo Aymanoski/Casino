@@ -330,6 +330,28 @@
 ### 47. Bonus Idea Built in CR1 Step 3
 - **Live Recent Plays Ticker inside `/scorer/[matchId]`:** Added a slim, non-intrusive 3-event live ticker strip above the bottom action dock showing the latest `+1`, `−1`, Yellow/Red card (with SVG card icon + note), or Undo entries with timestamps and a 1-tap jump into full Session History—giving judges instant visual reassurance after every rapid tap without opening a modal.
 
+---
+
+## Change Request 1 — Step 4 of 5: Player Privacy, Upcoming Match View & Shared Avatars (2026-11-21)
+
+### 48. Decisions & Confirmed Shape Choices (`v0.1.1-cr4-player`)
+1. **Strict Repository-Level Segment Secrecy (`matchRepo` + `scoreRepo` + Public Views — confirmed via Shape):**
+   - `redactMatchForRole` and `redactScoreEventForRole` in `src/lib/repos/permissions.ts` strip `segmentIds: []`, `currentSegmentIndex: 0`, and `ScoreEvent.segmentId: ''` on any unfinished non-demo match (`status !== 'finished'`) whenever read by a `player` or `visitor` (resolved via either `viewerRole` or `actorUserId`).
+   - `/player` and `/player/history` pass `viewerRole: 'player'` even during Super Admin preview so the Contestant Portal never leaks upcoming or live segment names, counts, order, categories, or match-specific rules.
+   - `/segments` (`SegmentsLibraryView.tsx`) maps segment usage counts and its inspector table list exclusively to **finished** matches (`status === 'finished'`), while `/final` (`FinalShowcaseView.tsx`) replaces the 8-segment list with a **"Surprise Championship Lineup — Revealed Live on Stage"** card until the Grand Final is `finished`.
+2. **24-Option 3D Avatar Library Source & License (`src/components/brand/AvatarLibrary3D.tsx` — AGENTS.md §15.3):**
+   - **Source:** Original in-house 3D-lit SVG artwork authored directly in `src/components/brand/AvatarLibrary3D.tsx` (`avatar-01` through `avatar-24`, featuring 24 game-show and Ramadan motifs: *Golden Studio Mic, Crimson Buzzer Dome, Royal Ramadan Fanous, Lucky Six 3D Die, Broadcast Headphones, Golden Crescent & Star, Champion Trophy Cup, Royal Spade Emblem, Cinema Clapboard, Electric Trivia Bolt, VIP Casino Chip, Comedy Stage Crown, Golden Falcon Crest, Clever Fox Mask, Nile Lotus Jewel, Gold Vinyl Turntable, Sudden-Death Stopwatch, Showtime Starburst, Mystery Trivia Cube, Golden Ramadan Dallah, Silver Screen Reel, Diamond Shield, Stage Rocket, Royal Lion Medallion*).
+   - **License:** **CC0 1.0 Universal (Public Domain Dedication) / MIT Project-Original** — 100% original vector geometry and 3D studio lighting rig with zero external third-party dependencies and zero real-person or celebrity likenesses.
+   - **Deterministic Assignment:** Assigned deterministically from `player.seed` / `player.id` via `resolveDeterministicAvatarKey()` (`(seed - 1) % 24`) and changeable by the player (for themselves) or by Super Admin (for any player). Marwan Serry (`player-marwan`) is strictly locked to his name-only Golden Seat emblem and cannot have a profile photo (`CommandValidationError` enforced in `/lib/commands`).
+3. **Interactive Square Crop & `<= 300KB` Compression Studio (`src/components/player/AvatarEditorDialog.tsx` — confirmed via Shape):**
+   - Supports Gallery upload and mobile Camera capture (`capture="user"`) with strict MIME validation (`image/jpeg`, `image/png`, `image/webp`), interactive drag-to-pan + `1×..3×` zoom square crop canvas, iterative client-side JPEG canvas compression guaranteed `<= 300KB` (paired with server/command-layer base64 byte-size and MIME validation in `validatePlayerAvatarInput`), 1-click **Remove Photo** (reverting to the 3D avatar library), and self-service bilingual Nickname (`nickname` / `nicknameAr`) editing for players.
+4. **Upcoming Match View & Judge Help Sticker Card (`src/components/player/PlayerProfileView.tsx`):**
+   - Displays Opponent(s) (with shared `PlayerAvatar`, full name, nickname, and seed `#`), Date & Call Time, Round & Group badges, prominent **Table Number** (`TABLE #N` badge + big casino-chip `#N` numerals), and the friendly **"Need help finding your table?" Judge Help Sticker Card** (`DESIGN.md §6`) with the assigned judge's name and 1-tap Call (`tel:`) and WhatsApp buttons logging `contact.viewed` via `userRepo.getJudgeContactForActor`.
+
+### 49. Bonus Idea Built in CR1 Step 4
+- **Interactive Pan/Zoom Square Framing Studio with Live Compressed KB Meter & 720-Player Searchable Preview Bar:** Upgraded `AvatarEditorDialog` with a tactile drag-to-frame square viewport and live compressed byte-size badge (`e.g. Compressed: 24 KB (<= 300 KB limit)`), and upgraded `PlayerPortalChrome` with the 720-player searchable `PlayerCombobox` (with live 3D avatars) + dynamic 1-click presets (`Upcoming Knockout`, `LIVE Now`, `Group 7 Winner`, `Upcoming Group`).
+
+
 
 
 
