@@ -31,19 +31,28 @@ import {
 import { Skeleton, TableRowSkeleton } from '@/components/ui/skeleton';
 import { DataTable, type DataTableColumn } from '@/components/ui/table';
 import { useToast } from '@/components/ui/toast';
+import {
+  DisciplinaryCardIcon,
+  getCardTypeFromAuditAction,
+} from '@/components/brand/DisciplinaryCards';
 import { AdminErrorBanner, AdminPageHeader } from './AdminPageHeader';
 import { formatAdminDateTime, getRoleBadgeVariant } from './adminFormatters';
 import { downloadCsvFile } from './csvUtils';
 
 const ENTITY_TYPES: AuditEntityType[] = [
   'score',
+  'absence',
   'buzz',
+  'contact',
+  'match',
   'game',
+  'group',
   'player',
   'bracket',
   'round',
   'segment',
   'user',
+  'cascade',
   'sponsor',
   'content',
   'settings',
@@ -209,24 +218,35 @@ export function AdminAuditView() {
         key: 'summary',
         header: lang === 'ar' ? 'الإجراء والوصف' : 'Action & Summary',
         mobileRole: 'title',
-        render: (e) => (
-          <div className="min-w-0 max-w-md space-y-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <code
-                dir="ltr"
-                className="rounded-chip-sm border border-border-paper bg-paper-2 px-2 py-0.5 text-[11px] font-bold text-red-900"
-              >
-                {e.action}
-              </code>
-              <Badge variant="white" className="text-[10px] px-2 py-0">
-                {e.entityType}
-              </Badge>
+        render: (e) => {
+          const cardColor = getCardTypeFromAuditAction(e.action);
+          return (
+            <div className="min-w-0 max-w-md space-y-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {cardColor && (
+                  <DisciplinaryCardIcon card={cardColor} size="sm" />
+                )}
+                <code
+                  dir="ltr"
+                  className="rounded-chip-sm border border-border-paper bg-paper-2 px-2 py-0.5 text-[11px] font-bold text-red-900"
+                >
+                  {e.action}
+                </code>
+                <Badge variant="white" className="text-[10px] px-2 py-0">
+                  {e.entityType}
+                </Badge>
+                {e.automatic && (
+                  <Badge variant="info" className="text-[10px] px-2 py-0">
+                    {lang === 'ar' ? 'تلقائي' : 'AUTO'}
+                  </Badge>
+                )}
+              </div>
+              <div className="text-xs font-semibold text-ink leading-snug">
+                {localizeText(lang, e.summary, e.summaryAr)}
+              </div>
             </div>
-            <div className="text-xs font-semibold text-ink leading-snug">
-              {localizeText(lang, e.summary, e.summaryAr)}
-            </div>
-          </div>
-        ),
+          );
+        },
       },
       {
         key: 'actor',

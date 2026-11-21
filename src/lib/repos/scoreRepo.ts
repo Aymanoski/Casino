@@ -211,7 +211,7 @@ export const scoreRepo = {
     playerId: string;
     delta: number;
     note?: string;
-    kind?: ScoreEventKind | 'preset' | 'custom';
+    kind?: Exclude<ScoreEventKind, 'undo'>;
     byUserId: string;
     confirmCascade?: boolean;
     cascadePolicy?: CascadePolicy;
@@ -235,7 +235,7 @@ export const scoreRepo = {
       matchId,
       segmentId: input.segmentId,
       playerId: input.playerId,
-      delta: input.delta,
+      delta: input.delta === -1 ? -1 : 1,
       note: input.note,
       byUserId: input.byUserId,
       confirmCascade: input.confirmCascade,
@@ -316,7 +316,7 @@ export const scoreRepo = {
 
   async editScoreEvent(
     eventId: string,
-    patch: { delta: number; note?: string; segmentId?: string },
+    patch: { delta: number; kind?: 'point' | 'yellow' | 'red'; note?: string; segmentId?: string },
     byUserId: string,
     options?: {
       confirmCascade?: boolean;
@@ -327,6 +327,7 @@ export const scoreRepo = {
     return commands.editScoreEvent({
       eventId,
       delta: patch.delta,
+      kind: patch.kind,
       note: patch.note,
       segmentId: patch.segmentId,
       byUserId,

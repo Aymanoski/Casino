@@ -8,9 +8,7 @@ import {
   Clock,
   Crown,
   MapPin,
-  Minus,
   MonitorPlay,
-  Plus,
   Sparkles,
   Trophy,
   Zap,
@@ -851,33 +849,9 @@ export function FinalShowcaseView() {
                         </span>
                       </span>
 
-                      <div className="flex flex-wrap items-center gap-1">
-                        {seg.presetPoints.map((pts) => {
-                          const isPos = pts > 0;
-                          return (
-                            <span
-                              key={pts}
-                              className={cn(
-                                'inline-flex items-center gap-0.5 rounded-pill border px-2 py-0.5 font-score text-xs font-black tabular-nums',
-                                isPos
-                                  ? 'border-positive bg-positive-soft text-positive-ink'
-                                  : 'border-outline bg-negative text-white'
-                              )}
-                            >
-                              {isPos ? (
-                                <Plus className="h-2.5 w-2.5 stroke-[3]" aria-hidden="true" />
-                              ) : (
-                                <Minus className="h-2.5 w-2.5 stroke-[3]" aria-hidden="true" />
-                              )}
-                              <span>
-                                {formatNumber(Math.abs(pts), {
-                                  useArabicIndicDigits: useArabicIndic,
-                                })}
-                              </span>
-                            </span>
-                          );
-                        })}
-                      </div>
+                      <span className="text-[11px] font-bold text-ink-muted">
+                        {lang === 'ar' ? '+١ / −١ · بطاقات' : '+1 / −1 · Cards'}
+                      </span>
                     </div>
                   </Link>
                 );

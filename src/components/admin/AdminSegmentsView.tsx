@@ -10,7 +10,6 @@ import {
   Pencil,
   Plus,
   Trash2,
-  X,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
@@ -22,7 +21,6 @@ import {
   formatNumber,
   localizeText,
   normalizeSearchText,
-  parseSignedIntegerInput,
 } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -41,7 +39,6 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
-import { ScoreChip } from '@/components/brand/ScoreChip';
 import { AdminErrorBanner, AdminPageHeader } from './AdminPageHeader';
 import { getSegmentCategoryMeta } from './adminFormatters';
 
@@ -61,7 +58,6 @@ interface SegmentFormState {
   descriptionAr: string;
   hasTimer: boolean;
   durationSec: string;
-  presetPoints: number[];
 }
 
 export function AdminSegmentsView() {
@@ -88,10 +84,7 @@ export function AdminSegmentsView() {
     descriptionAr: '',
     hasTimer: true,
     durationSec: '45',
-    presetPoints: [10, 5, -5],
   });
-  const [newPresetVal, setNewPresetVal] = useState('');
-  const [presetError, setPresetError] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<{ nameEn?: string; nameAr?: string }>({});
   const [saving, setSaving] = useState(false);
   const [reordering, setReordering] = useState(false);
@@ -185,10 +178,7 @@ export function AdminSegmentsView() {
       descriptionAr: '',
       hasTimer: true,
       durationSec: '45',
-      presetPoints: [10, 5, -5],
     });
-    setNewPresetVal('');
-    setPresetError(null);
     setFormErrors({});
     setDialogOpen(true);
   };
@@ -203,36 +193,9 @@ export function AdminSegmentsView() {
       descriptionAr: seg.descriptionAr,
       hasTimer: Boolean(seg.durationSec),
       durationSec: String(seg.durationSec ?? 45),
-      presetPoints: [...seg.presetPoints],
     });
-    setNewPresetVal('');
-    setPresetError(null);
     setFormErrors({});
     setDialogOpen(true);
-  };
-
-  const handleAddPreset = () => {
-    const parsed = parseSignedIntegerInput(newPresetVal, {
-      min: -500,
-      max: 500,
-      allowZero: false,
-    });
-    if (!parsed.ok) {
-      setPresetError(
-        lang === 'ar'
-          ? 'أدخل رقماً صحيحاً غير صفري بين −٥٠٠ و +٥٠٠ (يدعم الأرقام العربية)'
-          : 'Enter a non-zero integer between −500 and +500.'
-      );
-      return;
-    }
-    setPresetError(null);
-    if (!form.presetPoints.includes(parsed.value)) {
-      setForm((prev) => ({
-        ...prev,
-        presetPoints: [...prev.presetPoints, parsed.value],
-      }));
-    }
-    setNewPresetVal('');
   };
 
   const handleMove = async (index: number, delta: -1 | 1) => {
@@ -330,8 +293,6 @@ export function AdminSegmentsView() {
               descriptionEn: form.descriptionEn.trim(),
               descriptionAr: form.descriptionAr.trim(),
               durationSec,
-              presetPoints:
-                form.presetPoints.length > 0 ? form.presetPoints : [10, 5, -5],
             };
 
         await segmentRepo.update(editing.id, patch, user.id);
@@ -349,8 +310,6 @@ export function AdminSegmentsView() {
             descriptionEn: form.descriptionEn.trim(),
             descriptionAr: form.descriptionAr.trim(),
             durationSec,
-            presetPoints:
-              form.presetPoints.length > 0 ? form.presetPoints : [10, 5, -5],
           },
           user.id
         );
@@ -412,11 +371,11 @@ export function AdminSegmentsView() {
         description={
           isContentOnly
             ? lang === 'ar'
-              ? 'وضع مدير المحتوى: يمكنك تحرير أسماء وأوصاف الفقرات باللغتين؛ النقاط والترتيب والمؤقتات مخصصة لمدير البطولة.'
-              : 'Content Manager scope: you may edit bilingual segment titles and descriptions; scoring presets, timers, and ordering are locked to Super Admin.'
+              ? 'وضع مدير المحتوى: يمكنك تحرير أسماء وأوصاف الفقرات باللغتين؛ التصنيف والترتيب والمؤقتات مخصصة لمدير البطولة.'
+              : 'Content Manager scope: you may edit bilingual segment titles and descriptions; categories, timers, and ordering are locked to Super Admin.'
             : lang === 'ar'
-              ? 'إدارة فقرات البطولة، إعادة الترتيب بالسحب أو الأسهم، تخصيص النقاط المسبقة والمؤقتات الاختيارية باللغتين.'
-              : 'Create, edit, reorder, and configure segment categories, scoring presets, optional timers, and bilingual EN/AR copy.'
+              ? 'إدارة فقرات البطولة، إعادة الترتيب بالسحب أو الأسهم، وضبط التصنيفات والمؤقتات الاختيارية باللغتين (نظام النقاط موحد في لوحة الحكم: +١، −١، صفراء −١، حمراء −٢).'
+              : 'Create, edit, reorder, and configure segment categories, optional timers, and bilingual EN/AR copy. All matches use uniform scoring (+1, −1, Yellow −1, Red −2).'
         }
         badge={
           isContentOnly ? (
@@ -564,20 +523,8 @@ export function AdminSegmentsView() {
                   </div>
                 </div>
 
-                {/* Right: Preset Chips + Reorder + Actions */}
-                <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end shrink-0">
-                  <div className="flex items-center gap-1.5">
-                    {seg.presetPoints.map((pts, pIdx) => (
-                      <ScoreChip
-                        key={`${seg.id}-pt-${pIdx}`}
-                        value={pts}
-                        showSign
-                        size="sm"
-                        useArabicIndicDigits={useArabicIndic}
-                      />
-                    ))}
-                  </div>
-
+                {/* Right: Reorder + Actions */}
+                <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
                   <div className="flex items-center gap-1">
                     {canReorder && (
                       <>
@@ -665,8 +612,8 @@ export function AdminSegmentsView() {
             </DialogTitle>
             <DialogDescription>
               {lang === 'ar'
-                ? 'اكتب وصفاً أصلياً ومختصراً للفقرة باللغتين مع ضبط النقاط والمؤقت.'
-                : 'Author original bilingual titles and descriptions, plus scoring presets and optional timer.'}
+                ? 'اكتب وصفاً أصلياً ومختصراً للفقرة باللغتين مع ضبط التصنيف والمؤقت الاختياري.'
+                : 'Author original bilingual titles and descriptions, plus segment category and optional timer.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -775,64 +722,6 @@ export function AdminSegmentsView() {
                     />
                   </div>
                 </FormGrid>
-
-                {/* Preset Points Editor (44px+ accessible removable pills + Arabic-Indic numeric support) */}
-                <div className="space-y-2.5 rounded-input border border-border-paper bg-paper p-3.5">
-                  <div className="text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
-                    {lang === 'ar' ? 'أزرار النقاط المسبقة' : 'Preset Point Buttons'}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {form.presetPoints.map((pt, idx) => (
-                      <button
-                        key={`${pt}-${idx}`}
-                        type="button"
-                        onClick={() =>
-                          setForm((s) => ({
-                            ...s,
-                            presetPoints: s.presetPoints.filter((_, i) => i !== idx),
-                          }))
-                        }
-                        aria-label={
-                          lang === 'ar'
-                            ? `إزالة النقطة ${pt}`
-                            : `Remove preset ${pt > 0 ? `+${pt}` : pt}`
-                        }
-                        className="inline-flex min-h-[44px] items-center gap-2 rounded-pill border border-border-paper bg-white ps-1.5 pe-3 py-1 transition-colors hover:border-negative hover:bg-negative-soft focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
-                      >
-                        <ScoreChip value={pt} showSign size="sm" />
-                        <X className="h-4 w-4 text-negative" aria-hidden="true" />
-                      </button>
-                    ))}
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        aria-label={lang === 'ar' ? 'قيمة نقطة مسبقة جديدة' : 'New preset points value'}
-                        value={newPresetVal}
-                        onChange={(e) => {
-                          setNewPresetVal(e.target.value);
-                          if (presetError) setPresetError(null);
-                        }}
-                        placeholder="+15 / -10"
-                        className="min-h-[44px] h-11 w-28 rounded-input border-2 border-border-paper bg-white px-2.5 text-base font-bold text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
-                      />
-                      <Button
-                        type="button"
-                        variant="calm"
-                        size="sm"
-                        onClick={handleAddPreset}
-                      >
-                        <Plus className="h-4 w-4" />
-                        <span>{lang === 'ar' ? 'إضافة' : 'Add'}</span>
-                      </Button>
-                    </div>
-                  </div>
-                  {presetError && (
-                    <p role="alert" className="text-xs font-bold text-negative">
-                      {presetError}
-                    </p>
-                  )}
-                </div>
               </>
             )}
 

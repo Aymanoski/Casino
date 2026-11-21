@@ -174,6 +174,9 @@ export function StudioSidebarShell({
   const consoleTargetGameId = activeRouteGameId ?? primaryGameId;
   const consoleTargetCode = consoleTargetGameId
     .replace(/^game-(?:gen-)?/i, 'G')
+    .replace(/^match-g(\d+)-m(\d+)$/i, 'G$1·M$2')
+    .replace(/^match-final$/i, 'FINAL')
+    .replace(/^match-/i, 'M-')
     .toUpperCase();
 
   const scorerLinks: SidebarLinkItem[] = [

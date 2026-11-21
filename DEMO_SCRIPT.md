@@ -40,10 +40,10 @@ Complete these steps **before** walking into the room:
 - **Click:** Click the gold **"See the live demo"** button (smooth-scrolls to **`#live-demo`**).
 - **Do these 3 clicks live (takes 20 seconds):**
   1. On the left **Mini Scorer Console**, tap **"Buzzed First"** on **Omar Hassan** → point to the right **Mini Big Screen** flashing **`Omar Hassan BUZZED FIRST!`** instantaneously.
-  2. Tap **`+10`** (green plus preset) → watch Omar's score animate upward with a floating `+10` delta and reorder the live board.
+  2. Tap **`+1`** (emerald plus) or **`Yellow (−1)`** → watch Omar's score and SVG card counters update live and reorder the board.
   3. Tap **`Undo`** → watch it cleanly revert in one tap. *(Optional: click **"Pop Out Big Screen Tab"** if presenting on two monitors.)*
 - **What to say:**
-  > *"Every game table runs on this exact engine. There are no fragile phone buzzers to break on set — each table has one dedicated scorer on an iPad. The moment they tap who buzzed first and award +10, +5, or −5, the venue Big Screen and live leaderboard react in real time. And if a scorer makes a mistake under studio pressure, Undo reverts it cleanly without erasing history."*
+  > *"Every match table runs on this exact engine. There are no fragile phone buzzers to break on set — each table has one dedicated judge on an iPad. The moment they tap who buzzed first and award +1, −1, or a Yellow/Red card, the venue Big Screen and live leaderboard react in real time. And if a judge makes a mistake under studio pressure, Undo reverts it cleanly without erasing history."*
 
 ---
 

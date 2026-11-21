@@ -11,24 +11,27 @@ import {
   Minus,
   Plus,
   PlusCircle,
+  RotateCcw,
   ShieldCheck,
-  Trash2,
   Undo2,
+  UserX,
   X,
   Zap,
 } from 'lucide-react';
 import { canManageScoreHistory, useAuth } from '@/lib/auth';
 import {
   CascadeConfirmationRequiredError,
+  commands,
+  VersionConflictError,
   type CascadePolicy,
 } from '@/lib/commands';
 import type { CascadeImpact } from '@/lib/engine';
 import { useI18n } from '@/lib/i18n';
-import { scoreRepo } from '@/lib/repos';
 import { ImpactPreviewDialog } from '@/components/admin/ImpactPreviewDialog';
 import type {
+  AbsenceEvent,
   BuzzEvent,
-  Game,
+  Match,
   Player,
   ScoreEvent,
   Segment,
@@ -39,8 +42,6 @@ import {
   formatArabicCount,
   formatNumber,
   localizeText,
-  normalizeNumericInput,
-  parseSignedIntegerInput,
 } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -55,26 +56,33 @@ import {
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
 import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
+import {
+  DisciplinaryCardIcon,
+  formatScoreEventDisplay,
+  stripCardNotePrefix,
+} from '@/components/brand/DisciplinaryCards';
 
-type FeedTab = 'all' | 'scores' | 'buzzes';
+type FeedTab = 'all' | 'scores' | 'absences' | 'buzzes';
+type ScoringActionChoice = 'plus1' | 'minus1' | 'yellow' | 'red';
 
 type TimelineRow =
   | { type: 'score'; createdAt: string; event: ScoreEvent }
+  | { type: 'absence'; createdAt: string; event: AbsenceEvent }
   | { type: 'buzz'; createdAt: string; event: BuzzEvent };
 
 const PAGE_SIZE = 25;
 const NOTE_MAX_LENGTH = 140;
-const DELTA_MIN = -10000;
-const DELTA_MAX = 10000;
 
 export interface SessionHistoryDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  game: Game;
+  game: Match;
   players: Player[];
   segments: Segment[];
   users: User[];
   scoreEvents: ScoreEvent[];
+  absenceEvents: AbsenceEvent[];
+  absentPlayerIds: string[];
   buzzEvents: BuzzEvent[];
   useArabicIndicDigits?: boolean;
   onChanged: () => Promise<void> | void;
@@ -97,25 +105,10 @@ function formatEventTime(
   }).format(d);
 }
 
-function getDeltaErrorMessage(
-  reason: 'empty' | 'invalid' | 'zero' | 'range',
-  lang: 'en' | 'ar',
-  useArabicIndicDigits: boolean
-): string {
-  if (reason === 'range') {
-    const maxStr = formatNumber(DELTA_MAX, { useArabicIndicDigits });
-    return lang === 'ar'
-      ? `القيمة يجب أن تكون بين -${maxStr} و +${maxStr}.`
-      : `Value must be between -${maxStr} and +${maxStr}.`;
-  }
-  if (reason === 'zero') {
-    return lang === 'ar'
-      ? 'لا يمكن حفظ قيمة صفر — أدخل رقماً موجباً أو سالباً.'
-      : 'Points cannot be 0 — enter a positive or negative whole number.';
-  }
-  return lang === 'ar'
-    ? 'أدخل عدداً صحيحاً غير الصفر (مثال: 10 أو -5 أو ١٥).'
-    : 'Enter a non-zero whole number (e.g. 10 or -5).';
+function choiceFromScoreEvent(ev: ScoreEvent): ScoringActionChoice {
+  if (ev.kind === 'yellow') return 'yellow';
+  if (ev.kind === 'red') return 'red';
+  return ev.delta < 0 ? 'minus1' : 'plus1';
 }
 
 export function SessionHistoryDrawer({
@@ -126,6 +119,8 @@ export function SessionHistoryDrawer({
   segments,
   users,
   scoreEvents,
+  absenceEvents,
+  absentPlayerIds,
   buzzEvents,
   useArabicIndicDigits = false,
   onChanged,
@@ -135,43 +130,43 @@ export function SessionHistoryDrawer({
   const { toast } = useToast();
 
   const canManage = canManageScoreHistory(user?.role ?? null);
+  const isSuperAdmin = user?.role === 'superAdmin';
 
   const [tab, setTab] = useState<FeedTab>('all');
   const [playerFilter, setPlayerFilter] = useState<string>('all');
   const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
   const [busy, setBusy] = useState<boolean>(false);
 
-  // Add retroactive/manual score entry state
+  // Add entry state (strictly +1, -1, Yellow card, Red card — zero free-number inputs)
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
   const [addPlayerId, setAddPlayerId] = useState<string>(game.playerIds[0] ?? '');
   const [addSegmentId, setAddSegmentId] = useState<string>(
     game.segmentIds[game.currentSegmentIndex] ?? game.segmentIds[0] ?? ''
   );
-  const [addDelta, setAddDelta] = useState<string>('10');
+  const [addChoice, setAddChoice] = useState<ScoringActionChoice>('plus1');
   const [addNote, setAddNote] = useState<string>('');
   const [addError, setAddError] = useState<string | null>(null);
 
-  // Inline edit score event state
+  // Inline edit score event state (strictly +1, -1, Yellow card, Red card)
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDelta, setEditDelta] = useState<string>('');
+  const [editChoice, setEditChoice] = useState<ScoringActionChoice>('plus1');
   const [editNote, setEditNote] = useState<string>('');
   const [editSegmentId, setEditSegmentId] = useState<string>('');
-  const [editError, setEditError] = useState<string | null>(null);
 
-  // Confirm dialogs for history actions + Cascade Impact Preview
+  // Confirm dialogs + Cascade Impact Preview
   const [confirmRevertEvent, setConfirmRevertEvent] = useState<ScoreEvent | null>(
     null
   );
+  const [confirmReverseAbsentPlayer, setConfirmReverseAbsentPlayer] =
+    useState<Player | null>(null);
   const [pendingImpact, setPendingImpact] = useState<{
     impact: CascadeImpact;
     retry: (policy: CascadePolicy) => Promise<void>;
   } | null>(null);
 
-  // Reset transient editing/pagination state cleanly when drawer closes or game changes
   useEffect(() => {
     if (!open) {
       setEditingId(null);
-      setEditError(null);
       setAddError(null);
       setVisibleCount(PAGE_SIZE);
     } else {
@@ -217,6 +212,13 @@ export function SessionHistoryDrawer({
         }
       }
     }
+    if (tab === 'all' || tab === 'absences') {
+      for (const ab of absenceEvents) {
+        if (playerFilter === 'all' || ab.playerId === playerFilter) {
+          rows.push({ type: 'absence', createdAt: ab.createdAt, event: ab });
+        }
+      }
+    }
     if (tab === 'all' || tab === 'buzzes') {
       for (const b of buzzEvents) {
         if (playerFilter === 'all' || b.playerId === playerFilter) {
@@ -229,7 +231,7 @@ export function SessionHistoryDrawer({
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
     return rows;
-  }, [scoreEvents, buzzEvents, tab, playerFilter]);
+  }, [scoreEvents, absenceEvents, buzzEvents, tab, playerFilter]);
 
   const visibleTimeline = useMemo(
     () => timeline.slice(0, visibleCount),
@@ -239,37 +241,38 @@ export function SessionHistoryDrawer({
 
   const beginEdit = (ev: ScoreEvent) => {
     setEditingId(ev.id);
-    setEditDelta(String(ev.delta));
-    setEditNote(ev.note ?? '');
+    setEditChoice(choiceFromScoreEvent(ev));
+    setEditNote(stripCardNotePrefix(ev.note) ?? '');
     setEditSegmentId(ev.segmentId);
-    setEditError(null);
   };
 
   const handleSaveEdit = async (
     ev: ScoreEvent,
     cascadeOpts?: { confirmCascade?: boolean; cascadePolicy?: CascadePolicy }
   ) => {
-    const parsed = parseSignedIntegerInput(editDelta, {
-      min: DELTA_MIN,
-      max: DELTA_MAX,
-    });
-    if (!parsed.ok) {
-      setEditError(getDeltaErrorMessage(parsed.reason, lang, useArabicIndicDigits));
-      return;
-    }
-    setEditError(null);
+    if (!user) return;
     setBusy(true);
     try {
-      await scoreRepo.editScoreEvent(
-        ev.id,
-        {
-          delta: parsed.value,
-          note: editNote.trim().slice(0, NOTE_MAX_LENGTH) || undefined,
-          segmentId: editSegmentId || ev.segmentId,
-        },
-        user?.id ?? 'user-admin',
-        cascadeOpts
-      );
+      const kind: 'point' | 'yellow' | 'red' =
+        editChoice === 'yellow'
+          ? 'yellow'
+          : editChoice === 'red'
+            ? 'red'
+            : 'point';
+      const delta =
+        editChoice === 'plus1' ? 1 : editChoice === 'red' ? -2 : -1;
+
+      await commands.editScoreEvent({
+        eventId: ev.id,
+        delta,
+        kind,
+        note: editNote.trim().slice(0, NOTE_MAX_LENGTH) || undefined,
+        segmentId: editSegmentId || ev.segmentId,
+        byUserId: user.id,
+        expectedVersion: game.version,
+        confirmCascade: cascadeOpts?.confirmCascade,
+        cascadePolicy: cascadeOpts?.cascadePolicy,
+      });
       setEditingId(null);
       setPendingImpact(null);
       await onChanged();
@@ -277,8 +280,8 @@ export function SessionHistoryDrawer({
         variant: 'info',
         title:
           lang === 'ar'
-            ? 'تم تعديل حركة النقاط وإعادة حساب النتائج تلقائياً'
-            : 'Score updated, outcomes recomputed & logged to Audit',
+            ? 'تم تعديل الحركة وإعادة حساب النتائج تلقائياً'
+            : 'Entry updated, outcomes recomputed & logged to Audit',
       });
     } catch (err) {
       if (err instanceof CascadeConfirmationRequiredError) {
@@ -289,15 +292,22 @@ export function SessionHistoryDrawer({
         });
         return;
       }
+      if (err instanceof VersionConflictError) {
+        await onChanged();
+        toast({
+          variant: 'gold',
+          title:
+            lang === 'ar'
+              ? 'تم تحديث المباراة في نافذة أخرى'
+              : 'Match Updated Elsewhere',
+          description: err.message,
+        });
+        return;
+      }
       toast({
         variant: 'negative',
         title: lang === 'ar' ? 'تعذر حفظ التعديل' : 'Could not save edit',
-        description:
-          err instanceof Error
-            ? err.message
-            : lang === 'ar'
-              ? 'حاول مرة أخرى للتحقق من حفظ التعديل.'
-              : 'Please try saving the score adjustment again.',
+        description: err instanceof Error ? err.message : undefined,
       });
     } finally {
       setBusy(false);
@@ -308,15 +318,17 @@ export function SessionHistoryDrawer({
     cascadeOpts?: { confirmCascade?: boolean; cascadePolicy?: CascadePolicy }
   ) => {
     const targetEv = confirmRevertEvent;
-    if (!targetEv || busy) return;
+    if (!targetEv || !user || busy) return;
     setBusy(true);
     try {
-      await scoreRepo.undoScoreEventById(
-        game.id,
-        targetEv.id,
-        user?.id ?? 'user-admin',
-        cascadeOpts
-      );
+      await commands.revertEvent({
+        matchId: game.id,
+        targetEventId: targetEv.id,
+        byUserId: user.id,
+        expectedVersion: game.version,
+        confirmCascade: cascadeOpts?.confirmCascade,
+        cascadePolicy: cascadeOpts?.cascadePolicy,
+      });
       setConfirmRevertEvent(null);
       setPendingImpact(null);
       await onChanged();
@@ -324,7 +336,7 @@ export function SessionHistoryDrawer({
         variant: 'info',
         title:
           lang === 'ar'
-            ? 'تم إنشاء حركة تراجع معاكسة وإعادة حساب النتائج'
+            ? 'تم تسجيل تراجع معاكس وإعادة حساب النتائج'
             : 'Compensating undo recorded & outcomes recomputed',
       });
     } catch (err) {
@@ -336,27 +348,81 @@ export function SessionHistoryDrawer({
         });
         return;
       }
+      if (err instanceof VersionConflictError) {
+        await onChanged();
+        toast({
+          variant: 'gold',
+          title:
+            lang === 'ar'
+              ? 'تم تحديث المباراة في نافذة أخرى'
+              : 'Match Updated Elsewhere',
+          description: err.message,
+        });
+        return;
+      }
       toast({
         variant: 'negative',
         title: lang === 'ar' ? 'تعذر عكس الحركة' : 'Could not revert entry',
-        description:
-          err instanceof Error
-            ? err.message
-            : lang === 'ar'
-              ? 'حاول مرة أخرى لعكس حركة النقاط.'
-              : 'Please try reverting this score entry again.',
+        description: err instanceof Error ? err.message : undefined,
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const handleAddEntry = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const parsed = parseSignedIntegerInput(addDelta, {
-      min: DELTA_MIN,
-      max: DELTA_MAX,
-    });
+  const handleConfirmReverseAbsence = async (
+    cascadeOpts?: { confirmCascade?: boolean; cascadePolicy?: CascadePolicy }
+  ) => {
+    const targetPlayer = confirmReverseAbsentPlayer;
+    if (!targetPlayer || !user || busy) return;
+    setBusy(true);
+    try {
+      await commands.reverseAbsence({
+        matchId: game.id,
+        playerId: targetPlayer.id,
+        byUserId: user.id,
+        expectedVersion: game.version,
+        confirmCascade: cascadeOpts?.confirmCascade,
+        cascadePolicy: cascadeOpts?.cascadePolicy,
+      });
+      setConfirmReverseAbsentPlayer(null);
+      setPendingImpact(null);
+      await onChanged();
+      toast({
+        variant: 'positive',
+        title:
+          lang === 'ar'
+            ? 'تم إلغاء الغياب وإعادة حساب المباراة'
+            : 'Absence reversed & match recomputed',
+      });
+    } catch (err) {
+      if (err instanceof CascadeConfirmationRequiredError) {
+        setPendingImpact({
+          impact: err.impact,
+          retry: (policy) =>
+            handleConfirmReverseAbsence({
+              confirmCascade: true,
+              cascadePolicy: policy,
+            }),
+        });
+        return;
+      }
+      toast({
+        variant: 'negative',
+        title: lang === 'ar' ? 'تعذر إلغاء الغياب' : 'Could not reverse absence',
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleAddEntry = async (
+    e?: React.FormEvent,
+    cascadeOpts?: { confirmCascade?: boolean; cascadePolicy?: CascadePolicy }
+  ) => {
+    e?.preventDefault();
+    if (!user) return;
     if (!addPlayerId || !addSegmentId) {
       setAddError(
         lang === 'ar'
@@ -365,69 +431,144 @@ export function SessionHistoryDrawer({
       );
       return;
     }
-    if (!parsed.ok) {
-      setAddError(getDeltaErrorMessage(parsed.reason, lang, useArabicIndicDigits));
-      return;
-    }
     setAddError(null);
     setBusy(true);
     try {
-      await scoreRepo.applyScore({
-        gameId: game.id,
-        segmentId: addSegmentId,
-        playerId: addPlayerId,
-        delta: parsed.value,
-        note: addNote.trim().slice(0, NOTE_MAX_LENGTH) || undefined,
-        kind: 'custom',
-        byUserId: user?.id ?? 'user-admin',
-      });
+      const noteClean = addNote.trim().slice(0, NOTE_MAX_LENGTH) || undefined;
+      if (addChoice === 'yellow' || addChoice === 'red') {
+        await commands.applyCard({
+          matchId: game.id,
+          segmentId: addSegmentId,
+          playerId: addPlayerId,
+          card: addChoice,
+          note: noteClean,
+          byUserId: user.id,
+          expectedVersion: game.version,
+          confirmCascade: cascadeOpts?.confirmCascade,
+          cascadePolicy: cascadeOpts?.cascadePolicy,
+        });
+      } else {
+        await commands.applyPoint({
+          matchId: game.id,
+          segmentId: addSegmentId,
+          playerId: addPlayerId,
+          delta: addChoice === 'plus1' ? 1 : -1,
+          note: noteClean,
+          byUserId: user.id,
+          expectedVersion: game.version,
+          confirmCascade: cascadeOpts?.confirmCascade,
+          cascadePolicy: cascadeOpts?.cascadePolicy,
+        });
+      }
       setAddNote('');
       setShowAddForm(false);
+      setPendingImpact(null);
       await onChanged();
       toast({
-        variant: parsed.value > 0 ? 'positive' : 'negative',
+        variant: addChoice === 'plus1' ? 'positive' : 'negative',
         title:
           lang === 'ar'
-            ? 'تمت إضافة حركة النقاط للسجل'
-            : 'Score adjustment added to history',
+            ? 'تمت إضافة الحركة للسجل'
+            : 'Entry recorded in match log',
       });
-    } catch {
+    } catch (err) {
+      if (err instanceof CascadeConfirmationRequiredError) {
+        setPendingImpact({
+          impact: err.impact,
+          retry: (policy) =>
+            handleAddEntry(undefined, {
+              confirmCascade: true,
+              cascadePolicy: policy,
+            }),
+        });
+        return;
+      }
       toast({
         variant: 'negative',
-        title: lang === 'ar' ? 'تعذر إضافة الحركة' : 'Could not add score entry',
-        description:
-          lang === 'ar'
-            ? 'حاول الحفظ مرة أخرى.'
-            : 'Please try saving the entry again.',
+        title: lang === 'ar' ? 'تعذر إضافة الحركة' : 'Could not add entry',
+        description: err instanceof Error ? err.message : undefined,
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const toggleNumericSign = (
-    current: string,
-    setter: (v: string) => void,
-    clearErr: () => void
+  const renderChoicePicker = (
+    value: ScoringActionChoice,
+    onChange: (next: ScoringActionChoice) => void
   ) => {
-    clearErr();
-    const normalized = normalizeNumericInput(current);
-    if (!normalized) {
-      setter('-');
-      return;
-    }
-    if (normalized.startsWith('-')) {
-      setter(normalized.slice(1));
-    } else if (normalized.startsWith('+')) {
-      setter(`-${normalized.slice(1)}`);
-    } else {
-      setter(`-${normalized}`);
-    }
-  };
+    const options: Array<{
+      id: ScoringActionChoice;
+      label: string;
+      card?: 'yellow' | 'red';
+      tone: string;
+    }> = [
+      {
+        id: 'plus1',
+        label: `+${formatNumber(1, { useArabicIndicDigits })}`,
+        tone: 'bg-positive-soft text-positive-ink border-positive',
+      },
+      {
+        id: 'minus1',
+        label: `−${formatNumber(1, { useArabicIndicDigits })}`,
+        tone: 'bg-white text-negative border-outline',
+      },
+      {
+        id: 'yellow',
+        label:
+          lang === 'ar'
+            ? `بطاقة صفراء (−${formatNumber(1, { useArabicIndicDigits })})`
+            : 'Yellow card (−1)',
+        card: 'yellow',
+        tone: 'bg-gold-400 text-red-900 border-outline',
+      },
+      {
+        id: 'red',
+        label:
+          lang === 'ar'
+            ? `بطاقة حمراء (−${formatNumber(2, { useArabicIndicDigits })})`
+            : 'Red card (−2)',
+        card: 'red',
+        tone: 'bg-negative text-white border-outline',
+      },
+    ];
 
-  const formatSignedDelta = (delta: number) => {
-    const absStr = formatNumber(Math.abs(delta), { useArabicIndicDigits });
-    return delta > 0 ? `+${absStr}` : `−${absStr}`;
+    return (
+      <div
+        className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+        role="radiogroup"
+        aria-label={lang === 'ar' ? 'نوع الحركة' : 'Scoring action'}
+      >
+        {options.map((opt) => {
+          const active = value === opt.id;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => onChange(opt.id)}
+              className={cn(
+                'flex min-h-[48px] items-center justify-center gap-1.5 rounded-button border-2 px-2.5 py-2 text-xs font-extrabold transition-all focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
+                opt.tone,
+                active
+                  ? 'ring-[3px] ring-blue-500 ring-offset-2 ring-offset-white shadow-sticker-sm'
+                  : 'opacity-70 hover:opacity-100'
+              )}
+            >
+              {opt.card ? (
+                <DisciplinaryCardIcon card={opt.card} size="xs" />
+              ) : opt.id === 'plus1' ? (
+                <Plus className="h-3.5 w-3.5 stroke-[3]" aria-hidden="true" />
+              ) : (
+                <Minus className="h-3.5 w-3.5 stroke-[3]" aria-hidden="true" />
+              )}
+              <span className="truncate">{opt.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
   };
 
   return (
@@ -441,8 +582,8 @@ export function SessionHistoryDrawer({
               </span>
               <DialogTitle>
                 {lang === 'ar'
-                  ? 'سجل الجلسة والتحكم في النقاط'
-                  : 'Session History & Score Control'}
+                  ? 'سجل المباراة والتحكم'
+                  : 'Match History & Audit Control'}
               </DialogTitle>
             </div>
             <DialogDescription className="break-words [overflow-wrap:anywhere]">
@@ -451,29 +592,29 @@ export function SessionHistoryDrawer({
                 ? `${formatArabicCount(
                     scoreEvents.length,
                     {
-                      zero: '٠ حركات نقاط',
-                      one: 'حركة نقاط واحدة',
-                      two: 'حركتا نقاط',
-                      few: 'حركات نقاط',
-                      many: 'حركة نقاط',
+                      zero: '٠ حركات نقاط وبطاقات',
+                      one: 'حركة واحدة',
+                      two: 'حركتان',
+                      few: 'حركات',
+                      many: 'حركة',
                     },
                     useArabicIndicDigits
-                  )} و ${formatArabicCount(
-                    buzzEvents.length,
+                  )} · ${formatArabicCount(
+                    absenceEvents.length,
                     {
-                      zero: '٠ أجراس',
-                      one: 'جرس واحد',
-                      two: 'جرسان',
-                      few: 'أجراس',
-                      many: 'جرساً',
+                      zero: '٠ حالات غياب',
+                      one: 'حالة غياب',
+                      two: 'حالتا غياب',
+                      few: 'حالات غياب',
+                      many: 'حالة غياب',
                     },
                     useArabicIndicDigits
                   )}`
-                : `${scoreEvents.length} score ${scoreEvents.length === 1 ? 'event' : 'events'} · ${buzzEvents.length} ${buzzEvents.length === 1 ? 'buzz' : 'buzzes'}`}
+                : `${scoreEvents.length} score/card ${scoreEvents.length === 1 ? 'event' : 'events'} · ${absenceEvents.length} absence · ${buzzEvents.length} ${buzzEvents.length === 1 ? 'buzz' : 'buzzes'}`}
             </DialogDescription>
           </DialogHeader>
 
-          {/* Capability Role Notice + Add Entry Trigger */}
+          {/* Role Notice + Add Entry Trigger */}
           <div className="flex flex-col gap-2.5 rounded-input border-2 border-border-paper bg-paper p-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-2 text-xs sm:text-sm text-ink">
               <ShieldCheck
@@ -486,11 +627,11 @@ export function SessionHistoryDrawer({
               <span>
                 {canManage
                   ? lang === 'ar'
-                    ? 'صلاحية التحكم الكامل مفعّلة: يمكنك تعديل أو عكس أو حذف أي حركة نقاط أو إضافة حركة تصحيحية مع تسجيل فوري في سجل المراجعة.'
-                    : 'Full history control active: edit, revert, delete, or add entries. Every change recalculates totals and writes an AuditEntry.'
+                    ? 'صلاحية مدير البطولة: يمكنك إضافة أو تعديل أو عكس حركات النقاط والبطاقات وإلغاء الغياب بسجل غير قابل للحذف (مع معاينة الأثر).'
+                    : 'Super Admin history control: append +1/−1/cards, revert entries via compensating events, or reverse absences with Impact Preview.'
                   : lang === 'ar'
-                    ? 'عرض السجل الزمني للجلسة (تعديل وحذف السجل محصور حالياً في الأدوار الإدارية المخوّلة — استخدم زر التراجع السريع لآخر حركة).'
-                    : 'Read-only timeline view. Use quick Undo in the Action Dock for your last move; full history edits are restricted to authorized manager roles.'}
+                    ? 'عرض السجل الزمني للمباراة فقط. استخدم زر التراجع السريع في لوحة التحكيم لعكس آخر حركة خاصة بك.'
+                    : 'Read-only timeline view. Use quick Undo on the console for your own last scoring move.'}
               </span>
             </div>
 
@@ -512,14 +653,14 @@ export function SessionHistoryDrawer({
                       ? 'إغلاق الإضافة'
                       : 'Close Form'
                     : lang === 'ar'
-                      ? 'إضافة حركة تصحيح'
+                      ? 'إضافة حركة (+١ / −١ / بطاقة)'
                       : 'Add Entry'}
                 </span>
               </Button>
             )}
           </div>
 
-          {/* Add Manual / Retroactive Score Entry Form */}
+          {/* Add Entry Form (strictly +1, -1, Yellow, Red — zero custom amounts) */}
           {canManage && showAddForm && (
             <form
               onSubmit={handleAddEntry}
@@ -528,16 +669,19 @@ export function SessionHistoryDrawer({
             >
               <div className="text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
                 {lang === 'ar'
-                  ? 'إضافة حركة نقاط جديدة للسجل'
-                  : 'Add Manual Score Adjustment'}
+                  ? 'إضافة حركة نقاط أو بطاقة للسجل'
+                  : 'Append Point or Disciplinary Card'}
               </div>
+
+              {renderChoicePicker(addChoice, setAddChoice)}
+
               <div className="grid gap-2.5 sm:grid-cols-2">
                 <div>
                   <label
                     htmlFor="hist-add-player"
                     className="mb-1 block text-xs font-bold text-ink"
                   >
-                    {lang === 'ar' ? 'اللاعب' : 'Contestant'}
+                    {lang === 'ar' ? 'اللاعب' : 'Participant'}
                   </label>
                   <select
                     id="hist-add-player"
@@ -581,46 +725,13 @@ export function SessionHistoryDrawer({
                 </div>
               </div>
 
-              <div className="grid gap-2.5 sm:grid-cols-[auto_110px_1fr_auto] items-end">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="md"
-                  onClick={() =>
-                    toggleNumericSign(addDelta, setAddDelta, () => setAddError(null))
-                  }
-                  aria-label={lang === 'ar' ? 'تبديل الإشارة موجب/سالب' : 'Toggle plus/minus sign'}
-                >
-                  ±
-                </Button>
-                <div>
-                  <label
-                    htmlFor="hist-add-delta"
-                    className="mb-1 block text-xs font-bold text-ink"
-                  >
-                    {lang === 'ar' ? 'النقاط' : 'Points'}
-                  </label>
-                  <Input
-                    id="hist-add-delta"
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={7}
-                    value={addDelta}
-                    aria-invalid={Boolean(addError)}
-                    aria-describedby={addError ? 'hist-add-error' : undefined}
-                    onChange={(e) => {
-                      setAddDelta(e.target.value);
-                      if (addError) setAddError(null);
-                    }}
-                    placeholder="+10 / -5"
-                  />
-                </div>
-                <div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <div className="flex-1">
                   <label
                     htmlFor="hist-add-note"
                     className="mb-1 block text-xs font-bold text-ink"
                   >
-                    {lang === 'ar' ? 'سبب التصحيح (اختياري)' : 'Reason / Note'}
+                    {lang === 'ar' ? 'ملاحظة اختيارية' : 'Optional Note'}
                   </label>
                   <Input
                     id="hist-add-note"
@@ -630,8 +741,8 @@ export function SessionHistoryDrawer({
                     onChange={(e) => setAddNote(e.target.value)}
                     placeholder={
                       lang === 'ar'
-                        ? 'مثال: تصحيح إجابة متأخرة'
-                        : 'e.g. Verified lyric bonus'
+                        ? 'مثال: تصحيح بعد المراجعة'
+                        : 'e.g. Verified after review'
                     }
                   />
                 </div>
@@ -643,7 +754,6 @@ export function SessionHistoryDrawer({
 
               {addError && (
                 <p
-                  id="hist-add-error"
                   role="alert"
                   className="flex items-center gap-1.5 text-xs font-bold text-negative"
                 >
@@ -662,12 +772,20 @@ export function SessionHistoryDrawer({
                   {
                     id: 'all',
                     label: lang === 'ar' ? 'الكل' : 'All',
-                    count: scoreEvents.length + buzzEvents.length,
+                    count:
+                      scoreEvents.length +
+                      absenceEvents.length +
+                      buzzEvents.length,
                   },
                   {
                     id: 'scores',
-                    label: lang === 'ar' ? 'النقاط' : 'Scores',
+                    label: lang === 'ar' ? 'النقاط والبطاقات' : 'Scores & Cards',
                     count: scoreEvents.length,
+                  },
+                  {
+                    id: 'absences',
+                    label: lang === 'ar' ? 'الغياب' : 'Absences',
+                    count: absenceEvents.length,
                   },
                   {
                     id: 'buzzes',
@@ -685,7 +803,7 @@ export function SessionHistoryDrawer({
                     aria-selected={active}
                     onClick={() => setTab(item.id)}
                     className={cn(
-                      'inline-flex min-h-[44px] items-center gap-2 rounded-button border-2 px-3.5 py-1.5 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
+                      'inline-flex min-h-[44px] items-center gap-1.5 rounded-button border-2 px-3 py-1.5 text-xs sm:text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
                       active
                         ? 'border-outline bg-red-600 text-white shadow-sticker-sm'
                         : 'border-border-paper bg-paper text-ink hover:bg-paper-2'
@@ -711,7 +829,7 @@ export function SessionHistoryDrawer({
               <div
                 className="flex flex-wrap items-center gap-1.5"
                 role="group"
-                aria-label={lang === 'ar' ? 'تصفية حسب اللاعب' : 'Filter by contestant'}
+                aria-label={lang === 'ar' ? 'تصفية حسب اللاعب' : 'Filter by participant'}
               >
                 <button
                   type="button"
@@ -751,7 +869,7 @@ export function SessionHistoryDrawer({
             )}
           </div>
 
-          {/* Chronological Timeline List (Paginated for large datasets) */}
+          {/* Chronological Timeline List */}
           <div className="max-h-[44dvh] space-y-2.5 overflow-y-auto pe-1">
             {visibleTimeline.length === 0 ? (
               <div className="rounded-input border-2 border-dashed border-border-paper bg-paper p-6 text-center text-sm font-medium text-ink-muted">
@@ -784,7 +902,13 @@ export function SessionHistoryDrawer({
                                   : b.playerId}
                               </span>
                               <Badge variant="gold" className="text-[11px] px-2 py-0">
-                                {lang === 'ar' ? 'ضغط الجرس أولاً' : 'BUZZED FIRST'}
+                                {b.cleared
+                                  ? lang === 'ar'
+                                    ? 'مسح الجرس'
+                                    : 'BUZZ CLEARED'
+                                  : lang === 'ar'
+                                    ? 'ضغط الجرس أولاً'
+                                    : 'BUZZED FIRST'}
                               </Badge>
                             </div>
                             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-muted">
@@ -809,10 +933,90 @@ export function SessionHistoryDrawer({
                     );
                   }
 
+                  if (row.type === 'absence') {
+                    const ab = row.event;
+                    const player = playerMap.get(ab.playerId);
+                    const actor = userMap.get(ab.byUserId);
+                    const isCurrentlyAbsent = absentPlayerIds.includes(ab.playerId);
+                    return (
+                      <div
+                        key={ab.id}
+                        className="flex flex-wrap items-center justify-between gap-2.5 rounded-input border-2 border-border-paper bg-paper-2 px-3.5 py-3"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                          <span
+                            className={cn(
+                              'flex h-9 w-9 shrink-0 items-center justify-center rounded-pill border-2 border-outline',
+                              ab.action === 'marked'
+                                ? 'bg-negative text-white'
+                                : 'bg-positive-soft text-positive-ink'
+                            )}
+                          >
+                            {ab.action === 'marked' ? (
+                              <UserX className="h-4 w-4" aria-hidden="true" />
+                            ) : (
+                              <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                            )}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="break-words text-sm font-bold text-ink">
+                                {player
+                                  ? localizeText(lang, player.fullName, player.fullNameAr)
+                                  : ab.playerId}
+                              </span>
+                              <Badge
+                                variant={ab.action === 'marked' ? 'negative' : 'positive'}
+                                className="text-[11px] px-2 py-0"
+                              >
+                                {ab.action === 'marked'
+                                  ? lang === 'ar'
+                                    ? 'تم تسجيل غياب'
+                                    : 'MARKED ABSENT'
+                                  : lang === 'ar'
+                                    ? 'تم إلغاء الغياب'
+                                    : 'ABSENCE REVERSED'}
+                              </Badge>
+                            </div>
+                            {ab.reason && (
+                              <p className="text-xs font-medium text-ink">“{ab.reason}”</p>
+                            )}
+                            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-muted">
+                              {actor && (
+                                <span>{localizeText(lang, actor.name, actor.nameAr)}</span>
+                              )}
+                              <span className="tabular-nums">
+                                · {formatEventTime(ab.createdAt, lang, useArabicIndicDigits)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {isSuperAdmin && ab.action === 'marked' && isCurrentlyAbsent && player && (
+                          <Button
+                            type="button"
+                            variant="gold"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => setConfirmReverseAbsentPlayer(player)}
+                          >
+                            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                            <span>{lang === 'ar' ? 'إلغاء الغياب' : 'Reverse'}</span>
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  }
+
                   const ev = row.event;
                   const player = playerMap.get(ev.playerId);
                   const seg = segmentMap.get(ev.segmentId);
                   const actor = userMap.get(ev.byUserId);
+                  const display = formatScoreEventDisplay(
+                    ev,
+                    lang,
+                    useArabicIndicDigits
+                  );
                   const isPos = ev.delta > 0;
                   const isUndo = ev.kind === 'undo';
                   const isUndone = Boolean(ev.undoneByEventId);
@@ -832,43 +1036,29 @@ export function SessionHistoryDrawer({
                     >
                       {isEditing ? (
                         <div className="space-y-2.5">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="truncate text-xs font-extrabold text-red-900">
-                              {lang === 'ar' ? 'تعديل حركة:' : 'Editing entry:'}{' '}
-                              {player
-                                ? localizeText(lang, player.fullName, player.fullNameAr)
-                                : ev.playerId}
-                            </span>
+                          <div className="text-xs font-extrabold text-red-900">
+                            {lang === 'ar' ? 'تعديل حركة:' : 'Editing entry:'}{' '}
+                            {player
+                              ? localizeText(lang, player.fullName, player.fullNameAr)
+                              : ev.playerId}
                           </div>
-                          <div className="grid gap-2 sm:grid-cols-[auto_96px_1fr]">
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              onClick={() =>
-                                toggleNumericSign(editDelta, setEditDelta, () =>
-                                  setEditError(null)
-                                )
-                              }
-                              aria-label={lang === 'ar' ? 'تبديل الإشارة' : 'Toggle sign'}
+
+                          {renderChoicePicker(editChoice, setEditChoice)}
+
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <select
+                              value={editSegmentId}
+                              onChange={(e) => setEditSegmentId(e.target.value)}
+                              aria-label={lang === 'ar' ? 'الفقرة' : 'Segment'}
+                              className="min-h-[44px] rounded-input border-2 border-border-paper bg-white px-2.5 text-base font-medium text-ink focus:border-blue-500 focus:outline-none"
                             >
-                              ±
-                            </Button>
-                            <Input
-                              type="text"
-                              inputMode="numeric"
-                              maxLength={7}
-                              value={editDelta}
-                              aria-invalid={Boolean(editError)}
-                              aria-describedby={
-                                editError ? `hist-edit-error-${ev.id}` : undefined
-                              }
-                              onChange={(e) => {
-                                setEditDelta(e.target.value);
-                                if (editError) setEditError(null);
-                              }}
-                              aria-label={lang === 'ar' ? 'قيمة النقاط' : 'Point delta'}
-                            />
+                              {gameSegments.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {localizeText(lang, s.nameEn, s.nameAr)}
+                                </option>
+                              ))}
+                            </select>
+
                             <Input
                               type="text"
                               maxLength={NOTE_MAX_LENGTH}
@@ -880,56 +1070,27 @@ export function SessionHistoryDrawer({
                               aria-label={lang === 'ar' ? 'الملاحظة' : 'Note'}
                             />
                           </div>
-                          {editError && (
-                            <p
-                              id={`hist-edit-error-${ev.id}`}
-                              role="alert"
-                              className="flex items-center gap-1.5 text-xs font-bold text-negative"
+
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setEditingId(null)}
                             >
-                              <AlertCircle
-                                className="h-4 w-4 shrink-0"
-                                aria-hidden="true"
-                              />
-                              <span>{editError}</span>
-                            </p>
-                          )}
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <select
-                              value={editSegmentId}
-                              onChange={(e) => setEditSegmentId(e.target.value)}
-                              aria-label={lang === 'ar' ? 'الفقرة' : 'Segment'}
-                              className="min-h-[44px] flex-1 min-w-[160px] rounded-input border-2 border-border-paper bg-white px-2.5 text-base font-medium text-ink focus:border-blue-500 focus:outline-none"
+                              <X className="h-4 w-4" aria-hidden="true" />
+                              <span>{lang === 'ar' ? 'إلغاء' : 'Cancel'}</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="red"
+                              size="sm"
+                              disabled={busy}
+                              onClick={() => handleSaveEdit(ev)}
                             >
-                              {gameSegments.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {localizeText(lang, s.nameEn, s.nameAr)}
-                                </option>
-                              ))}
-                            </select>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingId(null);
-                                  setEditError(null);
-                                }}
-                              >
-                                <X className="h-4 w-4" aria-hidden="true" />
-                                <span>{lang === 'ar' ? 'إلغاء' : 'Cancel'}</span>
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="red"
-                                size="sm"
-                                disabled={busy}
-                                onClick={() => handleSaveEdit(ev)}
-                              >
-                                <Check className="h-4 w-4" aria-hidden="true" />
-                                <span>{lang === 'ar' ? 'حفظ' : 'Save'}</span>
-                              </Button>
-                            </div>
+                              <Check className="h-4 w-4" aria-hidden="true" />
+                              <span>{lang === 'ar' ? 'حفظ' : 'Save'}</span>
+                            </Button>
                           </div>
                         </div>
                       ) : (
@@ -937,7 +1098,11 @@ export function SessionHistoryDrawer({
                           <div className="flex min-w-0 flex-1 items-start gap-2.5">
                             {player && (
                               <PlayerAvatar
-                                name={localizeText(lang, player.fullName, player.fullNameAr)}
+                                name={localizeText(
+                                  lang,
+                                  player.fullName,
+                                  player.fullNameAr
+                                )}
                                 avatarSeed={player.avatarSeed}
                                 size="sm"
                                 isHost={player.isHost}
@@ -946,34 +1111,55 @@ export function SessionHistoryDrawer({
                             )}
                             <div className="min-w-0 flex-1 space-y-0.5">
                               <div className="flex flex-wrap items-center gap-1.5">
-                                <span
-                                  className={cn(
-                                    'inline-flex shrink-0 items-center gap-0.5 rounded-pill border-2 border-outline px-2.5 py-0.5 font-score text-base font-black tabular-nums leading-none',
-                                    isPos
-                                      ? 'bg-positive-soft text-positive-ink'
-                                      : 'bg-negative text-white'
-                                  )}
-                                >
-                                  {isPos ? (
-                                    <Plus
-                                      className="h-3.5 w-3.5 stroke-[3]"
-                                      aria-hidden="true"
+                                {display.cardType ? (
+                                  <span
+                                    className={cn(
+                                      'inline-flex shrink-0 items-center gap-1.5 rounded-pill border-2 border-outline px-2.5 py-0.5 text-xs font-extrabold',
+                                      display.cardType === 'yellow'
+                                        ? 'bg-gold-300 text-red-900'
+                                        : 'bg-negative text-white'
+                                    )}
+                                  >
+                                    <DisciplinaryCardIcon
+                                      card={display.cardType}
+                                      size="xs"
                                     />
-                                  ) : (
-                                    <Minus
-                                      className="h-3.5 w-3.5 stroke-[3]"
-                                      aria-hidden="true"
-                                    />
-                                  )}
-                                  <span>
-                                    {formatNumber(Math.abs(ev.delta), {
-                                      useArabicIndicDigits,
-                                    })}
+                                    <span>{display.kindLabel}</span>
                                   </span>
-                                </span>
+                                ) : (
+                                  <span
+                                    className={cn(
+                                      'inline-flex shrink-0 items-center gap-0.5 rounded-pill border-2 border-outline px-2.5 py-0.5 font-score text-base font-black tabular-nums leading-none',
+                                      isPos
+                                        ? 'bg-positive-soft text-positive-ink'
+                                        : 'bg-negative text-white'
+                                    )}
+                                  >
+                                    {isPos ? (
+                                      <Plus
+                                        className="h-3.5 w-3.5 stroke-[3]"
+                                        aria-hidden="true"
+                                      />
+                                    ) : (
+                                      <Minus
+                                        className="h-3.5 w-3.5 stroke-[3]"
+                                        aria-hidden="true"
+                                      />
+                                    )}
+                                    <span>
+                                      {formatNumber(Math.abs(ev.delta), {
+                                        useArabicIndicDigits,
+                                      })}
+                                    </span>
+                                  </span>
+                                )}
                                 <span className="break-words text-sm font-bold text-ink">
                                   {player
-                                    ? localizeText(lang, player.fullName, player.fullNameAr)
+                                    ? localizeText(
+                                        lang,
+                                        player.fullName,
+                                        player.fullNameAr
+                                      )
                                     : ev.playerId}
                                 </span>
                                 {isUndo && (
@@ -988,9 +1174,9 @@ export function SessionHistoryDrawer({
                                 )}
                               </div>
 
-                              {ev.note && (
+                              {display.userNote && (
                                 <p className="break-words [overflow-wrap:anywhere] text-xs font-medium text-ink">
-                                  “{ev.note}”
+                                  “{display.userNote}”
                                 </p>
                               )}
 
@@ -1017,39 +1203,35 @@ export function SessionHistoryDrawer({
                             </div>
                           </div>
 
-                          {/* Full Control Row Actions (Gated by canManageScoreHistory) */}
-                          {canManage && (
+                          {/* Super Admin Row Actions (Revert / Edit — never delete) */}
+                          {canManage && !isUndo && !isUndone && (
                             <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                              {!isUndo && !isUndone && (
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() => setConfirmRevertEvent(ev)}
-                                  title={lang === 'ar' ? 'عكس هذه الحركة' : 'Revert this entry'}
-                                  aria-label={lang === 'ar' ? 'عكس هذه الحركة' : 'Revert this entry'}
-                                  className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-button border-2 border-border-paper bg-paper px-2.5 text-xs font-bold text-ink transition-colors hover:border-blue-500 hover:bg-blue-100/40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
-                                >
-                                  <Undo2 className="h-4 w-4" aria-hidden="true" />
-                                  <span className="sm:hidden">
-                                    {lang === 'ar' ? 'عكس' : 'Revert'}
-                                  </span>
-                                </button>
-                              )}
-                              {!isUndo && !isUndone && (
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() => beginEdit(ev)}
-                                  title={lang === 'ar' ? 'تعديل الحركة' : 'Edit entry'}
-                                  aria-label={lang === 'ar' ? 'تعديل الحركة' : 'Edit entry'}
-                                  className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-button border-2 border-border-paper bg-paper px-2.5 text-xs font-bold text-ink transition-colors hover:border-blue-500 hover:bg-blue-100/40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
-                                >
-                                  <Edit3 className="h-4 w-4" aria-hidden="true" />
-                                  <span className="sm:hidden">
-                                    {lang === 'ar' ? 'تعديل' : 'Edit'}
-                                  </span>
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => setConfirmRevertEvent(ev)}
+                                title={lang === 'ar' ? 'عكس هذه الحركة' : 'Revert this entry'}
+                                aria-label={lang === 'ar' ? 'عكس هذه الحركة' : 'Revert this entry'}
+                                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-button border-2 border-border-paper bg-paper px-2.5 text-xs font-bold text-ink transition-colors hover:border-blue-500 hover:bg-blue-100/40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
+                              >
+                                <Undo2 className="h-4 w-4" aria-hidden="true" />
+                                <span className="sm:hidden">
+                                  {lang === 'ar' ? 'عكس' : 'Revert'}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => beginEdit(ev)}
+                                title={lang === 'ar' ? 'تعديل الحركة' : 'Edit entry'}
+                                aria-label={lang === 'ar' ? 'تعديل الحركة' : 'Edit entry'}
+                                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-button border-2 border-border-paper bg-paper px-2.5 text-xs font-bold text-ink transition-colors hover:border-blue-500 hover:bg-blue-100/40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500"
+                              >
+                                <Edit3 className="h-4 w-4" aria-hidden="true" />
+                                <span className="sm:hidden">
+                                  {lang === 'ar' ? 'تعديل' : 'Edit'}
+                                </span>
+                              </button>
                             </div>
                           )}
                         </div>
@@ -1088,17 +1270,43 @@ export function SessionHistoryDrawer({
         onOpenChange={(isOpen) => {
           if (!isOpen) setConfirmRevertEvent(null);
         }}
-        title={lang === 'ar' ? 'عكس حركة النقاط؟' : 'Revert this score entry?'}
+        title={lang === 'ar' ? 'عكس هذه الحركة؟' : 'Revert this entry?'}
         description={
           confirmRevertEvent
-            ? lang === 'ar'
-              ? `سيتم تسجيل حركة تراجع معاكسة بقيمة ${formatSignedDelta(-confirmRevertEvent.delta)} نقطة وإعادة حساب الفائز والمراكز تلقائياً.`
-              : `This appends a compensating ${formatSignedDelta(-confirmRevertEvent.delta)} pts undo record (never deletes) and automatically recomputes winners and standings.`
+            ? (() => {
+                const d = formatScoreEventDisplay(
+                  confirmRevertEvent,
+                  lang,
+                  useArabicIndicDigits
+                );
+                return lang === 'ar'
+                  ? `سيتم تسجيل حركة تراجع معاكسة لحركة (${d.kindLabel}) دون حذف السجل الأصلي، وإعادة حساب الفائز والبطاقات تلقائياً.`
+                  : `This appends a compensating undo for "${d.kindLabel}" (never deletes) and automatically recomputes winners, card counts, and standings.`;
+              })()
             : ''
         }
         confirmLabel={lang === 'ar' ? 'تأكيد العكس' : 'Confirm Revert'}
         cancelLabel={lang === 'ar' ? 'إلغاء' : 'Cancel'}
         onConfirm={() => handleConfirmRevert()}
+      />
+
+      {/* Confirm Reverse Absence */}
+      <ConfirmDialog
+        open={Boolean(confirmReverseAbsentPlayer) && !pendingImpact}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setConfirmReverseAbsentPlayer(null);
+        }}
+        title={lang === 'ar' ? 'إلغاء تسجيل الغياب؟' : 'Reverse Player Absence?'}
+        description={
+          confirmReverseAbsentPlayer
+            ? lang === 'ar'
+              ? `سيتم إلغاء غياب ${confirmReverseAbsentPlayer.fullNameAr} وإعادة حساب نتيجة المباراة والتأهل تلقائياً.`
+              : `Reverse the absence for ${confirmReverseAbsentPlayer.fullName}? Match outcome and downstream slots will be recomputed automatically.`
+            : ''
+        }
+        confirmLabel={lang === 'ar' ? 'إلغاء الغياب' : 'Reverse Absence'}
+        cancelLabel={lang === 'ar' ? 'تراجع' : 'Cancel'}
+        onConfirm={() => handleConfirmReverseAbsence()}
       />
 
       {/* Downstream Cascade Impact Preview Dialog */}

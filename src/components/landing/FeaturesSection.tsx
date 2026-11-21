@@ -131,8 +131,8 @@ export function FeaturesSection() {
 
                 <p className="text-sm sm:text-base leading-relaxed text-ink-muted">
                   {lang === 'ar'
-                    ? 'أزرار كبيرة مخصصة للجهاز اللوحي والهاتف، تسجيل فوري لأول ضغطة جرس، نقاط جاهزة ومخصصة مع تراجع فوري—تنعكس كلها مباشرة على شاشات الجمهور.'
-                    : 'Oversized tablet & phone tap targets, one-tap buzzer lock, preset and custom point entries with instant compensating undo—broadcast straight to stage monitors.'}
+                    ? 'أزرار كبيرة مخصصة للجهاز اللوحي والهاتف، تسجيل فوري لأول ضغطة جرس، أزرار +١ و−١ والبطاقات الصفراء والحمراء والانسحاب مع تراجع فوري—تنعكس كلها مباشرة على شاشات الجمهور.'
+                    : 'Oversized tablet & phone tap targets, one-tap buzzer lock, +1 / −1 points, yellow & red cards, absence walkovers, and instant compensating undo—broadcast straight to stage monitors.'}
                 </p>
 
                 <dl className="grid grid-cols-3 gap-2 border-y-2 border-border-paper py-3.5 text-center">

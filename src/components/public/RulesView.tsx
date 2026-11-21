@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DisciplinaryCardIcon } from '@/components/brand/DisciplinaryCards';
 import { ScoreChip } from '@/components/brand/ScoreChip';
 import { PublicErrorBanner } from './PublicErrorBanner';
 import { PublicPageHero } from './PublicPageHero';
@@ -174,8 +175,8 @@ export function RulesView() {
         goldHighlight={lang === 'ar' ? 'القوانين' : 'Official Tournament Rules'}
         subtitle={
           lang === 'ar'
-            ? 'كل ما يحتاج المتسابقون والجمهور معرفته عن نظام الـ ٣ لاعبين، الجرس اليدوي، احتساب النقاط، والطريق إلى مواجهة مروان سري.'
-            : 'Everything contestants and spectators need to know about 3-player sessions, stage buzzing, scoring presets, tie-breakers, and qualifying for the Final.'
+            ? 'كل ما يحتاج المتسابقون والجمهور معرفته عن مواجهات ١ ضد ١، الجرس اليدوي، النقاط والبطاقات، والطريق إلى النهائي الثلاثي أمام مروان سري.'
+            : 'Everything contestants and spectators need to know about 1v1 matches, stage buzzing, points and cards, absence walkovers, tie-breakers, and the 1v1v1 Final vs. Marwan Serry.'
         }
         compact
         meta={
@@ -383,47 +384,52 @@ export function RulesView() {
                 </div>
               </section>
 
-              {/* Section 3: Scoring, Presets & Tie-Breaker #16 */}
+              {/* Section 3: Scoring, Disciplinary Cards & Tie-Breaker #16 */}
               <section id="scoring-tiebreaker" className="scroll-mt-24 space-y-4">
                 <h2 className="font-display text-fluid-2xl text-red-900">
                   {lang === 'ar'
-                    ? 'احتساب النقاط وجولة الحسم التلقائية'
-                    : 'Scoring, Buzzer & Sudden-Death Tie-Breaker'}
+                    ? 'احتساب النقاط والبطاقات وجولة الحسم'
+                    : 'Scoring, Disciplinary Cards & Tie-Breaker'}
                 </h2>
 
                 <div className="rounded-card border border-border-paper bg-white p-5 sm:p-6 shadow-soft space-y-5">
                   <div className="flex flex-wrap items-center gap-3">
                     <ScoreChip
-                      value={10}
+                      value={1}
                       tone="positive"
                       showSign
                       useArabicIndicDigits={useArabicIndic}
                       size="md"
                     />
                     <ScoreChip
-                      value={5}
-                      tone="positive"
-                      showSign
-                      useArabicIndicDigits={useArabicIndic}
-                      size="md"
-                    />
-                    <ScoreChip
-                      value={-5}
+                      value={-1}
                       tone="negative"
                       showSign
                       useArabicIndicDigits={useArabicIndic}
                       size="md"
                     />
-                    <div className="min-w-0 flex-1 space-y-1">
+                    <Badge variant="gold" className="py-1.5 px-3 text-sm font-extrabold">
+                      <DisciplinaryCardIcon card="yellow" size="md" />
+                      <span>
+                        {lang === 'ar' ? 'بطاقة صفراء (−١)' : 'Yellow card (−1)'}
+                      </span>
+                    </Badge>
+                    <Badge variant="negative" className="py-1.5 px-3 text-sm font-extrabold">
+                      <DisciplinaryCardIcon card="red" size="md" />
+                      <span>
+                        {lang === 'ar' ? 'بطاقة حمراء (−٢)' : 'Red card (−2)'}
+                      </span>
+                    </Badge>
+                    <div className="min-w-[220px] flex-1 space-y-1">
                       <h3 className="font-display text-lg text-red-900">
                         {lang === 'ar'
-                          ? 'نقاط الفقرات والتعديل المخصص'
-                          : 'Segment Presets & Custom Adjustments'}
+                          ? 'نظام نقاط موحّد وبسيط (+١ / −١ / بطاقات)'
+                          : 'Uniform Scoring & Card Controls'}
                       </h3>
                       <p className="text-sm text-ink-muted leading-relaxed">
                         {lang === 'ar'
-                          ? 'كل فقرة لها أزرار نقاط سريعة (مثل +١٠ و+٥ و−٥) بالإضافة لإمكانية إدخال أي رقم موجب أو سالب مع ملاحظة موثّقة في سجل المراجعة.'
-                          : 'Each segment ships with quick point presets (typically +10, +5, −5) plus custom positive or negative scorer input with an optional note recorded to the tamper-evident history.'}
+                          ? 'جميع المباريات تستخدم نفس أدوات التحكم الأربع: +١ نقطة، −١ نقطة، بطاقة صفراء (−١)، وبطاقة حمراء (−٢)، مع ملاحظة اختيارية وتراجع فوري مسجّل.'
+                          : 'Every match uses four exact scorer actions: +1 point, −1 point, Yellow card (−1), and Red card (−2), each with an optional note and logged undo.'}
                       </p>
                     </div>
                   </div>
@@ -435,12 +441,12 @@ export function RulesView() {
                       </span>
                       <div>
                         <p className="font-bold text-ink">
-                          {lang === 'ar' ? 'الإجابة الصحيحة والمكافآت' : 'Correct Answers & Bonuses'}
+                          {lang === 'ar' ? 'الإجابة الصحيحة (+١)' : 'Correct Answer (+1)'}
                         </p>
                         <p className="text-ink-muted">
                           {lang === 'ar'
-                            ? 'يضغط الحكم اسم أول من كبس الجرس ثم يمنح النقاط الفورية فور صحة الإجابة.'
-                            : 'The scorer locks in who buzzed first and awards points immediately on a valid answer.'}
+                            ? 'يضغط الحكم اسم أول من كبس الجرس ثم يمنح +١ فوراً عند صحة الإجابة، و−١ عند الخطأ.'
+                            : 'The judge locks in who buzzed first and awards +1 immediately on a valid answer, or −1 for a miss.'}
                         </p>
                       </div>
                     </div>
@@ -451,12 +457,14 @@ export function RulesView() {
                       </span>
                       <div>
                         <p className="font-bold text-ink">
-                          {lang === 'ar' ? 'خصم الخطأ أو المقاطعة' : 'Wrong-Buzz Penalties'}
+                          {lang === 'ar'
+                            ? 'البطاقات والانسحاب (Walkover)'
+                            : 'Cards & Absence Walkovers'}
                         </p>
                         <p className="text-ink-muted">
                           {lang === 'ar'
-                            ? 'الإجابة الخاطئة أو انتهاء المؤقت قد تعرّض اللاعب لخصم نقاط، وتُعرض دائماً بعلامة − واضحة.'
-                            : 'Wrong interrupts or expired answers may incur a −5 penalty, always clearly signed and logged.'}
+                            ? 'البطاقة الصفراء (−١) والحمراء (−٢) تُخصمان من النقاط وتظهران كعدادات بطاقات وتُستخدمان لكسر التعادل. غياب لاعب في ١ ضد ١ ينهي المباراة فوراً بانسحاب.'
+                            : 'Yellow (−1) and Red (−2) cards deduct points, display as card counters, and break group ties. A no-show in 1v1 ends the match immediately as a walkover.'}
                         </p>
                       </div>
                     </div>
@@ -481,8 +489,8 @@ export function RulesView() {
                     </div>
                     <p className="text-sm leading-relaxed text-red-900">
                       {lang === 'ar'
-                        ? 'إذا تساوى متسابقان أو أكثر على خط التأهل (المركز الأول في الأدوار الأولى، أو المركز الثاني والثالث في نصف النهائي)، يُمنع إنهاء الطاولة تلقائياً وتُضاف جولة الحسم السريعة (٣٠ ثانية) فوراً لحسم المتأهل.'
-                        : 'Whenever contestants tie across an advancement cutoff (1st place in standard rounds, or 2nd/3rd in the Top-2 Semi-Final), the Scorer Console automatically appends the 30-second Sudden-Death Tie-Breaker segment before locking winners.'}
+                        ? 'التعادل ممنوع في جميع مباريات البطولة. عند تساوي النقاط يُمنع إنهاء المباراة تلقائياً وتُضاف جولة الحسم السريعة (٣٠ ثانية) لحسم الفائز.'
+                        : 'Draws are forbidden in every match. Whenever scores are level at the end of a match, the Scorer Console requires the 30-second Sudden-Death Tie-Breaker segment before locking a winner.'}
                     </p>
                   </div>
                 </div>

@@ -24,7 +24,7 @@ Built with **Next.js 15 (App Router)**, **TypeScript**, **Tailwind CSS**, **Radi
 ## 1. Key Capabilities
 
 - **Sponsor Pitch Landing (`/`) & Final Night Showcase (`/final`)**: Crimson sunburst Stage & warm Paper visual system, live countdown, Marwan Serry's **Golden Seat** (name only, zero real-person photos), an **embedded interactive Live Demo** (real repos + `BroadcastChannel` on an isolated `game-demo` table), bracket preview, 16 original segments, and editable placeholder sponsor tiers.
-- **Zero-Mistake Live Scorer Console (`/scorer`, `/scorer/[gameId]`)**: Designed for tablets in landscape and one-handed phone operation (`56px+` touch targets). Supports manual **"Buzzed First"**, per-segment preset buttons (`+10`, `+5`, `−5`), custom `±` amounts with notes, compensating **Undo**, segment countdown timer with final-5-second warning, keyboard shortcuts (`1`/`2`/`3`, `B`, `Space`, `Ctrl+Z`), automatic **Sudden-Death Tie-Breaker (#16)** insertion on qualifying ties, automatic **next-round winner advancement** (preserving Marwan Serry's Final seat), and role-gated full scoring history controls & reopen.
+- **Zero-Mistake Live Scorer Console (`/scorer`, `/scorer/[matchId]`)**: Designed for tablets in landscape and one-handed phone operation (`56px+` touch targets). Adapts to 2 players (all group/knockout 1v1 matches) or 3 participants (Grand Final vs. Marwan Serry). Supports manual **"Buzzed First"**, exact **`+1`**, **`−1`**, **Yellow card (`−1`)**, and **Red card (`−2`)** controls with optional note, card-shaped SVG counters, **Mark Absent** (immediate 1v1 walkover, both-absent `void`, Final admin prompt) with Super Admin reversal & Impact Preview, role-gated **Contact** dialog (`contact.viewed` audited), compensating **Undo**, segment countdown timer with final-5-second warning, keyboard shortcuts (`1`/`2`/`3`, `B`, `+`/`-`, `Y`, `R`, `Space`, `Ctrl+Z`), and automatic **Sudden-Death Tie-Breaker (#16)** on ties.
 - **Venue Big Screen (`/screen/[gameId]`, `/screen/leaderboard`)**: Full-bleed 10-meter-legible broadcast frame (up to 4K) with chasing perimeter marquee bulbs, dual EN+AR segment titles, real-time buzz highlights, animated score counters + floating deltas, **Grand Final Boss symmetry** (Marwan Serry dead-center), **Victory Stage** winner celebration, **Presenter Mode (`F`)** with auto-hiding controls, and an auto-cycling 27-player broadcast leaderboard.
 - **Admin Studio (`/admin/*`) & Dual-Layer RBAC**: Complete tournament management across 12 studio screens — Players (CRUD + RFC-4180 CSV bulk import with row validation + Profile Drawer), Flexible Bracket Builder (configurable player count, table size, advancement rules, drag/tap seeding), Games & Scorers, 16-Segment Library, Gate Check-In, Chronological Results Feed (newest/oldest + filters + CSV export), Super Admin Audit Log (before/after diffs + CSV export), Managers & Role Matrix, Content/Rules, Sponsors, and editable Settings + **Reset Demo Data**.
 - **Public Spectator Suite & Contestant Portal**: Interactive `/bracket` (with Highlight Player Path & segment breakdown modal), live `/leaderboard`, `/schedule`, `/segments` inspector, `/rules`, `/sponsors` deliverables matrix, and `/player` + `/player/history`.
@@ -104,15 +104,17 @@ src/
 │   │   └── styleguide/         # /styleguide Interactive Stage & Paper design system gallery
 │   ├── login/                  # /login      Mock auth role picker
 │   ├── player/                 # /player & /player/history   Contestant portal
-│   ├── scorer/                 # /scorer & /scorer/[gameId]  Scorer dashboard & live console
+│   ├── scorer/                 # /scorer & /scorer/[matchId]  Scorer dashboard & live console
 │   ├── screen/                 # /screen/[gameId] & /screen/leaderboard  Venue Big Screens
-│   ├── admin/                  # /admin/*    12-route RBAC Admin Studio
+│   ├── admin/                  # /admin/*    Admin Studio
 │   │   ├── page.tsx            # Overview dashboard
 │   │   ├── players/            # Roster CRUD, CSV bulk import & profile drawer
-│   │   ├── check-in/           # Venue arrival gate check-in
-│   │   ├── bracket/            # Flexible bracket generator & drag/tap seeding
-│   │   ├── games/              # Tables, scorers, schedule & Final toggle
-│   │   ├── segments/           # Segment presets, timers & reorder
+│   │   ├── check-in/           # Venue arrival gate check-in & player contacts
+│   │   ├── groups/             # Group draw, swaps & standings (720-player scale)
+│   │   ├── bracket/            # Knockout bracket canvas & BYE allocation
+│   │   ├── matches/            # Tables, judges, conflict-free auto-schedule & Final
+│   │   ├── segments/           # Segment library, optional timers & reorder
+│   │   ├── consistency/        # 9-invariant engine verifier & repair by recomputation
 │   │   ├── results/            # Chronological Results Feed + CSV export
 │   │   ├── audit/              # Super Admin Audit Log (before/after diffs) + CSV
 │   │   ├── managers/           # Staff manager CRUD & capability matrix

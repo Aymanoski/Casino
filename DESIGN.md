@@ -194,7 +194,7 @@ Section order:
 Footer with language toggle and placeholder contact details.
 
 ### Scorer console (Stage-dark)
-Deep maroon background, white text, gold and blue actions, high contrast, big touch targets, minimal decoration. Priority: speed and zero mistakes. Three large player panels, one obvious selected state (blue ring), big preset buttons, undo always visible, no distracting animation.
+Deep maroon background, white text, gold and blue actions, high contrast, big touch targets, minimal decoration. Priority: speed and zero mistakes. Two large player panels for 1v1 matches (three for the Grand Final with Marwan Serry), one obvious selected state (white-buffered blue ring), exact 4 scoring buttons (+1, −1, Yellow card −1, Red card −2), original SVG yellow/red card counters, Contact button, Mark Absent flow, undo always visible, no distracting animation.
 
 ### Big screen (Stage)
 Maximum drama: red sunburst, huge numerals, gold outlined segment title in both languages, marquee border, legible from 10 meters.

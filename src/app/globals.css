@@ -430,6 +430,29 @@ html[dir="rtl"] {
       repeating-conic-gradient(from 0deg at 50% 50%, #4F0716 0deg 10deg, #5C091A 10deg 20deg);
   }
 
+  /* Muted striped surfaces for Absent player panels (DESIGN.md §6) */
+  .absent-stripes-dark {
+    background-color: var(--red-900);
+    background-image: repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.055) 0px,
+      rgba(255, 255, 255, 0.055) 10px,
+      transparent 10px,
+      transparent 20px
+    );
+  }
+
+  .absent-stripes-light {
+    background-color: var(--paper-2);
+    background-image: repeating-linear-gradient(
+      -45deg,
+      rgba(79, 7, 22, 0.075) 0px,
+      rgba(79, 7, 22, 0.075) 10px,
+      transparent 10px,
+      transparent 20px
+    );
+  }
+
   /* Subtle warm paper dot texture */
   .paper-pattern {
     background-color: var(--paper);

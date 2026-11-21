@@ -337,7 +337,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'The host names a singer; the first player to buzz and sing a valid line from their catalog takes the point.',
       descriptionAr: 'يذكر المقدم اسم مطرب أو مطربة، وأول لاعب يضغط الجرس ويغني مقطعاً صحيحاً يحصد النقطة.',
       durationSec: 45,
-      presetPoints: [1, -1],
       order: 1,
     },
     {
@@ -348,7 +347,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'Identify or perform a hit track recorded by an iconic Arab or international musical group before time runs out.',
       descriptionAr: 'تعرّف على أغنية شهيرة لفرقة موسيقية عربية أو عالمية أو غنِّ مقطعاً منها قبل انتهاء الوقت.',
       durationSec: 45,
-      presetPoints: [1, -1],
       order: 2,
     },
     {
@@ -359,7 +357,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'A random everyday word appears on screen—buzz in and sing real lyrics containing that exact word.',
       descriptionAr: 'تظهر كلمة عشوائية على الشاشة، وعليك الضغط سريعاً وغناء كوبليه حقيقي يحتوي على هذه الكلمة بالضبط.',
       durationSec: 30,
-      presetPoints: [1, -1],
       order: 3,
     },
     {
@@ -370,7 +367,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'Listen to a short audio hook or backwards lyric clue and decode the original track title first.',
       descriptionAr: 'استمع إلى جملة موسيقية أو كلمات مقلوبة واكشف اسم الأغنية الأصلية قبل منافسيك.',
       durationSec: 60,
-      presetPoints: [1, -1],
       order: 4,
     },
     {
@@ -381,7 +377,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'Rapid-fire musical clues where players score for naming both the vocalist and the song.',
       descriptionAr: 'تلميحات موسيقية سريعة يحصل فيها اللاعب على النقطة عند تسمية المطرب والأغنية معاً.',
       durationSec: 45,
-      presetPoints: [1, -1],
       order: 5,
     },
     {
@@ -392,7 +387,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'Flip the letters of spoken words in your head and pronounce the reversed word cleanly under pressure.',
       descriptionAr: 'اقلب حروف الكلمات المنطوقة في ذهنك وانطق الكلمة معكوسة بدقة وتحت ضغط الوقت.',
       durationSec: 45,
-      presetPoints: [1, -1],
       order: 6,
     },
     {
@@ -403,7 +397,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'Chain associations and witty verbal pivots without hesitating, repeating a word, or breaking rhythm.',
       descriptionAr: 'سلسلة من الروابط اللفظية السريعة دون تردد أو تكرار أو كسر الإيقاع.',
       durationSec: 60,
-      presetPoints: [1, -1],
       order: 7,
     },
     {
@@ -414,7 +407,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'Decode clever riddles and indirect descriptions as clues narrow from vague to unmistakable.',
       descriptionAr: 'فكّ شفرة الأوصاف الذكية والتلميحات المتدرجة من الغموض إلى الوضوح بأسرع وقت.',
       durationSec: 60,
-      presetPoints: [1, -1],
       order: 8,
     },
     {
@@ -425,7 +417,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'Beat the countdown by naming as many valid items in the target category as you can before buzzing out.',
       descriptionAr: 'سابق العد التنازلي بتعداد أكبر قدر ممكن من الإجابات الصحيحة داخل الفئة المطلوبة.',
       durationSec: 45,
-      presetPoints: [1, -1],
       order: 9,
     },
     {
@@ -436,7 +427,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'Iconic scenes, Ramadan drama classics, and unforgettable characters from Egyptian screen history.',
       descriptionAr: 'مشاهد خالدة، مسلسلات رمضانية شهيرة، وشخصيات لا تُنسى من تاريخ السينما والدراما المصرية.',
       durationSec: 60,
-      presetPoints: [1, -1],
       order: 10,
     },
     {
@@ -447,7 +437,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'World box-office hits, legendary directors, plot twists, and Oscar-winning performances.',
       descriptionAr: 'أشهر الأفلام العالمية، المخرجون الكبار، الحبكات الدرامية، والأعمال الحائزة على الجوائز.',
       durationSec: 60,
-      presetPoints: [1, -1],
       order: 11,
     },
     {
@@ -458,7 +447,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'Connect historical icons, celebrities, or fictional characters to their signature cities and landmarks.',
       descriptionAr: 'اربط بين الشخصيات الشهيرة أو الخيالية والمدن أو الأماكن المرتبطة بها.',
       durationSec: 60,
-      presetPoints: [1, -1],
       order: 12,
     },
     {
@@ -469,7 +457,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'Famous one-liners from comedies, plays, and football commentary—name the speaker and work.',
       descriptionAr: 'إفيهات ومقولات شهيرة من المسرحيات والأفلام والتعليق الرياضي—اذكر صاحب المقولة والعمل.',
       durationSec: 45,
-      presetPoints: [1, -1],
       order: 13,
     },
     {
@@ -480,7 +467,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'High-stakes trivia spanning geography, history, science, sports, and Ramadan traditions.',
       descriptionAr: 'معلومات عامة سريعة تشمل الجغرافيا والتاريخ والعلوم والرياضة والتقاليد الرمضانية.',
       durationSec: 60,
-      presetPoints: [1, -1],
       order: 14,
     },
     {
@@ -491,7 +477,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'Wildcard questions submitted by live studio guests and social media followers.',
       descriptionAr: 'أسئلة مفاجئة من جمهور الاستوديو ومتابعي السوشيال ميديا.',
       durationSec: 60,
-      presetPoints: [1, -1],
       order: 15,
     },
     {
@@ -502,7 +487,6 @@ export function createSegmentsSeed(): Segment[] {
       descriptionEn: 'Sudden-death showdown activated whenever a match ends tied—one decisive point settles the winner.',
       descriptionAr: 'جولة الحسم الفاصلة عند انتهاء المباراة بالتعادل—نقطة حاسمة واحدة تحدد الفائز.',
       durationSec: 30,
-      presetPoints: [1, -1],
       order: 16,
     },
   ];
@@ -519,7 +503,8 @@ export function createDemoSeedState(
 } {
   const [dp1, dp2] = demoPlayerIds;
   const demoSegments = ['seg-1', 'seg-3', 'seg-6', 'seg-10', 'seg-13', 'seg-15'];
-  const baseMs = Date.parse('2027-03-05T21:00:00.000Z');
+  // Anchor demo exhibition events in the recent past so live pitch taps always sort newest-first
+  const baseMs = Date.now() - 10 * 60_000;
   const matchId = 'game-demo';
 
   const match: Match = {
@@ -1111,7 +1096,8 @@ export function createSeedSnapshot(options: CreateSeedOptions = {}): DatabaseSna
     const liveGroupCount = Math.min(3, Math.max(1, groups.length - completeGroupCount));
 
     let evSeq = 1;
-    const baseStoryMs = Date.parse('2027-03-05T19:00:00.000Z');
+    // Anchor seeded event log timestamps in the recent past (6h ago) so live scoring/audit actions always appear newest-first
+    const baseStoryMs = Date.now() - 6 * 60 * 60_000;
     const nextIso = () => new Date(baseStoryMs + evSeq++ * 30_000).toISOString();
 
     const addPoint = (

@@ -1,4 +1,4 @@
-# AGENTS.md — Project Context (READ THIS FIRST, EVERY SESSION)
+ # AGENTS.md — Project Context (READ THIS FIRST, EVERY SESSION)
 
 > Also read `DESIGN.md` before building any UI.
 > **Section 15 (Change Request 1, from client feedback after Phase 9) OVERRIDES any earlier section it conflicts with** (sections 3, 4, 6, 8 and 9 especially).
@@ -38,7 +38,7 @@ Interpretation:
 | Different access for managers | Role-based access: Super admin, Scorer, Check-in staff, Content manager |
 | System for the event | Full event management system (players, games, bracket, scoring, results) |
 | Enter the participants as users | Admins create player accounts (no public self-registration) |
-| Points plus / minus | Scorer adds or subtracts points: presets per segment + free input, with note |
+| Points plus / minus | Scorer applies +1, −1, Yellow card (−1), or Red card (−2), each with optional note |
 | Time | A timer per segment/game, and a date and time on every record |
 | History tracker | (a) Player history across games, (b) Admin audit log of every action |
 | Every result reaches me in order with date + time | Results feed, newest first, with date and time, visible to admins |
@@ -139,7 +139,7 @@ Auth is **mocked** for the prototype: a login screen with demo accounts per role
 
 ## 7. Segments (draft library, confirm with client)
 
-Seed these as editable `Segment` records (English / Arabic names). Default `presetPoints` = [10, 5, -5]; timers optional.
+Seed these as editable `Segment` records (English / Arabic names); timers optional. All segments use the uniform Scorer Console v2 scoring controls (`+1`, `−1`, Yellow card `−1`, Red card `−2`).
 
 **Music and singing**
 1. A Song by the Artist: أغنية للفنان / للفنانة

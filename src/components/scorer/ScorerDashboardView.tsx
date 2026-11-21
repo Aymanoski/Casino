@@ -186,9 +186,16 @@ export function ScorerDashboardView() {
         : games;
     return {
       all: byScorer.length,
-      live: byScorer.filter((g) => g.status === 'live').length,
+      live: byScorer.filter(
+        (g) => g.status === 'live' || g.status === 'needsTieBreak'
+      ).length,
       scheduled: byScorer.filter((g) => g.status === 'scheduled').length,
-      finished: byScorer.filter((g) => g.status === 'finished').length,
+      finished: byScorer.filter(
+        (g) => g.status === 'finished' || g.status === 'void'
+      ).length,
+      needsReview: byScorer.filter(
+        (g) => g.status === 'needsReview' || g.status === 'void'
+      ).length,
     };
   }, [games, isSuperAdmin, scorerFilter]);
 
@@ -206,7 +213,11 @@ export function ScorerDashboardView() {
         if (isSuperAdmin && scorerFilter !== 'all' && g.scorerUserId !== scorerFilter) {
           return false;
         }
-        if (statusFilter !== 'all' && g.status !== statusFilter) {
+        if (statusFilter === 'live') {
+          if (g.status !== 'live' && g.status !== 'needsTieBreak') return false;
+        } else if (statusFilter === 'finished') {
+          if (g.status !== 'finished' && g.status !== 'void') return false;
+        } else if (statusFilter !== 'all' && g.status !== statusFilter) {
           return false;
         }
         return true;
@@ -222,11 +233,17 @@ export function ScorerDashboardView() {
   }, [games, isSuperAdmin, scorerFilter, statusFilter]);
 
   const liveGames = useMemo(
-    () => filteredGames.filter((g) => g.status === 'live'),
+    () =>
+      filteredGames.filter(
+        (g) => g.status === 'live' || g.status === 'needsTieBreak'
+      ),
     [filteredGames]
   );
   const nonLiveGames = useMemo(
-    () => filteredGames.filter((g) => g.status !== 'live'),
+    () =>
+      filteredGames.filter(
+        (g) => g.status !== 'live' && g.status !== 'needsTieBreak'
+      ),
     [filteredGames]
   );
 
@@ -555,8 +572,13 @@ export function ScorerDashboardView() {
                     </div>
                   </div>
 
-                  {/* 3 Seated Players Strip */}
-                  <div className="mt-5 grid gap-2.5 sm:grid-cols-3">
+                  {/* Seated Players Strip (2-col for 1v1, 3-col for Final) */}
+                  <div
+                    className={cn(
+                      'mt-5 grid gap-2.5',
+                      seatedPlayers.length >= 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+                    )}
+                  >
                     {seatedPlayers.map((player) => {
                       const score = gameTotals[player.id] ?? 0;
                       const isBuzzed = game.activeBuzzPlayerId === player.id;
@@ -663,10 +685,34 @@ export function ScorerDashboardView() {
                             <CalendarClock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                             <span>{lang === 'ar' ? 'مجدولة' : 'SCHEDULED'}</span>
                           </Badge>
+                        ) : game.status === 'void' ? (
+                          <Badge variant="negative">
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            <span>{lang === 'ar' ? 'ملغاة (غياب)' : 'VOID'}</span>
+                          </Badge>
+                        ) : game.status === 'needsReview' ? (
+                          <Badge variant="gold">
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            <span>{lang === 'ar' ? 'تحتاج مراجعة' : 'NEEDS REVIEW'}</span>
+                          </Badge>
                         ) : (
                           <Badge variant="neutral">
                             <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                             <span>{lang === 'ar' ? 'منتهية' : 'FINISHED'}</span>
+                          </Badge>
+                        )}
+                        {isFinished && game.result?.type === 'walkover' && (
+                          <Badge variant="negative" className="text-[10px]">
+                            <span>{lang === 'ar' ? 'انسحاب' : 'WALKOVER'}</span>
+                          </Badge>
+                        )}
+                        {game.tableNumber > 0 && (
+                          <Badge variant="white" className="text-[10px] tabular-nums">
+                            <span>
+                              {lang === 'ar'
+                                ? `طاولة ${formatNumber(game.tableNumber, { useArabicIndicDigits: useArabicIndic })}`
+                                : `T${game.tableNumber}`}
+                            </span>
                           </Badge>
                         )}
                         {game.isFinal && (

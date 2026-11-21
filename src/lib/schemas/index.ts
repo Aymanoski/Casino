@@ -180,8 +180,6 @@ export const SegmentSchema = z.object({
   descriptionEn: z.string(),
   descriptionAr: z.string(),
   durationSec: z.number().int().positive().optional(),
-  /** Retained for metadata/legacy views; Scorer Console v2 uses +1/-1/Yellow/Red */
-  presetPoints: z.array(z.number().int()).default([1, -1]),
   order: z.number().int().positive(),
 });
 export type Segment = z.infer<typeof SegmentSchema>;

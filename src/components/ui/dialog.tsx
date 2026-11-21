@@ -140,6 +140,7 @@ export interface ConfirmDialogProps {
   cancelLabel?: string;
   destructive?: boolean;
   onConfirm: () => void;
+  children?: React.ReactNode;
 }
 
 /**
@@ -158,6 +159,7 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   destructive = false,
   onConfirm,
+  children,
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -176,6 +178,7 @@ export function ConfirmDialog({
           </div>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
+        {children}
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="secondary" size="md">

@@ -43,6 +43,7 @@ import {
 import {
   autoScheduleMatches,
   checkInvariants,
+  computeMatchAbsences,
   computeMatchResult,
   computeTournamentBlueprint,
   detectScheduleConflicts,
@@ -786,8 +787,10 @@ export const commands = {
     cascadePolicy?: CascadePolicy;
     expectedVersion?: number;
   }): Promise<ScoreEvent> {
-    if (!Number.isInteger(input.delta) || input.delta === 0) {
-      throw new CommandValidationError('Point delta must be a non-zero integer.');
+    if (input.delta !== 1 && input.delta !== -1) {
+      throw new CommandValidationError(
+        'Point delta must be +1 or −1. Use applyCard for Yellow (−1) or Red (−2) cards.'
+      );
     }
 
     return commitCommand(input.byUserId, (beforeDb, db) => {
@@ -1069,7 +1072,8 @@ export const commands = {
 
       const target = db.scoreEvents[targetIdx];
       const isOwnScorerUndo =
-        target.byUserId === input.byUserId && match.status === 'live';
+        target.byUserId === input.byUserId &&
+        (match.status === 'live' || match.status === 'needsTieBreak');
       assertRepoPermission(
         db,
         input.byUserId,
@@ -1170,6 +1174,7 @@ export const commands = {
   async editScoreEvent(input: {
     eventId: string;
     delta: number;
+    kind?: 'point' | 'yellow' | 'red';
     note?: string;
     segmentId?: string;
     byUserId: string;
@@ -1177,8 +1182,23 @@ export const commands = {
     cascadePolicy?: CascadePolicy;
     expectedVersion?: number;
   }): Promise<ScoreEvent | null> {
-    if (!Number.isInteger(input.delta) || input.delta === 0) {
-      throw new CommandValidationError('Edited score delta must be a non-zero integer.');
+    const resolvedKind =
+      input.kind ?? (input.delta === -2 ? 'red' : 'point');
+    const resolvedDelta =
+      resolvedKind === 'yellow'
+        ? -1
+        : resolvedKind === 'red'
+          ? -2
+          : input.delta;
+
+    if (
+      resolvedKind === 'point' &&
+      resolvedDelta !== 1 &&
+      resolvedDelta !== -1
+    ) {
+      throw new CommandValidationError(
+        'Edited score must be +1, −1, Yellow card (−1), or Red card (−2).'
+      );
     }
 
     return commitCommand(input.byUserId, (beforeDb, db) => {
@@ -1213,20 +1233,42 @@ export const commands = {
       };
       db.scoreEvents[targetIdx] = { ...target, undoneByEventId: undoEvent.id };
 
-      // 2. Append replacement event
+      // 2. Append replacement event (strictly +1, -1, yellow, or red)
+      const finalKind: 'point' | 'yellow' | 'red' =
+        input.kind ??
+        (target.kind === 'yellow' && resolvedDelta === -1
+          ? 'yellow'
+          : target.kind === 'red' && resolvedDelta === -2
+            ? 'red'
+            : resolvedDelta === -2
+              ? 'red'
+              : 'point');
+
+      const trimmedNote = input.note?.trim();
+      const formattedNote =
+        finalKind === 'yellow'
+          ? trimmedNote
+            ? trimmedNote.startsWith('Yellow card')
+              ? trimmedNote
+              : `Yellow card (−1): ${trimmedNote}`
+            : 'Yellow card (−1)'
+          : finalKind === 'red'
+            ? trimmedNote
+              ? trimmedNote.startsWith('Red card')
+                ? trimmedNote
+                : `Red card (−2): ${trimmedNote}`
+              : 'Red card (−2)'
+            : trimmedNote || undefined;
+
       const replacement: ScoreEvent = {
         id: nextId('score'),
         matchId: match.id,
         gameId: match.id,
         segmentId: input.segmentId ?? target.segmentId,
         playerId: target.playerId,
-        delta: input.delta,
-        note: input.note?.trim() || undefined,
-        kind: target.kind === 'yellow' && input.delta === -1
-          ? 'yellow'
-          : target.kind === 'red' && input.delta === -2
-            ? 'red'
-            : 'point',
+        delta: resolvedDelta,
+        note: formattedNote,
+        kind: finalKind,
         byUserId: input.byUserId,
         replayEpoch: target.replayEpoch ?? match.replayEpoch ?? 0,
         createdAt: nextIsoTimestamp(),
@@ -1247,6 +1289,15 @@ export const commands = {
       );
 
       const player = db.players.find((p) => p.id === target.playerId);
+      const repLabel =
+        finalKind === 'yellow'
+          ? 'Yellow card (−1)'
+          : finalKind === 'red'
+            ? 'Red card (−2)'
+            : resolvedDelta > 0
+              ? `+${resolvedDelta}`
+              : `${resolvedDelta}`;
+
       if (!match.isDemo) {
         db.auditEntries.unshift(
           ...cascadeAuditEntries,
@@ -1255,10 +1306,10 @@ export const commands = {
             action: 'score.edit',
             entityType: 'score',
             entityId: replacement.id,
-            summary: `Edited score for ${player?.fullName ?? target.playerId}: ${target.delta} → ${replacement.delta} (via compensating revert + new event)`,
-            summaryAr: `تعديل نقاط ${player?.fullNameAr ?? target.playerId}: ${target.delta} ← ${replacement.delta}`,
-            before: { eventId: target.id, delta: target.delta, note: target.note ?? null },
-            after: { eventId: replacement.id, delta: replacement.delta, note: replacement.note ?? null },
+            summary: `Edited score for ${player?.fullName ?? target.playerId}: ${target.delta} → ${repLabel} (via compensating revert + new event)`,
+            summaryAr: `تعديل نقاط ${player?.fullNameAr ?? target.playerId}: ${target.delta} ← ${repLabel}`,
+            before: { eventId: target.id, delta: target.delta, kind: target.kind, note: target.note ?? null },
+            after: { eventId: replacement.id, delta: replacement.delta, kind: replacement.kind, note: replacement.note ?? null },
           })
         );
       }
@@ -1273,7 +1324,8 @@ export const commands = {
               gameId: match.id,
               matchId: match.id,
               playerId: target.playerId,
-              delta: input.delta - target.delta,
+              delta: resolvedDelta - target.delta,
+              kind: finalKind,
               scoreEventId: replacement.id,
               isEdit: true,
             },
@@ -1311,6 +1363,9 @@ export const commands = {
       }
       if (participant.guest) {
         throw new CommandValidationError('Guest host Marwan Serry cannot be marked absent.');
+      }
+      if (computeMatchAbsences(match, db.absenceEvents).has(input.playerId)) {
+        throw new CommandValidationError('Player is already marked absent in this match.');
       }
 
       const absenceEvent: AbsenceEvent = {
@@ -1427,6 +1482,10 @@ export const commands = {
 
       assertVersion(match, input.expectedVersion);
       assertRepoPermission(db, input.byUserId, 'absence.reverse', { match });
+
+      if (!computeMatchAbsences(match, db.absenceEvents).has(input.playerId)) {
+        throw new CommandValidationError('Player is not currently marked absent in this match.');
+      }
 
       const absenceEvent: AbsenceEvent = {
         id: nextId('abs'),
@@ -4392,10 +4451,7 @@ export const commands = {
           (input.patch.category !== undefined && input.patch.category !== before.category) ||
           (input.patch.durationSec !== undefined &&
             input.patch.durationSec !== before.durationSec) ||
-          (input.patch.order !== undefined && input.patch.order !== before.order) ||
-          (input.patch.presetPoints !== undefined &&
-            JSON.stringify(input.patch.presetPoints) !==
-              JSON.stringify(before.presetPoints));
+          (input.patch.order !== undefined && input.patch.order !== before.order);
         if (restricted) {
           throw new PermissionDeniedError(
             'segment.manage',

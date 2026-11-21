@@ -35,6 +35,11 @@ import { Input } from '@/components/ui/input';
 import { Skeleton, PlayerPanelSkeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
+import {
+  CardCounterGroup,
+  DisciplinaryCardIcon,
+  formatScoreEventDisplay,
+} from '@/components/brand/DisciplinaryCards';
 import { LiveBadge } from '@/components/brand/LiveBadge';
 import { MarqueeBulbs } from '@/components/brand/MarqueeBulbs';
 import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
@@ -60,9 +65,10 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [totals, setTotals] = useState<Record<string, number>>({});
+  const [yellowByPlayer, setYellowByPlayer] = useState<Record<string, number>>({});
+  const [redByPlayer, setRedByPlayer] = useState<Record<string, number>>({});
   const [events, setEvents] = useState<ScoreEvent[]>([]);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('player-1');
-  const [customPoints, setCustomPoints] = useState<string>('15');
   const [customNote, setCustomNote] = useState<string>('');
   const [recentDeltaByPlayer, setRecentDeltaByPlayer] = useState<
     Record<string, number | null>
@@ -73,12 +79,12 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
   const [liveOfficialGameId, setLiveOfficialGameId] = useState<string | null>(null);
 
   const loadDemoState = useCallback(async () => {
-    const [demoGame, allPlayers, allSegments, gameTotals, gameEvents, liveGames] =
+    const [demoGame, allPlayers, allSegments, scoreSummary, gameEvents, liveGames] =
       await Promise.all([
         gameRepo.get(DEMO_GAME_ID),
         playerRepo.list({ includeHost: false }),
         segmentRepo.list(),
-        scoreRepo.getGameTotals(DEMO_GAME_ID),
+        scoreRepo.getMatchScoreSummary(DEMO_GAME_ID),
         scoreRepo.list({ gameId: DEMO_GAME_ID, order: 'newest' }),
         gameRepo.getLiveGames(),
       ]);
@@ -110,7 +116,9 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
     setLiveOfficialGameId(liveGames[0]?.id ?? null);
     setPlayers(allPlayers);
     setSegments(allSegments);
-    setTotals(gameTotals);
+    setTotals(scoreSummary.totals);
+    setYellowByPlayer(scoreSummary.yellowCardsByPlayer);
+    setRedByPlayer(scoreSummary.redCardsByPlayer);
     setEvents(gameEvents);
     setLoading(false);
   }, []);
@@ -251,61 +259,71 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
     }
   };
 
-  const handleApplyPoints = async (
+  const handleApplyAction = async (
     player: Player,
-    delta: number,
-    kind: 'preset' | 'custom',
-    note?: string
+    action: 'plus' | 'minus' | 'yellow' | 'red'
   ) => {
-    if (!game || !currentSegment || busyAction || Number.isNaN(delta) || delta === 0) {
-      return;
-    }
+    if (!game || !currentSegment || busyAction) return;
     setBusyAction(true);
+    const trimmedNote = customNote.trim() || undefined;
     try {
       setSelectedPlayerId(player.id);
-      await scoreRepo.applyScore({
-        gameId: DEMO_GAME_ID,
-        segmentId: currentSegment.id,
-        playerId: player.id,
-        delta,
-        note: note?.trim() || undefined,
-        kind,
-        byUserId: DEMO_SCORER_ID,
-      });
-      flashPlayerDelta(player.id, delta);
-      await loadDemoState();
-      const signText = delta > 0 ? `+${delta}` : `−${Math.abs(delta)}`;
-      toast({
-        variant: delta > 0 ? 'positive' : 'negative',
-        title:
-          lang === 'ar'
-            ? `${signText} نقطة لـ ${player.fullNameAr}`
-            : `${signText} pts → ${player.fullName}`,
-        description: note?.trim() || localizeText(lang, currentSegment.nameEn, currentSegment.nameAr),
-        durationMs: 2200,
-      });
+      if (action === 'yellow' || action === 'red') {
+        const delta = action === 'yellow' ? -1 : -2;
+        await scoreRepo.applyCard({
+          matchId: DEMO_GAME_ID,
+          segmentId: currentSegment.id,
+          playerId: player.id,
+          card: action,
+          note: trimmedNote,
+          byUserId: DEMO_SCORER_ID,
+        });
+        flashPlayerDelta(player.id, delta);
+        setCustomNote('');
+        await loadDemoState();
+        toast({
+          variant: action === 'yellow' ? 'gold' : 'negative',
+          title:
+            action === 'yellow'
+              ? lang === 'ar'
+                ? `بطاقة صفراء (−١) ← ${player.fullNameAr}`
+                : `Yellow card (−1) → ${player.fullName}`
+              : lang === 'ar'
+                ? `بطاقة حمراء (−٢) ← ${player.fullNameAr}`
+                : `Red card (−2) → ${player.fullName}`,
+          description:
+            trimmedNote ||
+            localizeText(lang, currentSegment.nameEn, currentSegment.nameAr),
+          durationMs: 2200,
+        });
+      } else {
+        const delta = action === 'plus' ? 1 : -1;
+        await scoreRepo.applyPoint({
+          matchId: DEMO_GAME_ID,
+          segmentId: currentSegment.id,
+          playerId: player.id,
+          delta,
+          note: trimmedNote,
+          byUserId: DEMO_SCORER_ID,
+        });
+        flashPlayerDelta(player.id, delta);
+        setCustomNote('');
+        await loadDemoState();
+        toast({
+          variant: delta > 0 ? 'positive' : 'negative',
+          title:
+            lang === 'ar'
+              ? `${delta > 0 ? '+١' : '−١'} نقطة لـ ${player.fullNameAr}`
+              : `${delta > 0 ? '+1' : '−1'} pt → ${player.fullName}`,
+          description:
+            trimmedNote ||
+            localizeText(lang, currentSegment.nameEn, currentSegment.nameAr),
+          durationMs: 2200,
+        });
+      }
     } finally {
       setBusyAction(false);
     }
-  };
-
-  const handleCustomSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const selected = demoPlayers.find((p) => p.id === selectedPlayerId);
-    const parsed = parseInt(customPoints, 10);
-    if (!selected || Number.isNaN(parsed) || parsed === 0) {
-      toast({
-        variant: 'negative',
-        title: lang === 'ar' ? 'أدخل رقماً صحيحاً غير الصفر' : 'Enter a valid non-zero number',
-        description:
-          lang === 'ar'
-            ? 'مثال: 15 أو -10 ثم اضغط تطبيق.'
-            : 'Example: 15 or -10, then apply to the selected player.',
-      });
-      return;
-    }
-    await handleApplyPoints(selected, parsed, 'custom', customNote);
-    setCustomNote('');
   };
 
   const handleUndo = async () => {
@@ -409,10 +427,6 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
     }
   };
 
-  const presetPoints = currentSegment?.presetPoints ?? [10, 5, -5];
-  const selectedPlayer =
-    demoPlayers.find((p) => p.id === selectedPlayerId) ?? demoPlayers[0] ?? null;
-
   return (
     <div id="live-demo" className="relative scroll-mt-20">
       <section className="theme-paper bg-paper paper-pattern py-section-y">
@@ -429,8 +443,8 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
             goldKeyword={lang === 'ar' ? 'مباشرة من هنا' : 'Live Right Here'}
             subtitle={
               lang === 'ar'
-                ? 'اضغط الجرس واحتسب النقاط أو تراجع من لوحة الحكم—وشاهد شاشة الاستوديو تتحدث لحظياً عبر المستودعات الحقيقية وقناة البث الفوري دون التأثير على ترتيب البطولة الرسمي.'
-                : 'Tap Buzz, score presets, or undo on the mini Scorer Console—watch the Big Screen update live through our real repositories and BroadcastChannel without altering official tournament standings.'
+                ? 'اضغط الجرس وامنح +١ أو −١ أو بطاقة صفراء/حمراء أو تراجع من لوحة الحكم—وشاهد شاشة الاستوديو تتحدث لحظياً دون التأثير على ترتيب البطولة الرسمي.'
+                : 'Tap Buzz, score +1 / −1 / Yellow / Red cards, or undo on the mini Scorer Console—watch the Big Screen sync live without altering official tournament standings.'
             }
           />
 
@@ -444,7 +458,7 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
               <span className="text-ink-faint" aria-hidden="true">→</span>
               <span className="inline-flex items-center gap-1.5 rounded-pill border-2 border-positive bg-positive-soft px-3 py-1 text-positive-ink">
                 <Plus className="h-3.5 w-3.5 stroke-[3]" aria-hidden="true" />
-                <span>{lang === 'ar' ? '٢. امنح +١٠ أو مخصص' : '2. Tap +10 / Custom'}</span>
+                <span>{lang === 'ar' ? '٢. +١ / −١ أو بطاقة' : '2. Tap +1 / Card'}</span>
               </span>
               <span className="text-ink-faint" aria-hidden="true">→</span>
               <span className="inline-flex items-center gap-1.5 rounded-pill border-2 border-blue-600 bg-blue-100 px-3 py-1 text-blue-800">
@@ -632,26 +646,37 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
                             </div>
                           </div>
 
-                          <div className="flex items-baseline gap-1 ms-auto">
-                            <AnimatedNumber
-                              value={score}
+                        {/* Card Counters + Running Score */}
+                          <div className="flex flex-wrap items-center gap-2 ms-auto">
+                            <CardCounterGroup
+                              yellowCount={yellowByPlayer[player.id] ?? 0}
+                              redCount={redByPlayer[player.id] ?? 0}
+                              surface="dark"
+                              size="sm"
+                              lang={lang}
                               useArabicIndicDigits={useArabicIndic}
-                              className="font-score text-3xl sm:text-4xl font-black leading-none text-gold-300 tabular-nums"
                             />
-                            <span className="text-[11px] font-bold uppercase text-white/85">
-                              {lang === 'ar' ? 'نقطة' : 'PTS'}
-                            </span>
+                            <div className="flex items-baseline gap-1">
+                              <AnimatedNumber
+                                value={score}
+                                useArabicIndicDigits={useArabicIndic}
+                                className="font-score text-3xl sm:text-4xl font-black leading-none text-gold-300 tabular-nums"
+                              />
+                              <span className="text-[11px] font-bold uppercase text-white/85">
+                                {lang === 'ar' ? 'نقطة' : 'PTS'}
+                              </span>
+                            </div>
                           </div>
                         </button>
 
-                        {/* 56px+ Scorer Action Buttons */}
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-12">
+                        {/* 56px+ Scorer v2 Action Buttons (+1, -1, Yellow, Red + Buzz) */}
+                        <div className="space-y-2">
                           <button
                             type="button"
                             onClick={() => handleBuzz(player)}
                             disabled={busyAction}
                             className={cn(
-                              'sm:col-span-5 flex min-h-[56px] items-center justify-center gap-1.5 rounded-button border-[2.5px] border-outline px-3 text-sm font-extrabold shadow-sticker-sm sticker-press focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+                              'w-full flex min-h-[52px] items-center justify-center gap-1.5 rounded-button border-[2.5px] border-outline px-3 text-sm font-extrabold shadow-sticker-sm sticker-press focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
                               isBuzzed
                                 ? 'bg-gold-gradient text-red-900 shadow-glow-gold'
                                 : 'bg-white text-red-900 hover:bg-paper'
@@ -675,37 +700,64 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
                             </span>
                           </button>
 
-                          <div className="sm:col-span-7 grid grid-cols-3 gap-1.5">
-                            {presetPoints.map((pts) => {
-                              const isPos = pts > 0;
-                              return (
-                                <button
-                                  key={pts}
-                                  type="button"
-                                  disabled={busyAction}
-                                  onClick={() =>
-                                    handleApplyPoints(player, pts, 'preset')
-                                  }
-                                  className={cn(
-                                    'flex min-h-[56px] items-center justify-center gap-0.5 rounded-button border-[2.5px] border-outline font-score text-xl font-black tabular-nums shadow-sticker-sm sticker-press focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
-                                    isPos
-                                      ? 'bg-positive-soft text-positive-ink hover:bg-positive hover:text-ink'
-                                      : 'bg-negative text-white hover:bg-red-900'
-                                  )}
-                                >
-                                  {isPos ? (
-                                    <Plus className="h-4 w-4 stroke-[3] shrink-0" aria-hidden="true" />
-                                  ) : (
-                                    <Minus className="h-4 w-4 stroke-[3] shrink-0" aria-hidden="true" />
-                                  )}
-                                  <span>
-                                    {formatNumber(Math.abs(pts), {
-                                      useArabicIndicDigits: useArabicIndic,
-                                    })}
-                                  </span>
-                                </button>
-                              );
-                            })}
+                          <div className="grid grid-cols-2 xs:grid-cols-4 gap-1.5">
+                            <button
+                              type="button"
+                              disabled={busyAction}
+                              onClick={() => handleApplyAction(player, 'plus')}
+                              className="flex min-h-[56px] items-center justify-center gap-0.5 rounded-button border-[2.5px] border-outline bg-positive-soft font-score text-2xl font-black tabular-nums text-positive-ink shadow-sticker-sm sticker-press hover:bg-positive hover:text-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                            >
+                              <Plus className="h-4 w-4 stroke-[3] shrink-0" aria-hidden="true" />
+                              <span>
+                                {formatNumber(1, { useArabicIndicDigits: useArabicIndic })}
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={busyAction}
+                              onClick={() => handleApplyAction(player, 'minus')}
+                              className="flex min-h-[56px] items-center justify-center gap-0.5 rounded-button border-[2.5px] border-outline bg-white font-score text-2xl font-black tabular-nums text-negative shadow-sticker-sm sticker-press hover:bg-negative-soft focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                            >
+                              <Minus className="h-4 w-4 stroke-[3] shrink-0" aria-hidden="true" />
+                              <span>
+                                {formatNumber(1, { useArabicIndicDigits: useArabicIndic })}
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={busyAction}
+                              onClick={() => handleApplyAction(player, 'yellow')}
+                              aria-label={
+                                lang === 'ar'
+                                  ? `بطاقة صفراء (−١) لـ ${displayName}`
+                                  : `Yellow card (−1) for ${displayName}`
+                              }
+                              className="flex min-h-[56px] items-center justify-center gap-1 rounded-button border-[2.5px] border-outline bg-gold-400 px-2 font-score text-xl font-black tabular-nums text-red-900 shadow-sticker-sm sticker-press hover:bg-gold-300 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                            >
+                              <DisciplinaryCardIcon card="yellow" size="sm" />
+                              <span>
+                                −{formatNumber(1, { useArabicIndicDigits: useArabicIndic })}
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={busyAction}
+                              onClick={() => handleApplyAction(player, 'red')}
+                              aria-label={
+                                lang === 'ar'
+                                  ? `بطاقة حمراء (−٢) لـ ${displayName}`
+                                  : `Red card (−2) for ${displayName}`
+                              }
+                              className="flex min-h-[56px] items-center justify-center gap-1 rounded-button border-[2.5px] border-outline bg-negative px-2 font-score text-xl font-black tabular-nums text-white shadow-sticker-sm sticker-press hover:bg-red-900 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                            >
+                              <DisciplinaryCardIcon card="red" size="sm" />
+                              <span>
+                                −{formatNumber(2, { useArabicIndicDigits: useArabicIndic })}
+                              </span>
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -713,56 +765,27 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
                   })}
                 </div>
 
-                {/* Custom +/- Points Input + Timer Controls */}
+                {/* Optional Note + Timer Controls */}
                 <div className="space-y-3 border-t-2 border-white/15 pt-4">
-                  <form
-                    onSubmit={handleCustomSubmit}
-                    className="grid grid-cols-1 gap-2 sm:grid-cols-12"
-                  >
-                    <div className="sm:col-span-3">
-                      <label htmlFor="demo-custom-pts" className="sr-only">
-                        {lang === 'ar' ? 'نقاط مخصصة (+/-)' : 'Custom points (+/-)'}
-                      </label>
-                      <Input
-                        id="demo-custom-pts"
-                        type="number"
-                        value={customPoints}
-                        onChange={(e) => setCustomPoints(e.target.value)}
-                        placeholder="+15 / -10"
-                        className="min-h-[56px] text-center font-score text-xl font-black text-red-900"
-                      />
-                    </div>
-                    <div className="sm:col-span-5">
-                      <label htmlFor="demo-custom-note" className="sr-only">
-                        {lang === 'ar' ? 'ملاحظة اختيارية' : 'Optional note'}
-                      </label>
-                      <Input
-                        id="demo-custom-note"
-                        type="text"
-                        value={customNote}
-                        onChange={(e) => setCustomNote(e.target.value)}
-                        placeholder={
-                          lang === 'ar' ? 'ملاحظة (اختياري)...' : 'Note (optional)...'
-                        }
-                        className="min-h-[56px]"
-                      />
-                    </div>
-                    <div className="sm:col-span-4">
-                      <Button
-                        type="submit"
-                        variant="gold"
-                        size="scorer"
-                        className="w-full"
-                        disabled={busyAction || !selectedPlayer}
-                      >
-                        <span>
-                          {lang === 'ar'
-                            ? `تطبيق (${selectedPlayer?.nicknameAr ?? ''})`
-                            : `Apply (${selectedPlayer?.nickname ?? ''})`}
-                        </span>
-                      </Button>
-                    </div>
-                  </form>
+                  <div>
+                    <label htmlFor="demo-custom-note" className="sr-only">
+                      {lang === 'ar'
+                        ? 'ملاحظة اختيارية تُرفق بالحركة القادمة'
+                        : 'Optional note attached to next score or card'}
+                    </label>
+                    <Input
+                      id="demo-custom-note"
+                      type="text"
+                      value={customNote}
+                      onChange={(e) => setCustomNote(e.target.value)}
+                      placeholder={
+                        lang === 'ar'
+                          ? 'ملاحظة اختيارية تُرفق بالنقطة أو البطاقة التالية...'
+                          : 'Optional note attached to next +1, −1, or card...'
+                      }
+                      className="min-h-[48px]"
+                    />
+                  </div>
 
                   {/* Timer Strip */}
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-input border-2 border-white/20 bg-red-800/80 px-3 py-2">
@@ -955,6 +978,11 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
                           {events.slice(0, 2).map((ev) => {
                             const p = players.find((pl) => pl.id === ev.playerId);
                             const isPos = ev.delta > 0;
+                            const display = formatScoreEventDisplay(
+                              ev,
+                              lang,
+                              useArabicIndic
+                            );
                             return (
                               <div
                                 key={ev.id}
@@ -964,27 +992,55 @@ export function LiveDemoSection({ settings }: LiveDemoSectionProps) {
                                   {p
                                     ? localizeText(lang, p.fullName, p.fullNameAr)
                                     : ev.playerId}
-                                  {ev.note ? (
+                                  {display.cardType ? (
+                                    <span className="text-ink-muted">
+                                      {' — '}
+                                      {display.kindLabel}
+                                      {display.userNote ? ` (${display.userNote})` : ''}
+                                    </span>
+                                  ) : ev.note ? (
                                     <span className="text-ink-muted"> — {ev.note}</span>
                                   ) : null}
                                 </span>
-                                <span
-                                  className={cn(
-                                    'inline-flex shrink-0 items-center gap-0.5 rounded-pill border px-2 py-0.5 font-score text-xs font-black tabular-nums',
-                                    isPos
-                                      ? 'border-positive bg-positive-soft text-positive-ink'
-                                      : 'border-outline bg-negative text-white'
-                                  )}
-                                >
-                                  {isPos ? (
-                                    <Plus className="h-2.5 w-2.5 stroke-[3]" aria-hidden="true" />
-                                  ) : (
-                                    <Minus className="h-2.5 w-2.5 stroke-[3]" aria-hidden="true" />
-                                  )}
-                                  {formatNumber(Math.abs(ev.delta), {
-                                    useArabicIndicDigits: useArabicIndic,
-                                  })}
-                                </span>
+                                {display.cardType ? (
+                                  <span
+                                    className={cn(
+                                      'inline-flex shrink-0 items-center gap-1 rounded-pill border px-2 py-0.5 text-[11px] font-black',
+                                      display.cardType === 'yellow'
+                                        ? 'border-outline bg-gold-400 text-red-900'
+                                        : 'border-outline bg-negative text-white'
+                                    )}
+                                  >
+                                    <DisciplinaryCardIcon
+                                      card={display.cardType}
+                                      size="sm"
+                                    />
+                                    <span>
+                                      −
+                                      {formatNumber(Math.abs(ev.delta), {
+                                        useArabicIndicDigits: useArabicIndic,
+                                      })}
+                                    </span>
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={cn(
+                                      'inline-flex shrink-0 items-center gap-0.5 rounded-pill border px-2 py-0.5 font-score text-xs font-black tabular-nums',
+                                      isPos
+                                        ? 'border-positive bg-positive-soft text-positive-ink'
+                                        : 'border-outline bg-negative text-white'
+                                    )}
+                                  >
+                                    {isPos ? (
+                                      <Plus className="h-2.5 w-2.5 stroke-[3]" aria-hidden="true" />
+                                    ) : (
+                                      <Minus className="h-2.5 w-2.5 stroke-[3]" aria-hidden="true" />
+                                    )}
+                                    {formatNumber(Math.abs(ev.delta), {
+                                      useArabicIndicDigits: useArabicIndic,
+                                    })}
+                                  </span>
+                                )}
                               </div>
                             );
                           })}

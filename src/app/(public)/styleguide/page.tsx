@@ -49,6 +49,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DisciplinaryCardIcon,
   EmptyState,
   FormGrid,
   GoldDivider,
@@ -91,6 +92,8 @@ interface SandboxPlayer {
   nicknameAr: string;
   avatarSeed: string;
   score: number;
+  yellowCards: number;
+  redCards: number;
   gamesPlayed: number;
   wins: number;
   isHost?: boolean;
@@ -114,7 +117,7 @@ export default function StyleguidePage() {
   const [urgentRemaining, setUrgentRemaining] = useState<number>(4);
 
   // Form & Table filter states
-  const [customPoints, setCustomPoints] = useState<string>('15');
+  const [tableLabelInput, setTableLabelInput] = useState<string>('Table 04 · Group 12');
   const [selectedCategory, setSelectedCategory] = useState<string>('music');
   const [tableCategoryFilter, setTableCategoryFilter] = useState<string>('all');
   const [scorerNote, setScorerNote] = useState<string>(
@@ -133,10 +136,12 @@ export default function StyleguidePage() {
       nicknameEn: 'The Fox',
       nicknameAr: 'الثعلب',
       avatarSeed: 'omar-fox',
-      score: 65,
+      score: 7,
+      yellowCards: 1,
+      redCards: 0,
       gamesPlayed: 2,
       wins: 2,
-      lastDelta: 10,
+      lastDelta: 1,
     },
     {
       id: 'player-19',
@@ -145,10 +150,12 @@ export default function StyleguidePage() {
       nicknameEn: 'Salsabeel',
       nicknameAr: 'سلسبيل',
       avatarSeed: 'salma-salsabeel',
-      score: 55,
+      score: 5,
+      yellowCards: 0,
+      redCards: 0,
       gamesPlayed: 2,
       wins: 2,
-      lastDelta: 5,
+      lastDelta: 1,
     },
     {
       id: 'player-marwan',
@@ -157,11 +164,13 @@ export default function StyleguidePage() {
       nicknameEn: 'The Boss',
       nicknameAr: 'صاحب الكازينو',
       avatarSeed: 'marwan-host',
-      score: 60,
+      score: 6,
+      yellowCards: 0,
+      redCards: 1,
       gamesPlayed: 1,
       wins: 1,
       isHost: true,
-      lastDelta: -5,
+      lastDelta: -2,
     },
   ]);
 
@@ -192,11 +201,21 @@ export default function StyleguidePage() {
     return () => clearInterval(interval);
   }, [timerStatus]);
 
-  const applySandboxDelta = (playerId: string, delta: number) => {
+  const applySandboxDelta = (
+    playerId: string,
+    delta: number,
+    card?: 'yellow' | 'red'
+  ) => {
     setSandboxPlayers((prev) =>
       prev.map((p) =>
         p.id === playerId
-          ? { ...p, score: p.score + delta, lastDelta: delta }
+          ? {
+              ...p,
+              score: p.score + delta,
+              yellowCards: p.yellowCards + (card === 'yellow' ? 1 : 0),
+              redCards: p.redCards + (card === 'red' ? 1 : 0),
+              lastDelta: delta,
+            }
           : p
       )
     );
@@ -206,15 +225,23 @@ export default function StyleguidePage() {
       : playerId;
 
     toast({
-      variant: delta >= 0 ? 'positive' : 'negative',
+      variant: card === 'yellow' ? 'gold' : delta >= 0 ? 'positive' : 'negative',
       title:
-        lang === 'ar'
-          ? `${delta > 0 ? `+${delta}` : `−${Math.abs(delta)}`} نقطة لـ ${targetName}`
-          : `${delta > 0 ? `+${delta}` : `−${Math.abs(delta)}`} pts applied to ${targetName}`,
+        card === 'yellow'
+          ? lang === 'ar'
+            ? `بطاقة صفراء (−١) ← ${targetName}`
+            : `Yellow card (−1) → ${targetName}`
+          : card === 'red'
+            ? lang === 'ar'
+              ? `بطاقة حمراء (−٢) ← ${targetName}`
+              : `Red card (−2) → ${targetName}`
+            : lang === 'ar'
+              ? `${delta > 0 ? `+${delta}` : `−${Math.abs(delta)}`} نقطة لـ ${targetName}`
+              : `${delta > 0 ? `+${delta}` : `−${Math.abs(delta)}`} pt applied to ${targetName}`,
       description:
         lang === 'ar'
           ? 'تم تحديث لوحة الصدارة والعداد المتحرك فوراً.'
-          : 'Animated counter and delta flash triggered immediately.',
+          : 'Animated counter and card count updated immediately.',
     });
   };
 
@@ -801,13 +828,18 @@ export default function StyleguidePage() {
                 nickname={lang === 'ar' ? 'الثعلب' : 'The Fox'}
                 avatarSeed="omar-fox"
                 score={sandboxPlayers[0].score}
+                yellowCards={sandboxPlayers[0].yellowCards}
+                redCards={sandboxPlayers[0].redCards}
+                showCardCounters
                 rank={1}
                 isSelected
                 isBuzzed={buzzedPlayerId === 'player-1'}
-                presetPoints={[10, 5, -5]}
                 useArabicIndicDigits={useArabicIndic}
                 onBuzz={() => setBuzzedPlayerId('player-1')}
-                onApplyPreset={(pts) => applySandboxDelta('player-1', pts)}
+                onPointPlus={() => applySandboxDelta('player-1', 1)}
+                onPointMinus={() => applySandboxDelta('player-1', -1)}
+                onYellowCard={() => applySandboxDelta('player-1', -1, 'yellow')}
+                onRedCard={() => applySandboxDelta('player-1', -2, 'red')}
               />
               <PlayerPanel
                 surface="dark"
@@ -816,12 +848,17 @@ export default function StyleguidePage() {
                 nickname={lang === 'ar' ? 'سلسبيل' : 'Salsabeel'}
                 avatarSeed="salma-salsabeel"
                 score={sandboxPlayers[1].score}
+                yellowCards={sandboxPlayers[1].yellowCards}
+                redCards={sandboxPlayers[1].redCards}
+                showCardCounters
                 rank={2}
                 isBuzzed={buzzedPlayerId === 'player-19'}
-                presetPoints={[10, 5, -5]}
                 useArabicIndicDigits={useArabicIndic}
                 onBuzz={() => setBuzzedPlayerId('player-19')}
-                onApplyPreset={(pts) => applySandboxDelta('player-19', pts)}
+                onPointPlus={() => applySandboxDelta('player-19', 1)}
+                onPointMinus={() => applySandboxDelta('player-19', -1)}
+                onYellowCard={() => applySandboxDelta('player-19', -1, 'yellow')}
+                onRedCard={() => applySandboxDelta('player-19', -2, 'red')}
               />
             </div>
           </div>
@@ -860,25 +897,35 @@ export default function StyleguidePage() {
               <Button
                 variant="red"
                 size="sm"
-                onClick={() => applySandboxDelta(buzzedPlayerId, 10)}
+                onClick={() => applySandboxDelta(buzzedPlayerId, 1)}
               >
                 <Plus className="h-4 w-4 shrink-0" />
                 <span>
-                  {lang === 'ar' ? '+١٠ للاعب الضاغط' : '+10 pts to Buzzed'}
+                  {lang === 'ar' ? '+١ للاعب الضاغط' : '+1 pt to Buzzed'}
+                </span>
+              </Button>
+              <Button
+                variant="gold"
+                size="sm"
+                onClick={() => applySandboxDelta(buzzedPlayerId, -1, 'yellow')}
+              >
+                <DisciplinaryCardIcon card="yellow" size="sm" />
+                <span>
+                  {lang === 'ar' ? 'بطاقة صفراء (−١)' : 'Yellow (−1)'}
                 </span>
               </Button>
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={() => applySandboxDelta(buzzedPlayerId, -5)}
+                onClick={() => applySandboxDelta(buzzedPlayerId, -2, 'red')}
               >
-                <Minus className="h-4 w-4 shrink-0" />
-                <span>{lang === 'ar' ? '−٥ خصم' : '−5 Penalty'}</span>
+                <DisciplinaryCardIcon card="red" size="sm" />
+                <span>{lang === 'ar' ? 'بطاقة حمراء (−٢)' : 'Red (−2)'}</span>
               </Button>
             </div>
           </div>
 
-          {/* 3-Player Sticker Panel Grid */}
+          {/* 3-Player Sticker Panel Grid (Grand Final Example) */}
           <div className="grid grid-cols-1 gap-grid-gap md:grid-cols-2 xl:grid-cols-3">
             {sandboxPlayers.map((p) => {
               const rank =
@@ -892,13 +939,15 @@ export default function StyleguidePage() {
                   nickname={localizeText(lang, p.nicknameEn, p.nicknameAr)}
                   avatarSeed={p.avatarSeed}
                   score={p.score}
+                  yellowCards={p.yellowCards}
+                  redCards={p.redCards}
+                  showCardCounters
                   rank={rank}
                   isBuzzed={buzzedPlayerId === p.id}
                   isSelected={selectedPlayerId === p.id}
                   isWinner={rank === 1}
                   isHost={p.isHost}
                   useArabicIndicDigits={useArabicIndic}
-                  presetPoints={[10, 5, -5]}
                   onSelect={() => setSelectedPlayerId(p.id)}
                   onBuzz={() => {
                     setBuzzedPlayerId(p.id);
@@ -907,11 +956,14 @@ export default function StyleguidePage() {
                       variant: 'gold',
                       title:
                         lang === 'ar'
-                          ? `⚡ ${p.nameAr} ضغط الجرس أولاً!`
-                          : `⚡ ${p.nameEn} buzzed first!`,
+                          ? `${p.nameAr} ضغط الجرس أولاً!`
+                          : `${p.nameEn} buzzed first!`,
                     });
                   }}
-                  onApplyPreset={(pts) => applySandboxDelta(p.id, pts)}
+                  onPointPlus={() => applySandboxDelta(p.id, 1)}
+                  onPointMinus={() => applySandboxDelta(p.id, -1)}
+                  onYellowCard={() => applySandboxDelta(p.id, -1, 'yellow')}
+                  onRedCard={() => applySandboxDelta(p.id, -2, 'red')}
                 />
               );
             })}
@@ -1480,9 +1532,9 @@ export default function StyleguidePage() {
 
             <FormGrid columns={2}>
               <Input
-                label={lang === 'ar' ? 'نقاط مخصصة' : 'Custom Points Delta'}
-                value={customPoints}
-                onChange={(e) => setCustomPoints(e.target.value)}
+                label={lang === 'ar' ? 'اسم الطاولة' : 'Match Table Label'}
+                value={tableLabelInput}
+                onChange={(e) => setTableLabelInput(e.target.value)}
                 helperText={
                   lang === 'ar'
                     ? 'اضغط داخل الحقل لرؤية التركيز الأزرق'
@@ -1519,11 +1571,11 @@ export default function StyleguidePage() {
 
             <Input
               label={lang === 'ar' ? 'حالة خطأ التحقق' : 'Inline Validation Error State'}
-              defaultValue="invalid-delta"
+              defaultValue="invalid-email"
               error={
                 lang === 'ar'
-                  ? 'يجب إدخال رقم صحيح للنقاط قبل الاعتماد.'
-                  : 'Please enter a valid numeric point delta before applying.'
+                  ? 'يرجى إدخال بريد إلكتروني صالح للمتسابق قبل الحفظ.'
+                  : 'Please enter a valid contestant email address before saving.'
               }
             />
 
@@ -1575,8 +1627,8 @@ export default function StyleguidePage() {
                     </DialogHeader>
                     <div className="rounded-input border-2 border-outline bg-paper-2 p-4 text-xs font-bold text-red-900">
                       {lang === 'ar'
-                        ? 'الفقرة ١٦: جولة التحدي / الحسم (نقاط مقترحة: +10 / −5)'
-                        : 'Segment #16: Tie-Breaker & Penalty Challenge (Presets: +10 / −5)'}
+                        ? 'الفقرة ١٦: جولة التحدي / الحسم (٣٠ ثانية · +١ / −١ / بطاقات)'
+                        : 'Segment #16: Tie-Breaker & Penalty Challenge (30s · +1 / −1 / Cards)'}
                     </div>
                     <DialogFooter>
                       <DialogClose asChild>
@@ -1867,25 +1919,16 @@ export default function StyleguidePage() {
                     ),
                   },
                   {
-                    key: 'presets',
-                    header: lang === 'ar' ? 'النقاط المسبقة' : 'Preset Points',
+                    key: 'duration',
+                    header: lang === 'ar' ? 'المؤقت' : 'Timer',
                     render: (seg) => (
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {seg.presetPoints.map((pt) => (
-                          <Badge
-                            key={pt}
-                            variant={pt > 0 ? 'positive' : 'negative'}
-                            className="tabular-nums"
-                          >
-                            {pt > 0 ? (
-                              <Plus className="h-3 w-3 stroke-[3]" />
-                            ) : (
-                              <Minus className="h-3 w-3 stroke-[3]" />
-                            )}
-                            <span>{Math.abs(pt)}</span>
-                          </Badge>
-                        ))}
-                      </div>
+                      <Badge variant={seg.durationSec ? 'white' : 'muted'} className="tabular-nums">
+                        {seg.durationSec
+                          ? `${seg.durationSec}s`
+                          : lang === 'ar'
+                            ? 'مرن'
+                            : 'Flexible'}
+                      </Badge>
                     ),
                   },
                 ]}

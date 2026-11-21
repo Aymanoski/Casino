@@ -47,6 +47,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DisciplinaryCardIcon } from '@/components/brand/DisciplinaryCards';
 import { LiveBadge } from '@/components/brand/LiveBadge';
 import { ScoreChip } from '@/components/brand/ScoreChip';
 import {
@@ -268,8 +269,8 @@ export function SegmentsLibraryView() {
         goldHighlight={lang === 'ar' ? 'فقرات وتحديات' : 'Segments Library'}
         subtitle={
           lang === 'ar'
-            ? 'استكشف تفاصيل كل فقرة، مؤقتها، نقاطها الفورية، والمباريات التي تتضمنها عبر البطولة.'
-            : 'Inspect every original game-show segment: rules, timer settings, preset scoring chips, and which tournament tables feature it.'
+            ? 'استكشف تفاصيل كل فقرة، مؤقتها، ونظام النقاط والبطاقات الموحد، والمباريات التي تتضمنها عبر البطولة.'
+            : 'Inspect every original game-show segment: rules, timer settings, uniform scoring (+1, −1, Yellow −1, Red −2), and which tournament tables feature it.'
         }
         compact
         meta={
@@ -458,39 +459,18 @@ export function SegmentsLibraryView() {
                           </span>
                         </span>
 
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {seg.presetPoints.map((pts) => {
-                            const isPos = pts > 0;
-                            return (
-                              <span
-                                key={pts}
-                                className={cn(
-                                  'inline-flex items-center gap-0.5 rounded-pill border px-2 py-0.5 font-score text-xs font-black tabular-nums',
-                                  isPos
-                                    ? 'border-positive bg-positive-soft text-positive-ink'
-                                    : 'border-outline bg-negative text-white'
-                                )}
-                              >
-                                {isPos ? (
-                                  <Plus
-                                    className="h-2.5 w-2.5 stroke-[3]"
-                                    aria-hidden="true"
-                                  />
-                                ) : (
-                                  <Minus
-                                    className="h-2.5 w-2.5 stroke-[3]"
-                                    aria-hidden="true"
-                                  />
-                                )}
-                                <span>
-                                  {formatNumber(Math.abs(pts), {
-                                    useArabicIndicDigits: useArabicIndic,
-                                  })}
-                                </span>
-                              </span>
-                            );
-                          })}
-                        </div>
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-ink-muted">
+                          <span className="inline-flex items-center gap-0.5 rounded-pill border border-positive bg-positive-soft px-2 py-0.5 font-score font-black text-positive-ink tabular-nums">
+                            <Plus className="h-2.5 w-2.5 stroke-[3]" aria-hidden="true" />
+                            {formatNumber(1, { useArabicIndicDigits: useArabicIndic })}
+                          </span>
+                          <span className="inline-flex items-center gap-0.5 rounded-pill border border-outline bg-negative px-2 py-0.5 font-score font-black text-white tabular-nums">
+                            <Minus className="h-2.5 w-2.5 stroke-[3]" aria-hidden="true" />
+                            {formatNumber(1, { useArabicIndicDigits: useArabicIndic })}
+                          </span>
+                          <DisciplinaryCardIcon card="yellow" size="sm" />
+                          <DisciplinaryCardIcon card="red" size="sm" />
+                        </span>
                       </div>
 
                       <div className="flex items-center justify-between gap-2">
@@ -587,31 +567,47 @@ export function SegmentsLibraryView() {
                   </DialogDescription>
                 </DialogHeader>
 
-                {/* Scoring Presets Breakdown */}
+                {/* Uniform Scoring Breakdown */}
                 <div className="space-y-3 rounded-input border border-border-paper bg-paper p-4">
                   <h3 className="text-xs font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-red-900">
                     {lang === 'ar'
-                      ? 'أزرار النقاط الفورية في لوحة الحكم'
-                      : 'Scorer Console Point Presets'}
+                      ? 'نظام النقاط والبطاقات الموحّد في لوحة الحكم'
+                      : 'Uniform Scorer Console Controls'}
                   </h3>
 
-                  <div className="flex flex-wrap items-center gap-3">
-                    {seg.presetPoints.map((pts) => (
-                      <ScoreChip
-                        key={pts}
-                        value={pts}
-                        tone={pts > 0 ? 'positive' : 'negative'}
-                        showSign
-                        useArabicIndicDigits={useArabicIndic}
-                        size="md"
-                      />
-                    ))}
-                    <p className="min-w-[180px] flex-1 text-xs leading-relaxed text-ink-muted">
-                      {lang === 'ar'
-                        ? 'بالإضافة لإدخال نقاط مخصصة (+/-) مع ملاحظة اختيارية وتراجع فوري من لوحة الحكم.'
-                        : 'Plus free custom positive/negative amounts with optional notes and instant undo in the Scorer Console.'}
-                    </p>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <ScoreChip
+                      value={1}
+                      tone="positive"
+                      showSign
+                      useArabicIndicDigits={useArabicIndic}
+                      size="sm"
+                    />
+                    <ScoreChip
+                      value={-1}
+                      tone="negative"
+                      showSign
+                      useArabicIndicDigits={useArabicIndic}
+                      size="sm"
+                    />
+                    <Badge variant="gold" className="text-xs font-extrabold">
+                      <DisciplinaryCardIcon card="yellow" size="sm" />
+                      <span>
+                        {lang === 'ar' ? 'بطاقة صفراء (−١)' : 'Yellow card (−1)'}
+                      </span>
+                    </Badge>
+                    <Badge variant="negative" className="text-xs font-extrabold">
+                      <DisciplinaryCardIcon card="red" size="sm" />
+                      <span>
+                        {lang === 'ar' ? 'بطاقة حمراء (−٢)' : 'Red card (−2)'}
+                      </span>
+                    </Badge>
                   </div>
+                  <p className="text-xs leading-relaxed text-ink-muted">
+                    {lang === 'ar'
+                      ? 'تُستخدم نفس عناصر التحكم (+١، −١، البطاقة الصفراء −١، والبطاقة الحمراء −٢) في جميع فقرات البطولة مع ملاحظة اختيارية وتراجع فوري مسجل.'
+                      : 'Every segment uses the same 4 controls (+1, −1, Yellow card −1, Red card −2) with an optional note and instant logged undo.'}
+                  </p>
                 </div>
 
                 {/* Stage Flow */}

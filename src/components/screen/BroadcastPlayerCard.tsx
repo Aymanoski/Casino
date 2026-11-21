@@ -2,10 +2,11 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Crown, Minus, Plus, Trophy, Zap } from 'lucide-react';
+import { Crown, Minus, Plus, Trophy, UserX, Zap } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { cn, formatNumber } from '@/lib/utils';
 import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
+import { CardCounterGroup } from '@/components/brand/DisciplinaryCards';
 import { MarqueeBulbs } from '@/components/brand/MarqueeBulbs';
 import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
 import { ScoreChip, type ScoreChipTone } from '@/components/brand/ScoreChip';
@@ -22,6 +23,10 @@ export interface BroadcastPlayerCardProps {
   avatarSeed?: string;
   score: number;
   rank: number;
+  yellowCards?: number;
+  redCards?: number;
+  isAbsent?: boolean;
+  isWalkoverWinner?: boolean;
   isBuzzed?: boolean;
   /** True when another player on the table is currently buzzed */
   isDimmedByPeerBuzz?: boolean;
@@ -39,8 +44,8 @@ export interface BroadcastPlayerCardProps {
  * BroadcastPlayerCard
  * 10-meter legible venue/stream player panel for `/screen/[gameId]`.
  * - Crisp white sticker surface on crimson Stage (or warm Golden Seat for Marwan Serry in Final mode)
- * - Huge tabular `AnimatedNumber` score + floating `+/-` delta badge (always with Plus/Minus icon)
- * - Radiant golden BUZZED FIRST spotlight glow & pulse
+ * - Huge tabular `AnimatedNumber` score + floating `+/-` delta badge + SVG card counters
+ * - Radiant golden BUZZED FIRST spotlight glow & pulse + Absent / Walkover state
  * - Name-only geometric avatar medallion (never real photos)
  */
 export function BroadcastPlayerCard({
@@ -49,6 +54,10 @@ export function BroadcastPlayerCard({
   avatarSeed,
   score,
   rank,
+  yellowCards = 0,
+  redCards = 0,
+  isAbsent = false,
+  isWalkoverWinner = false,
   isBuzzed = false,
   isDimmedByPeerBuzz = false,
   isWinner = false,
@@ -122,13 +131,15 @@ export function BroadcastPlayerCard({
       transition={{ duration: 0.28, ease: 'easeOut' }}
       className={cn(
         '@container relative flex min-w-0 flex-col justify-between overflow-hidden rounded-card border-[3px] border-outline p-3.5 sm:p-5 xl:p-6 3xl:p-8 [@media(max-height:520px)]:p-2.5 text-ink transition-shadow duration-300',
-        isBuzzed
-          ? 'bg-gradient-to-b from-gold-200 via-paper to-white ring-[5px] ring-gold-300 shadow-glow-gold'
-          : isGoldenSeat
-            ? 'bg-gradient-to-b from-gold-200 via-paper to-white ring-[4px] ring-gold-400/90 shadow-sticker-lg'
-            : isWinner
-              ? 'bg-gradient-to-b from-gold-200/80 via-paper to-white ring-[4px] ring-gold-300 shadow-sticker-lg'
-              : 'bg-white shadow-sticker-lg',
+        isAbsent
+          ? 'bg-paper-2 absent-stripes-light opacity-85 shadow-sticker'
+          : isBuzzed
+            ? 'bg-gradient-to-b from-gold-200 via-paper to-white ring-[5px] ring-gold-300 shadow-glow-gold'
+            : isGoldenSeat
+              ? 'bg-gradient-to-b from-gold-200 via-paper to-white ring-[4px] ring-gold-400/90 shadow-sticker-lg'
+              : isWinner || isWalkoverWinner
+                ? 'bg-gradient-to-b from-gold-200/80 via-paper to-white ring-[4px] ring-gold-300 shadow-sticker-lg'
+                : 'bg-white shadow-sticker-lg',
         className
       )}
     >
@@ -175,9 +186,19 @@ export function BroadcastPlayerCard({
           ) : null}
         </div>
 
-        {/* Dynamic Status Callout: Buzzed First / Winner / Advancing */}
+        {/* Dynamic Status Callout: Absent / Buzzed First / Walkover / Winner / Advancing */}
         <AnimatePresence mode="wait">
-          {isBuzzed ? (
+          {isAbsent ? (
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border-2 border-outline bg-negative px-3 sm:px-3.5 py-1 text-xs sm:text-sm font-black uppercase text-white shadow-sticker-sm">
+              <UserX className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{lang === 'ar' ? 'غائب' : 'ABSENT'}</span>
+            </span>
+          ) : isWalkoverWinner ? (
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border-2 border-outline bg-gold-gradient px-3.5 py-1 text-xs sm:text-sm font-black uppercase text-red-900 shadow-sticker-sm">
+              <Trophy className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{lang === 'ar' ? 'فوز بالانسحاب' : 'WALKOVER WIN'}</span>
+            </span>
+          ) : isBuzzed ? (
             <motion.span
               key="buzzed-pill"
               initial={
@@ -250,11 +271,22 @@ export function BroadcastPlayerCard({
         </div>
       </div>
 
-      {/* Colossal 10-Meter Score Deck with Floating +/- Delta Flash */}
+      {/* Colossal 10-Meter Score Deck with Card Counters & Floating +/- Delta Flash */}
       <div className="relative z-10 flex items-end justify-between gap-3 border-t-[2.5px] border-border-paper pt-2.5 sm:pt-4 2xl:pt-6 [@media(max-height:520px)]:pt-1.5">
-        <span className="font-bold uppercase text-[length:var(--screen-label)] ltr:tracking-wider rtl:tracking-normal text-ink-muted pb-1 sm:pb-2">
-          {lang === 'ar' ? 'النقاط' : 'SCORE'}
-        </span>
+        <div className="flex flex-col gap-1.5 pb-1 sm:pb-2">
+          <span className="font-bold uppercase text-[length:var(--screen-label)] ltr:tracking-wider rtl:tracking-normal text-ink-muted">
+            {lang === 'ar' ? 'النقاط' : 'SCORE'}
+          </span>
+          {(yellowCards > 0 || redCards > 0) && (
+            <CardCounterGroup
+              yellowCount={yellowCards}
+              redCount={redCards}
+              surface="light"
+              size="md"
+              useArabicIndicDigits={useArabicIndicDigits}
+            />
+          )}
+        </div>
 
         <div className="relative ms-auto flex items-baseline justify-end gap-2.5">
           {/* Floating +/- Delta Badge (always paired with Plus/Minus icon) */}

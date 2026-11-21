@@ -36,6 +36,10 @@ import { useToast } from '@/components/ui/toast';
 import { LiveBadge } from '@/components/brand/LiveBadge';
 import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
 import {
+  ContactIconButton,
+  PlayerContactDialog,
+} from '@/components/brand/PlayerContactDialog';
+import {
   AdminErrorBanner,
   AdminPageHeader,
   AdminStatChipStrip,
@@ -60,6 +64,7 @@ export function AdminCheckInView() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [busyPlayerId, setBusyPlayerId] = useState<string | null>(null);
+  const [contactPlayer, setContactPlayer] = useState<Player | null>(null);
 
   const mountedRef = useRef(true);
   const loadSeqRef = useRef(0);
@@ -223,6 +228,11 @@ export function AdminCheckInView() {
     const isAbsent = p.status === 'absent';
     return (
       <div className="flex shrink-0 items-center gap-1.5">
+        <ContactIconButton
+          playerName={localizeText(lang, p.fullName, p.fullNameAr)}
+          surface="light"
+          onClick={() => setContactPlayer(p)}
+        />
         <Button
           type="button"
           variant="calm"
@@ -499,6 +509,17 @@ export function AdminCheckInView() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {user && (
+        <PlayerContactDialog
+          open={Boolean(contactPlayer)}
+          onOpenChange={(open) => {
+            if (!open) setContactPlayer(null);
+          }}
+          player={contactPlayer}
+          actorUserId={user.id}
+        />
+      )}
     </div>
   );
 }

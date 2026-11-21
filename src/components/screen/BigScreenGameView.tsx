@@ -28,7 +28,9 @@ import {
   segmentRepo,
   settingsRepo,
 } from '@/lib/repos';
+import { computeMatchAbsences } from '@/lib/engine';
 import type {
+  AbsenceEvent,
   Game,
   GameTimerState,
   Player,
@@ -38,6 +40,7 @@ import type {
 } from '@/lib/schemas';
 import { cn, formatNumber, localizeText } from '@/lib/utils';
 import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
+import { DisciplinaryCardIcon } from '@/components/brand/DisciplinaryCards';
 import { LiveBadge } from '@/components/brand/LiveBadge';
 import { MarqueeBulbs } from '@/components/brand/MarqueeBulbs';
 import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
@@ -60,6 +63,7 @@ interface LowerThirdEvent {
   title: string;
   detail?: string;
   delta?: number;
+  card?: 'yellow' | 'red';
 }
 
 function formatScheduledLabel(
@@ -97,6 +101,9 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
   const [segmentsMap, setSegmentsMap] = useState<Record<string, Segment>>({});
   const [settings, setSettings] = useState<Settings | null>(null);
   const [totals, setTotals] = useState<Record<string, number>>({});
+  const [yellowByPlayer, setYellowByPlayer] = useState<Record<string, number>>({});
+  const [redByPlayer, setRedByPlayer] = useState<Record<string, number>>({});
+  const [absenceEvents, setAbsenceEvents] = useState<AbsenceEvent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [connectionStatus, setConnectionStatus] =
     useState<RealtimeConnectionStatus>('connected');
@@ -167,14 +174,16 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
         loadedPlayers,
         loadedSegments,
         loadedSettings,
-        gameTotals,
+        scoreSummary,
+        loadedAbsences,
       ] = await Promise.all([
         gameRepo.get(gameId),
         gameRepo.list({ includeDemo: true }),
         playerRepo.list({ includeHost: true }),
         segmentRepo.list(),
         settingsRepo.get(),
-        scoreRepo.getGameTotals(gameId),
+        scoreRepo.getMatchScoreSummary(gameId),
+        scoreRepo.listAbsencesByMatch(gameId),
       ]);
 
       let loadedRound: Round | null = null;
@@ -202,7 +211,10 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
       setPlayersMap(pMap);
       setSegmentsMap(sMap);
       setSettings(loadedSettings);
-      setTotals(gameTotals);
+      setTotals(scoreSummary.totals);
+      setYellowByPlayer(scoreSummary.yellowCardsByPlayer);
+      setRedByPlayer(scoreSummary.redCardsByPlayer);
+      setAbsenceEvents(loadedAbsences);
 
       if (loadedGame) {
         syncTimerDisplayFromGame(loadedGame, sMap);
@@ -292,6 +304,10 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
         ) {
           const pid = payload.playerId;
           const delta = payload.delta;
+          const cardKind =
+            payload.kind === 'yellow' || payload.kind === 'red'
+              ? payload.kind
+              : undefined;
           setDeltaByPlayer((prev) => ({
             ...prev,
             [pid]: { id: message.id, delta },
@@ -301,20 +317,39 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
             const pName = localizeText(lang, p.fullName, p.fullNameAr);
             flashLowerThird({
               id: message.id,
-              tone: delta > 0 ? 'positive' : 'negative',
+              tone:
+                cardKind === 'yellow'
+                  ? 'gold'
+                  : delta > 0
+                    ? 'positive'
+                    : 'negative',
               delta,
+              card: cardKind,
               title: pName,
-              detail: payload.isUndo
-                ? lang === 'ar'
-                  ? 'تراجع عن النقاط'
-                  : 'Score reverted'
-                : payload.isEdit
+              detail:
+                cardKind === 'yellow'
                   ? lang === 'ar'
-                    ? 'تعديل النقاط'
-                    : 'Score adjusted'
-                  : lang === 'ar'
-                    ? 'تحديث النقاط المباشر'
-                    : 'Points awarded',
+                    ? 'بطاقة صفراء (−١)'
+                    : 'Yellow card (−1)'
+                  : cardKind === 'red'
+                    ? lang === 'ar'
+                      ? 'بطاقة حمراء (−٢)'
+                      : 'Red card (−2)'
+                    : payload.isUndo
+                      ? lang === 'ar'
+                        ? 'تراجع عن النقاط'
+                        : 'Score reverted'
+                      : payload.isEdit
+                        ? lang === 'ar'
+                          ? 'تعديل النقاط'
+                          : 'Score adjusted'
+                        : delta > 0
+                          ? lang === 'ar'
+                            ? 'نقطة مضافة'
+                            : 'Point awarded'
+                          : lang === 'ar'
+                            ? 'خصم نقطة'
+                            : 'Point deducted',
             });
           }
         }
@@ -342,6 +377,8 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
         message.event === 'data.reset' ||
         message.event === 'settings.updated' ||
         message.event === 'bracket.updated' ||
+        message.event === 'absence.recorded' ||
+        message.event === 'match.needsReview' ||
         message.event === 'player.updated'
       ) {
         void loadScreenState();
@@ -367,6 +404,10 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
   }, [game?.timer?.status, game?.timer?.endsAt]);
 
   const useArabicIndic = settings?.useArabicIndicDigits ?? false;
+  const absentPlayerIds = useMemo(() => {
+    if (!game) return new Set<string>();
+    return computeMatchAbsences(game, absenceEvents);
+  }, [game, absenceEvents]);
 
   // Ordered players: in Final mode, position Marwan Serry dead-center flanked by the 2 finalists
   // Synthesizes clean TBD placeholder seats when a scheduled future table awaits previous-round qualifiers.
@@ -731,13 +772,21 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
               </div>
             </div>
 
-            {/* 3-Seat VS Showdown Lineup (Tablet Portrait: 2-col hybrid with Golden Seat spanning top; Desktop: 3-up) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 xl:gap-7 flex-1 min-h-0 items-center max-w-[1680px] w-full mx-auto">
+            {/* 2-Seat (1v1) or 3-Seat (Final) VS Showdown Lineup */}
+            <div
+              className={cn(
+                'grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 xl:gap-7 flex-1 min-h-0 items-center w-full mx-auto',
+                displayPlayers.length >= 3
+                  ? 'lg:grid-cols-3 max-w-[1680px]'
+                  : 'lg:grid-cols-2 max-w-5xl'
+              )}
+            >
               {displayPlayers.map((player, idx) => {
                 const isHost = Boolean(player.isHost);
                 const pName = localizeText(lang, player.fullName, player.fullNameAr);
                 const pNick = localizeText(lang, player.nickname, player.nicknameAr);
-                const spanFullOnTablet = game.isFinal ? isHost : idx === 0;
+                const spanFullOnTablet =
+                  displayPlayers.length >= 3 && (game.isFinal ? isHost : idx === 0);
                 return (
                   <div
                     key={player.id}
@@ -797,7 +846,7 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                     )}
 
                     {/* VS Casino Chip connector between seats on desktop */}
-                    {idx < 2 && (
+                    {idx < displayPlayers.length - 1 && (
                       <div
                         aria-hidden="true"
                         className="hidden lg:flex absolute top-1/2 -end-5 xl:-end-6 z-20 -translate-y-1/2"
@@ -962,17 +1011,21 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                         <div className="inline-flex items-center gap-1.5 rounded-pill border-2 border-outline bg-gold-gradient px-3.5 py-1 text-xs sm:text-sm font-black uppercase text-red-900 shadow-sticker-sm">
                           <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                           <span>
-                            {game.isFinal
-                              ? finalStandings[0].player.isHost
-                                ? lang === 'ar'
-                                  ? 'مروان سري يحسم اللقب!'
-                                  : 'MARWAN SERRY DEFENDS THE SEAT!'
+                            {game.result?.type === 'walkover'
+                              ? lang === 'ar'
+                                ? 'فوز بالانسحاب (Walkover)'
+                                : 'WALKOVER WINNER'
+                              : game.isFinal
+                                ? finalStandings[0].player.isHost
+                                  ? lang === 'ar'
+                                    ? 'مروان سري يحسم اللقب!'
+                                    : 'MARWAN SERRY DEFENDS THE SEAT!'
+                                  : lang === 'ar'
+                                    ? 'بطل النهائي الكبير'
+                                    : 'GRAND FINAL CHAMPION'
                                 : lang === 'ar'
-                                  ? 'بطل النهائي الكبير'
-                                  : 'GRAND FINAL CHAMPION'
-                              : lang === 'ar'
-                                ? 'المركز الأول · متأهل'
-                                : '1ST PLACE · ADVANCING'}
+                                  ? 'المركز الأول · متأهل'
+                                  : '1ST PLACE · ADVANCING'}
                           </span>
                         </div>
 
@@ -1192,14 +1245,13 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
               </div>
             </div>
 
-            {/* LOWER ARENA: 3 CONTEXT-ADAPTED BROADCAST PLAYER PANELS
-                - Phone Portrait: 1-col stack
-                - Phone Landscape (<520px height): compact 3-up strip
-                - Tablet Portrait (md): 2-col hybrid (featured/buzzed/Golden Seat spans full top width)
-                - Desktop/TV (lg+): 3 equal columns */}
+            {/* LOWER ARENA: 2-COL (1v1) OR 3-COL (FINAL) BROADCAST PLAYER PANELS */}
             <div
               className={cn(
-                'relative z-20 grid grid-cols-1 sm:[@media(max-height:520px)]:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 xl:gap-7 flex-1 min-h-0 items-stretch transition-[padding] duration-300',
+                'relative z-20 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 xl:gap-7 flex-1 min-h-0 items-stretch transition-[padding] duration-300',
+                displayPlayers.length >= 3
+                  ? 'sm:[@media(max-height:520px)]:grid-cols-3 lg:grid-cols-3'
+                  : 'sm:[@media(max-height:520px)]:grid-cols-2 lg:grid-cols-2 max-w-6xl mx-auto w-full',
                 presenter.controlsVisible
                   ? 'pb-20 sm:pb-16 lg:pb-14 [@media(max-height:520px)]:pb-12'
                   : 'pb-1'
@@ -1207,15 +1259,21 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
             >
               {displayPlayers.map((player, idx) => {
                 const isBuzzed = game.activeBuzzPlayerId === player.id;
+                const isAbsent = absentPlayerIds.has(player.id);
+                const isWalkoverWinner =
+                  game.result?.type === 'walkover' &&
+                  game.result.winnerId === player.id;
                 const hasOtherBuzz = Boolean(
                   game.activeBuzzPlayerId &&
                     game.activeBuzzPlayerId !== player.id
                 );
-                const featuredOnTablet = game.isFinal
-                  ? Boolean(player.isHost)
-                  : game.activeBuzzPlayerId
-                    ? isBuzzed
-                    : idx === 0;
+                const featuredOnTablet =
+                  displayPlayers.length >= 3 &&
+                  (game.isFinal
+                    ? Boolean(player.isHost)
+                    : game.activeBuzzPlayerId
+                      ? isBuzzed
+                      : idx === 0);
 
                 return (
                   <BroadcastPlayerCard
@@ -1229,6 +1287,10 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                     )}
                     avatarSeed={player.avatarSeed}
                     score={totals[player.id] ?? 0}
+                    yellowCards={yellowByPlayer[player.id] ?? 0}
+                    redCards={redByPlayer[player.id] ?? 0}
+                    isAbsent={isAbsent}
+                    isWalkoverWinner={isWalkoverWinner}
                     rank={rankByPlayerId[player.id] ?? 1}
                     isBuzzed={isBuzzed}
                     isDimmedByPeerBuzz={hasOtherBuzz}
@@ -1277,7 +1339,13 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
                     : 'bg-gold-gradient text-red-900'
               )}
             >
-              {typeof lowerThird.delta === 'number' ? (
+              {lowerThird.card ? (
+                <DisciplinaryCardIcon
+                  card={lowerThird.card}
+                  size="lg"
+                  className="shrink-0"
+                />
+              ) : typeof lowerThird.delta === 'number' ? (
                 <span className="inline-flex items-center gap-0.5 font-score text-2xl sm:text-3xl font-black tabular-nums leading-none">
                   {lowerThird.delta > 0 ? (
                     <Plus className="h-5 w-5 stroke-[3.2]" aria-hidden="true" />

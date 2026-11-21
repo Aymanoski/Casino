@@ -12,6 +12,8 @@ export * from './ScoreChip';
 export * from './AnimatedNumber';
 export * from './PlayerAvatar';
 export * from './PlayerPanel';
+export * from './DisciplinaryCards';
+export * from './PlayerContactDialog';
 export * from './ScoreboardRow';
 export * from './TimerRing';
 export * from './BracketNode';

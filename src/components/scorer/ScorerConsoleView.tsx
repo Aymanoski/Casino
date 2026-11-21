@@ -8,13 +8,16 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarClock,
-  Check,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock,
+  Crown,
   Flag,
+  Gavel,
   History,
   Keyboard,
+  MessageSquarePlus,
   Minus,
   MonitorPlay,
   Play,
@@ -22,9 +25,9 @@ import {
   RotateCcw,
   ShieldAlert,
   ShieldCheck,
-  SlidersHorizontal,
   Trophy,
   Undo2,
+  UserX,
   X,
   XCircle,
 } from 'lucide-react';
@@ -36,15 +39,16 @@ import {
 } from '@/lib/auth';
 import {
   CascadeConfirmationRequiredError,
+  commands,
   VersionConflictError,
   type CascadePolicy,
 } from '@/lib/commands';
-import type { CascadeImpact } from '@/lib/engine';
+import { computeMatchAbsences, type CascadeImpact } from '@/lib/engine';
 import { useI18n } from '@/lib/i18n';
 import { ImpactPreviewDialog } from '@/components/admin/ImpactPreviewDialog';
 import { realtime } from '@/lib/realtime';
 import {
-  gameRepo,
+  matchRepo,
   playerRepo,
   roundRepo,
   scoreRepo,
@@ -53,8 +57,9 @@ import {
   userRepo,
 } from '@/lib/repos';
 import type {
+  AbsenceEvent,
   BuzzEvent,
-  Game,
+  Match,
   Player,
   Round,
   ScoreEvent,
@@ -63,13 +68,7 @@ import type {
   Settings,
   User,
 } from '@/lib/schemas';
-import {
-  cn,
-  formatNumber,
-  localizeText,
-  normalizeNumericInput,
-  parseSignedIntegerInput,
-} from '@/lib/utils';
+import { cn, formatNumber, localizeText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/dialog';
@@ -77,11 +76,17 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { PlayerPanelSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
-import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
 import { LiveBadge } from '@/components/brand/LiveBadge';
-import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
 import { PlayerPanel } from '@/components/brand/PlayerPanel';
 import { TimerRing } from '@/components/brand/TimerRing';
+import {
+  DisciplinaryCardIcon,
+  formatScoreEventDisplay,
+} from '@/components/brand/DisciplinaryCards';
+import {
+  canViewPlayerContactForMatch,
+  PlayerContactDialog,
+} from '@/components/brand/PlayerContactDialog';
 
 const SessionHistoryDrawer = dynamic(
   () =>
@@ -119,65 +124,109 @@ function formatDateTime(
   }).format(d);
 }
 
-const NOTE_MAX_LENGTH = 140;
-const DELTA_MIN = -10000;
-const DELTA_MAX = 10000;
+function formatTimeShort(
+  iso: string,
+  lang: 'en' | 'ar',
+  useArabicIndicDigits: boolean
+): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat(lang === 'ar' ? 'ar-EG' : 'en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    numberingSystem: useArabicIndicDigits ? 'arab' : 'latn',
+  }).format(d);
+}
 
-export function ScorerConsoleView({ gameId }: { gameId: string }) {
+const NOTE_MAX_LENGTH = 140;
+
+export interface ScorerConsoleViewProps {
+  matchId?: string;
+  /** Compatibility alias */
+  gameId?: string;
+}
+
+export function ScorerConsoleView({ matchId, gameId }: ScorerConsoleViewProps) {
+  const resolvedMatchId = matchId ?? gameId ?? '';
   const { user } = useAuth();
   const { lang } = useI18n();
   const { toast } = useToast();
 
-  const [game, setGame] = useState<Game | null>(null);
+  const [match, setMatch] = useState<Match | null>(null);
   const [round, setRound] = useState<Round | null>(null);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [allSegments, setAllSegments] = useState<Segment[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [totals, setTotals] = useState<Record<string, number>>({});
+  const [yellowCardsByPlayer, setYellowCardsByPlayer] = useState<
+    Record<string, number>
+  >({});
+  const [redCardsByPlayer, setRedCardsByPlayer] = useState<
+    Record<string, number>
+  >({});
   const [scoreEvents, setScoreEvents] = useState<ScoreEvent[]>([]);
+  const [absenceEvents, setAbsenceEvents] = useState<AbsenceEvent[]>([]);
   const [buzzEvents, setBuzzEvents] = useState<BuzzEvent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<boolean>(false);
   const [liveAnnouncement, setLiveAnnouncement] = useState<string>('');
 
-  // Selected target player for Action Dock
+  // Selected target player (drives phone thumb dock & keyboard shortcuts)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('');
   const [recentDeltaByPlayer, setRecentDeltaByPlayer] = useState<
     Record<string, number | null>
   >({});
 
-  // Custom score input & mobile expandable drawer inside sticky dock
-  const [customPoints, setCustomPoints] = useState<string>('15');
-  const [customNote, setCustomNote] = useState<string>('');
-  const [customError, setCustomError] = useState<string | null>(null);
-  const [mobileCustomOpen, setMobileCustomOpen] = useState<boolean>(false);
+  // Optional note attached to the next +1 / -1 / Yellow / Red tap (zero custom numeric input!)
+  const [actionNote, setActionNote] = useState<string>('');
+  const [mobileNoteOpen, setMobileNoteOpen] = useState<boolean>(false);
 
   // Timer live display seconds
   const [displayRemainingSec, setDisplayRemainingSec] = useState<number>(45);
   const timerExpireHandledRef = useRef<boolean>(false);
   const timerWarnAnnouncedRef = useRef<boolean>(false);
 
-  // Concurrency, unmount, and timeout cleanup guards
+  // Concurrency & cleanup refs
   const mountedRef = useRef<boolean>(true);
   const loadSeqRef = useRef<number>(0);
   const busyRef = useRef<boolean>(false);
   const deltaTimeoutsRef = useRef<Record<string, number>>({});
   const shortcutsRef = useRef<HTMLDivElement | null>(null);
 
-  // Tie-breaker alert state (captures tied player IDs when auto-triggered)
+  // Tie-breaker alert state
   const [tieBreakerPlayerIds, setTieBreakerPlayerIds] = useState<string[]>([]);
 
-  // Drawers & Confirmation Dialogs
+  // Drawers, Contact Dialog, Absence & Admin Decision Dialogs
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   const [shortcutsOpen, setShortcutsOpen] = useState<boolean>(false);
+  const [contactPlayer, setContactPlayer] = useState<Player | null>(null);
   const [confirmStartOpen, setConfirmStartOpen] = useState<boolean>(false);
   const [confirmFinishOpen, setConfirmFinishOpen] = useState<boolean>(false);
   const [confirmReopenOpen, setConfirmReopenOpen] = useState<boolean>(false);
-  const [confirmResetTimerOpen, setConfirmResetTimerOpen] = useState<boolean>(false);
-  const [pendingSegmentIndex, setPendingSegmentIndex] = useState<number | null>(null);
-  const [reopenImpact, setReopenImpact] = useState<CascadeImpact | null>(null);
+  const [confirmResetTimerOpen, setConfirmResetTimerOpen] =
+    useState<boolean>(false);
+  const [pendingSegmentIndex, setPendingSegmentIndex] = useState<number | null>(
+    null
+  );
+  const [pendingAbsentPlayer, setPendingAbsentPlayer] = useState<Player | null>(
+    null
+  );
+  const [absenceReason, setAbsenceReason] = useState<string>('');
+  const [pendingReverseAbsentPlayer, setPendingReverseAbsentPlayer] =
+    useState<Player | null>(null);
+
+  // Inline Super Admin Decision state (void / Final absence / needsReview)
+  const [overrideWinnerId, setOverrideWinnerId] = useState<string>('');
+  const [overrideReason, setOverrideReason] = useState<string>('');
+
+  // Shared Cascade Impact Preview Dialog
+  const [pendingImpact, setPendingImpact] = useState<{
+    impact: CascadeImpact;
+    retry: (policy: CascadePolicy) => Promise<void>;
+  } | null>(null);
 
   const useArabicIndic = settings?.useArabicIndicDigits ?? false;
   const isSuperAdmin = user?.role === 'superAdmin';
@@ -193,7 +242,6 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
     };
   }, []);
 
-  // Escape & outside-click dismissal for Keyboard Shortcuts popover
   useEffect(() => {
     if (!shortcutsOpen) return;
     const onPointerDown = (e: MouseEvent) => {
@@ -219,76 +267,92 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
     const seq = ++loadSeqRef.current;
     try {
       const [
-        loadedGame,
+        loadedMatch,
         loadedPlayers,
         loadedSegments,
         loadedUsers,
         loadedSettings,
-        gameTotals,
-        gameScores,
-        gameBuzzes,
+        scoreSummary,
+        matchScores,
+        matchAbsences,
+        matchBuzzes,
       ] = await Promise.all([
-        gameRepo.get(gameId),
+        matchRepo.get(resolvedMatchId),
         playerRepo.list({ includeHost: true }),
         segmentRepo.list(),
         userRepo.list(),
         settingsRepo.get(),
-        scoreRepo.getGameTotals(gameId),
-        scoreRepo.listByGame(gameId),
-        scoreRepo.listBuzzByGame(gameId),
+        scoreRepo.getMatchScoreSummary(resolvedMatchId),
+        scoreRepo.listByMatch(resolvedMatchId),
+        scoreRepo.listAbsencesByMatch(resolvedMatchId),
+        scoreRepo.listBuzzByGame(resolvedMatchId),
       ]);
 
       let loadedRound: Round | null = null;
-      if (loadedGame) {
-        loadedRound = await roundRepo.get(loadedGame.roundId);
+      if (loadedMatch) {
+        loadedRound = await roundRepo.get(loadedMatch.roundId);
       }
 
       if (!mountedRef.current || seq !== loadSeqRef.current) return;
 
-      if (loadedGame) {
-        // Sync timer remaining seconds
-        if (loadedGame.timer?.status === 'running' && loadedGame.timer.endsAt) {
+      if (loadedMatch) {
+        if (
+          loadedMatch.timer?.status === 'running' &&
+          loadedMatch.timer.endsAt
+        ) {
           const left = Math.max(
             0,
             Math.ceil(
-              (new Date(loadedGame.timer.endsAt).getTime() - Date.now()) / 1000
+              (new Date(loadedMatch.timer.endsAt).getTime() - Date.now()) / 1000
             )
           );
           setDisplayRemainingSec(left);
           if (left > 0) timerExpireHandledRef.current = false;
           if (left > 5) timerWarnAnnouncedRef.current = false;
-        } else if (loadedGame.timer) {
-          setDisplayRemainingSec(loadedGame.timer.remainingSec);
-          if (loadedGame.timer.remainingSec > 5) {
+        } else if (loadedMatch.timer) {
+          setDisplayRemainingSec(loadedMatch.timer.remainingSec);
+          if (loadedMatch.timer.remainingSec > 5) {
             timerWarnAnnouncedRef.current = false;
           }
         } else {
-          const segId = loadedGame.segmentIds[loadedGame.currentSegmentIndex];
+          const segId =
+            loadedMatch.segmentIds[loadedMatch.currentSegmentIndex];
           const seg = loadedSegments.find((s) => s.id === segId);
           setDisplayRemainingSec(seg?.durationSec ?? 45);
         }
 
+        const realIds = loadedMatch.participants
+          .map((p) => p.playerId)
+          .filter((pid): pid is string => Boolean(pid));
+
         setSelectedPlayerId((prev) => {
-          if (prev && loadedGame.playerIds.includes(prev)) return prev;
+          if (prev && realIds.includes(prev)) return prev;
           if (
-            loadedGame.activeBuzzPlayerId &&
-            loadedGame.playerIds.includes(loadedGame.activeBuzzPlayerId)
+            loadedMatch.activeBuzzPlayerId &&
+            realIds.includes(loadedMatch.activeBuzzPlayerId)
           ) {
-            return loadedGame.activeBuzzPlayerId;
+            return loadedMatch.activeBuzzPlayerId;
           }
-          return loadedGame.playerIds[0] ?? '';
+          return realIds[0] ?? '';
         });
+
+        setOverrideWinnerId((prev) =>
+          prev && realIds.includes(prev) ? prev : (realIds[0] ?? '')
+        );
       }
 
-      setGame(loadedGame);
+      setMatch(loadedMatch);
       setRound(loadedRound);
       setAllPlayers(loadedPlayers);
       setAllSegments(loadedSegments);
       setAllUsers(loadedUsers);
       setSettings(loadedSettings);
-      setTotals(gameTotals);
-      setScoreEvents(gameScores);
-      setBuzzEvents(gameBuzzes);
+      setTotals(scoreSummary.totals);
+      setYellowCardsByPlayer(scoreSummary.yellowCardsByPlayer);
+      setRedCardsByPlayer(scoreSummary.redCardsByPlayer);
+      setScoreEvents(matchScores);
+      setAbsenceEvents(matchAbsences);
+      setBuzzEvents(matchBuzzes);
       setLoadError(null);
       setLoading(false);
     } catch (err) {
@@ -296,36 +360,42 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
       setLoadError(
         err instanceof Error && err.message
           ? err.message
-          : 'Failed to read session data.'
+          : 'Failed to read match data.'
       );
       setLoading(false);
     }
-  }, [gameId]);
+  }, [resolvedMatchId]);
 
   useEffect(() => {
     loadConsoleState();
     const unsub = realtime.subscribe('*', (msg) => {
-      const payloadGameId = (msg.payload as { gameId?: string } | undefined)
-        ?.gameId;
+      const payload = msg.payload as
+        | { gameId?: string; matchId?: string }
+        | undefined;
+      const targetId = payload?.matchId ?? payload?.gameId;
       if (
-        !payloadGameId ||
-        payloadGameId === gameId ||
+        !targetId ||
+        targetId === resolvedMatchId ||
         msg.event === 'data.reset'
       ) {
         loadConsoleState();
       }
     });
     return () => unsub();
-  }, [gameId, loadConsoleState]);
+  }, [resolvedMatchId, loadConsoleState]);
 
   // Accurate 250ms timer tick when running
   useEffect(() => {
-    if (!game?.timer || game.timer.status !== 'running' || !game.timer.endsAt) {
+    if (
+      !match?.timer ||
+      match.timer.status !== 'running' ||
+      !match.timer.endsAt
+    ) {
       return;
     }
 
-    const durationSec = game.timer.durationSec;
-    const endsAtMs = new Date(game.timer.endsAt).getTime();
+    const durationSec = match.timer.durationSec;
+    const endsAtMs = new Date(match.timer.endsAt).getTime();
 
     const tick = () => {
       const left = Math.max(0, Math.ceil((endsAtMs - Date.now()) / 1000));
@@ -343,19 +413,19 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
         setLiveAnnouncement(
           lang === 'ar' ? 'انتهى وقت الفقرة' : 'Segment timer expired'
         );
-        gameRepo
-          .updateTimer(
-            game.id,
-            {
+        commands
+          .updateTimer({
+            matchId: match.id,
+            timer: {
               status: 'paused',
               durationSec,
               remainingSec: 0,
               endsAt: null,
             },
-            user?.id
-          )
+            actorUserId: user?.id,
+          })
           .catch(() => {
-            // Keep local 0s display if storage write fails
+            // Keep 0s display if storage write fails
           });
       }
     };
@@ -363,57 +433,92 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
     tick();
     const intervalId = window.setInterval(tick, 250);
     return () => window.clearInterval(intervalId);
-  }, [game?.id, game?.timer, user?.id, lang]);
+  }, [match?.id, match?.timer, user?.id, lang]);
 
-  // Derived entities
+  // Derived view models (read-only; NEVER written directly to storage)
   const seatedPlayers = useMemo(() => {
-    if (!game) return [];
-    return game.playerIds
-      .map((pid) => allPlayers.find((p) => p.id === pid))
+    if (!match) return [];
+    const resolved = match.participants
+      .map((p) =>
+        p.playerId ? allPlayers.find((pl) => pl.id === p.playerId) : undefined
+      )
       .filter((p): p is Player => Boolean(p));
-  }, [game, allPlayers]);
 
-  const unresolvedSeatIds = useMemo(() => {
-    if (!game) return [];
+    // In Grand Final (3 participants), place Marwan Serry in the center slot on desktop symmetry
+    if ((match.type === 'final' || match.isFinal) && resolved.length === 3) {
+      const host = resolved.find((p) => p.isGuest || p.isHost);
+      const finalists = resolved.filter((p) => !p.isGuest && !p.isHost);
+      if (host && finalists.length === 2) {
+        return [finalists[0], host, finalists[1]];
+      }
+    }
+    return resolved;
+  }, [match, allPlayers]);
+
+  const absentSet = useMemo(() => {
+    if (!match) return new Set<string>();
+    return computeMatchAbsences(match, absenceEvents);
+  }, [match, absenceEvents]);
+
+  const absentPlayerIds = useMemo(() => Array.from(absentSet), [absentSet]);
+
+  const unresolvedParticipants = useMemo(() => {
+    if (!match) return [];
     const knownIds = new Set(allPlayers.map((p) => p.id));
-    return game.playerIds.filter((pid) => !knownIds.has(pid));
-  }, [game, allPlayers]);
+    return match.participants.filter(
+      (p) => !p.isBye && (!p.playerId || !knownIds.has(p.playerId))
+    );
+  }, [match, allPlayers]);
 
-  const hasUnfilledSeats = unresolvedSeatIds.length > 0;
+  const hasUnfilledSeats = unresolvedParticipants.length > 0;
+  const isFinalMatch = Boolean(match?.type === 'final' || match?.isFinal);
+  const isThreeColLayout =
+    isFinalMatch || (match?.participants.length ?? 2) >= 3;
+  const isFinalAbsenceDecisionNeeded = Boolean(
+    match &&
+      isFinalMatch &&
+      absentPlayerIds.length > 0 &&
+      match.status !== 'finished' &&
+      match.status !== 'void'
+  );
 
-  const gameSegments = useMemo(() => {
-    if (!game) return [];
-    return game.segmentIds
+  const matchSegments = useMemo(() => {
+    if (!match) return [];
+    return match.segmentIds
       .map((sid) => allSegments.find((s) => s.id === sid))
       .filter((s): s is Segment => Boolean(s));
-  }, [game, allSegments]);
+  }, [match, allSegments]);
 
   const currentSegment = useMemo(() => {
-    if (!game || gameSegments.length === 0) return null;
-    return gameSegments[game.currentSegmentIndex] ?? gameSegments[0] ?? null;
-  }, [game, gameSegments]);
+    if (!match || matchSegments.length === 0) return null;
+    return matchSegments[match.currentSegmentIndex] ?? matchSegments[0] ?? null;
+  }, [match, matchSegments]);
 
-  const assignedScorer = useMemo(() => {
-    if (!game) return null;
-    return allUsers.find((u) => u.id === game.scorerUserId) ?? null;
-  }, [game, allUsers]);
+  const assignedJudge = useMemo(() => {
+    if (!match) return null;
+    const jid = match.judgeUserId || match.scorerUserId;
+    return allUsers.find((u) => u.id === jid) ?? null;
+  }, [match, allUsers]);
 
   const selectedPlayer = useMemo(() => {
     return (
-      seatedPlayers.find((p) => p.id === selectedPlayerId) ??
+      seatedPlayers.find(
+        (p) => p.id === selectedPlayerId && !absentSet.has(p.id)
+      ) ??
+      seatedPlayers.find((p) => !absentSet.has(p.id)) ??
       seatedPlayers[0] ??
       null
     );
-  }, [seatedPlayers, selectedPlayerId]);
+  }, [seatedPlayers, selectedPlayerId, absentSet]);
 
   const buzzedPlayer = useMemo(() => {
-    if (!game?.activeBuzzPlayerId) return null;
+    if (!match?.activeBuzzPlayerId) return null;
     return (
-      seatedPlayers.find((p) => p.id === game.activeBuzzPlayerId) ?? null
+      seatedPlayers.find((p) => p.id === match.activeBuzzPlayerId) ?? null
     );
-  }, [game?.activeBuzzPlayerId, seatedPlayers]);
+  }, [match?.activeBuzzPlayerId, seatedPlayers]);
 
-  // Tie-aware competition rankings (1, 1, 3 on 1st-place tie)
+  // Tie-aware live rankings
   const rankByPlayerId = useMemo(() => {
     const entries = seatedPlayers
       .map((p) => ({ id: p.id, score: totals[p.id] ?? 0 }))
@@ -436,56 +541,53 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
         score: totals[player.id] ?? 0,
         rank: rankByPlayerId[player.id] ?? 1,
       }))
-      .sort((a, b) => b.score - a.score || a.player.seed - b.player.seed);
-  }, [seatedPlayers, totals, rankByPlayerId]);
+      .sort((a, b) => {
+        if (match?.result?.winnerId === a.player.id) return -1;
+        if (match?.result?.winnerId === b.player.id) return 1;
+        return b.score - a.score || a.player.seed - b.player.seed;
+      });
+  }, [seatedPlayers, totals, rankByPlayerId, match?.result?.winnerId]);
 
-  // Preview whether Finish Game will detect a Qualifying Tie across advancePerGame
+  // Preview Finish Match: draws are NEVER allowed (tie at top requires Tie-Breaker #16)
   const finishPreview = useMemo(() => {
-    const advanceCount = round?.advancePerGame ?? 1;
-    if (sortedStandings.length <= advanceCount) {
+    if (sortedStandings.length < 2) {
       return {
-        hasQualifyingTie: false,
+        isTied: false,
         tiedPlayers: [] as Player[],
-        advancingPlayers: sortedStandings.map((s) => s.player),
-        cutoffScore: 0,
+        leader: sortedStandings[0]?.player ?? null,
+        topScore: sortedStandings[0]?.score ?? 0,
       };
     }
-    const cutoffScore = sortedStandings[advanceCount - 1].score;
-    const nextScore = sortedStandings[advanceCount].score;
-    if (cutoffScore === nextScore) {
-      const tiedPlayers = sortedStandings
-        .filter((s) => s.score === cutoffScore)
-        .map((s) => s.player);
-      return {
-        hasQualifyingTie: true,
-        tiedPlayers,
-        advancingPlayers: [] as Player[],
-        cutoffScore,
-      };
-    }
+    const topScore = sortedStandings[0].score;
+    const leaders = sortedStandings
+      .filter((s) => s.score === topScore)
+      .map((s) => s.player);
     return {
-      hasQualifyingTie: false,
-      tiedPlayers: [] as Player[],
-      advancingPlayers: sortedStandings
-        .slice(0, advanceCount)
-        .map((s) => s.player),
-      cutoffScore,
+      isTied: leaders.length > 1,
+      tiedPlayers: leaders.length > 1 ? leaders : [],
+      leader: leaders.length === 1 ? leaders[0] : null,
+      topScore,
     };
-  }, [sortedStandings, round?.advancePerGame]);
+  }, [sortedStandings]);
 
-  // Determine the exact event Undo Last Action will revert
+  // Current epoch events & next undoable event
+  const activeEpochScoreEvents = useMemo(() => {
+    const epoch = match?.replayEpoch ?? 0;
+    return scoreEvents.filter((e) => (e.replayEpoch ?? 0) === epoch);
+  }, [scoreEvents, match?.replayEpoch]);
+
   const nextUndoableEvent = useMemo(() => {
     if (!user) return null;
     const onlyOwn = user.role === 'scorer';
     return (
-      scoreEvents.find(
+      activeEpochScoreEvents.find(
         (e) =>
           e.kind !== 'undo' &&
           !e.undoneByEventId &&
           (!onlyOwn || e.byUserId === user.id)
       ) ?? null
     );
-  }, [scoreEvents, user]);
+  }, [activeEpochScoreEvents, user]);
 
   const nextUndoablePlayer = useMemo(() => {
     if (!nextUndoableEvent) return null;
@@ -494,14 +596,9 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
     );
   }, [nextUndoableEvent, seatedPlayers]);
 
-  const formatSignedDelta = useCallback(
-    (delta: number) => {
-      const absStr = formatNumber(Math.abs(delta), {
-        useArabicIndicDigits: useArabicIndic,
-      });
-      return delta > 0 ? `+${absStr}` : `−${absStr}`;
-    },
-    [useArabicIndic]
+  const recentPlays = useMemo(
+    () => activeEpochScoreEvents.slice(0, 3),
+    [activeEpochScoreEvents]
   );
 
   const flashPlayerDelta = useCallback((playerId: string, delta: number) => {
@@ -516,37 +613,73 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
     }, 1600);
   }, []);
 
-  const notifyActionError = useCallback(
-    (actionEn: string, actionAr: string) => {
+  const handleCommandError = useCallback(
+    async (
+      err: unknown,
+      actionEn: string,
+      actionAr: string,
+      retryWithCascade?: (policy: CascadePolicy) => Promise<void>
+    ) => {
+      if (err instanceof CascadeConfirmationRequiredError && retryWithCascade) {
+        setPendingImpact({
+          impact: err.impact,
+          retry: retryWithCascade,
+        });
+        return;
+      }
+      if (err instanceof VersionConflictError) {
+        await loadConsoleState();
+        toast({
+          variant: 'gold',
+          title:
+            lang === 'ar'
+              ? 'تم تحديث المباراة في نافذة أخرى'
+              : 'Match Updated in Another Window',
+          description:
+            lang === 'ar'
+              ? 'تمت مزامنة أحدث حالة للمباراة تلقائياً. أعد المحاولة الآن.'
+              : 'Synced to the latest match state automatically. Please tap again.',
+        });
+        return;
+      }
       toast({
         variant: 'negative',
         title: lang === 'ar' ? `تعذر ${actionAr}` : `Failed to ${actionEn}`,
         description:
-          lang === 'ar'
-            ? 'حدث خطأ أثناء حفظ البيانات. حاول مرة أخرى.'
-            : 'Could not save the update. Please try again.',
+          err instanceof Error && err.message
+            ? err.message
+            : lang === 'ar'
+              ? 'حدث خطأ أثناء حفظ البيانات. حاول مرة أخرى.'
+              : 'Could not save the update. Please try again.',
       });
     },
-    [toast, lang]
+    [lang, loadConsoleState, toast]
   );
 
-  // Actions (guarded with synchronous busyRef to prevent rapid double-tap race conditions)
-  const handleStartGame = async () => {
-    if (!game || !user || busyRef.current) return;
+  // ============================================================================
+  // COMMAND HANDLERS (100% /lib/commands, zero direct state writes!)
+  // ============================================================================
+
+  const handleStartMatch = async () => {
+    if (!match || !user || busyRef.current) return;
     busyRef.current = true;
     setBusyAction(true);
     try {
-      await gameRepo.startGame(game.id, user.id);
+      await commands.startMatch({
+        matchId: match.id,
+        actorUserId: user.id,
+        expectedVersion: match.version,
+      });
       await loadConsoleState();
-      const msg = lang === 'ar' ? 'بدأت الجلسة المباشرة!' : 'Live session started!';
+      const msg = lang === 'ar' ? 'بدأت المباراة المباشرة!' : 'Live match started!';
       setLiveAnnouncement(msg);
       toast({
         variant: 'gold',
         title: msg,
-        description: localizeText(lang, game.tableName, game.tableNameAr),
+        description: localizeText(lang, match.tableName, match.tableNameAr),
       });
-    } catch {
-      notifyActionError('start session', 'بدء الجلسة');
+    } catch (err) {
+      await handleCommandError(err, 'start match', 'بدء المباراة');
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setBusyAction(false);
@@ -555,18 +688,25 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
 
   const handleBuzz = useCallback(
     async (player: Player) => {
-      if (!game || !currentSegment || !user || busyRef.current || game.status !== 'live') {
+      if (
+        !match ||
+        !currentSegment ||
+        !user ||
+        busyRef.current ||
+        (match.status !== 'live' && match.status !== 'needsTieBreak')
+      ) {
         return;
       }
       busyRef.current = true;
       setBusyAction(true);
       try {
         setSelectedPlayerId(player.id);
-        await scoreRepo.recordBuzz({
-          gameId: game.id,
+        await commands.recordBuzz({
+          matchId: match.id,
           segmentId: currentSegment.id,
           playerId: player.id,
           byUserId: user.id,
+          expectedVersion: match.version,
         });
         await loadConsoleState();
         const title =
@@ -577,74 +717,79 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
         toast({
           variant: 'gold',
           title,
-          description:
-            lang === 'ar'
-              ? 'تم تحديده تلقائياً لتطبيق النقاط ومزامنة الشاشة.'
-              : 'Auto-selected for scoring & synced to Big Screen.',
-          durationMs: 2200,
+          durationMs: 2000,
         });
-      } catch {
-        notifyActionError('record buzz', 'تسجيل الجرس');
+      } catch (err) {
+        await handleCommandError(err, 'record buzz', 'تسجيل الجرس');
       } finally {
         busyRef.current = false;
         if (mountedRef.current) setBusyAction(false);
       }
     },
-    [game, currentSegment, user, loadConsoleState, toast, lang, notifyActionError]
+    [match, currentSegment, user, loadConsoleState, toast, lang, handleCommandError]
   );
 
   const handleClearBuzz = async () => {
-    if (!game || !user || busyRef.current) return;
+    if (!match || !user || busyRef.current) return;
     busyRef.current = true;
     setBusyAction(true);
     try {
-      await scoreRepo.clearBuzz(game.id, user.id);
+      await commands.clearBuzz({
+        matchId: match.id,
+        byUserId: user.id,
+        expectedVersion: match.version,
+      });
       await loadConsoleState();
       setLiveAnnouncement(
-        lang === 'ar' ? 'تم مسح إشارة الجرس النشطة' : 'Active buzz highlight cleared'
+        lang === 'ar' ? 'تم مسح إشارة الجرس' : 'Active buzz highlight cleared'
       );
-    } catch {
-      notifyActionError('clear buzz', 'مسح الجرس');
+    } catch (err) {
+      await handleCommandError(err, 'clear buzz', 'مسح الجرس');
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setBusyAction(false);
     }
   };
 
-  const handleApplyPoints = useCallback(
-    async (delta: number, kind: 'preset' | 'custom', note?: string) => {
+  const handleApplyPoint = useCallback(
+    async (player: Player, delta: 1 | -1) => {
       if (
-        !game ||
+        !match ||
         !currentSegment ||
-        !selectedPlayer ||
         !user ||
         busyRef.current ||
-        game.status !== 'live' ||
-        Number.isNaN(delta) ||
-        delta === 0
+        (match.status !== 'live' && match.status !== 'needsTieBreak')
       ) {
-        return false;
+        return;
       }
       busyRef.current = true;
       setBusyAction(true);
       try {
-        const cleanNote = note?.trim().slice(0, NOTE_MAX_LENGTH) || undefined;
-        await scoreRepo.applyScore({
-          gameId: game.id,
+        setSelectedPlayerId(player.id);
+        const cleanNote = actionNote.trim().slice(0, NOTE_MAX_LENGTH) || undefined;
+        await commands.applyPoint({
+          matchId: match.id,
           segmentId: currentSegment.id,
-          playerId: selectedPlayer.id,
+          playerId: player.id,
           delta,
           note: cleanNote,
-          kind,
           byUserId: user.id,
+          expectedVersion: match.version,
         });
-        flashPlayerDelta(selectedPlayer.id, delta);
+        if (cleanNote) {
+          setActionNote('');
+          setMobileNoteOpen(false);
+        }
+        flashPlayerDelta(player.id, delta);
         await loadConsoleState();
-        const signStr = formatSignedDelta(delta);
+        const signStr =
+          delta > 0
+            ? `+${formatNumber(1, { useArabicIndicDigits: useArabicIndic })}`
+            : `−${formatNumber(1, { useArabicIndicDigits: useArabicIndic })}`;
         const title =
           lang === 'ar'
-            ? `${signStr} نقطة ← ${selectedPlayer.fullNameAr}`
-            : `${signStr} pts → ${selectedPlayer.fullName}`;
+            ? `${signStr} نقطة ← ${player.fullNameAr}`
+            : `${signStr} pt → ${player.fullName}`;
         setLiveAnnouncement(title);
         toast({
           variant: delta > 0 ? 'positive' : 'negative',
@@ -652,69 +797,112 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
           description:
             cleanNote ||
             localizeText(lang, currentSegment.nameEn, currentSegment.nameAr),
-          durationMs: 2200,
+          durationMs: 2000,
         });
-        return true;
-      } catch {
-        notifyActionError('apply points', 'احتساب النقاط');
-        return false;
+      } catch (err) {
+        await handleCommandError(err, 'apply point', 'احتساب النقطة');
       } finally {
         busyRef.current = false;
         if (mountedRef.current) setBusyAction(false);
       }
     },
     [
-      game,
+      match,
       currentSegment,
-      selectedPlayer,
       user,
+      actionNote,
       flashPlayerDelta,
       loadConsoleState,
-      formatSignedDelta,
-      toast,
+      useArabicIndic,
       lang,
-      notifyActionError,
+      toast,
+      handleCommandError,
     ]
   );
 
-  const handleCustomSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const parsed = parseSignedIntegerInput(customPoints, {
-      min: DELTA_MIN,
-      max: DELTA_MAX,
-    });
-    if (!parsed.ok) {
-      const maxStr = formatNumber(DELTA_MAX, { useArabicIndicDigits: useArabicIndic });
-      const msg =
-        parsed.reason === 'range'
-          ? lang === 'ar'
-            ? `أدخل قيمة بين -${maxStr} و +${maxStr}.`
-            : `Enter a value between -${maxStr} and +${maxStr}.`
-          : parsed.reason === 'zero'
+  const handleApplyCard = useCallback(
+    async (player: Player, card: 'yellow' | 'red') => {
+      if (
+        !match ||
+        !currentSegment ||
+        !user ||
+        busyRef.current ||
+        (match.status !== 'live' && match.status !== 'needsTieBreak')
+      ) {
+        return;
+      }
+      busyRef.current = true;
+      setBusyAction(true);
+      try {
+        setSelectedPlayerId(player.id);
+        const cleanNote = actionNote.trim().slice(0, NOTE_MAX_LENGTH) || undefined;
+        await commands.applyCard({
+          matchId: match.id,
+          segmentId: currentSegment.id,
+          playerId: player.id,
+          card,
+          note: cleanNote,
+          byUserId: user.id,
+          expectedVersion: match.version,
+        });
+        if (cleanNote) {
+          setActionNote('');
+          setMobileNoteOpen(false);
+        }
+        flashPlayerDelta(player.id, card === 'yellow' ? -1 : -2);
+        await loadConsoleState();
+        const cardLabel =
+          card === 'yellow'
             ? lang === 'ar'
-              ? 'القيمة لا يمكن أن تكون صفراً.'
-              : 'Points cannot be 0.'
+              ? `بطاقة صفراء (−${formatNumber(1, { useArabicIndicDigits: useArabicIndic })})`
+              : 'Yellow card (−1)'
             : lang === 'ar'
-              ? 'أدخل عدداً صحيحاً غير الصفر (مثال: 15 أو -5 أو ١٥).'
-              : 'Enter a non-zero whole number (e.g. 15 or -5).';
-      setCustomError(msg);
-      return;
-    }
-    setCustomError(null);
-    const ok = await handleApplyPoints(parsed.value, 'custom', customNote);
-    if (ok) {
-      setCustomNote('');
-      setMobileCustomOpen(false);
-    }
-  };
+              ? `بطاقة حمراء (−${formatNumber(2, { useArabicIndicDigits: useArabicIndic })})`
+              : 'Red card (−2)';
+        const title =
+          lang === 'ar'
+            ? `${cardLabel} ← ${player.fullNameAr}`
+            : `${cardLabel} → ${player.fullName}`;
+        setLiveAnnouncement(title);
+        toast({
+          variant: card === 'yellow' ? 'gold' : 'negative',
+          title,
+          description:
+            cleanNote ||
+            localizeText(lang, currentSegment.nameEn, currentSegment.nameAr),
+          durationMs: 2400,
+        });
+      } catch (err) {
+        await handleCommandError(err, 'issue card', 'منح البطاقة');
+      } finally {
+        busyRef.current = false;
+        if (mountedRef.current) setBusyAction(false);
+      }
+    },
+    [
+      match,
+      currentSegment,
+      user,
+      actionNote,
+      flashPlayerDelta,
+      loadConsoleState,
+      useArabicIndic,
+      lang,
+      toast,
+      handleCommandError,
+    ]
+  );
 
   const handleUndoLast = useCallback(async () => {
-    if (!game || !user || !nextUndoableEvent || busyRef.current) return;
+    if (!match || !user || !nextUndoableEvent || busyRef.current) return;
     busyRef.current = true;
     setBusyAction(true);
     try {
-      const undone = await scoreRepo.undoLastScore(game.id, user.id, {
+      const undone = await commands.undoLastScore({
+        matchId: match.id,
+        byUserId: user.id,
         onlyOwn: user.role === 'scorer',
+        expectedVersion: match.version,
       });
       if (undone) {
         flashPlayerDelta(undone.playerId, undone.delta);
@@ -726,97 +914,358 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
           variant: 'info',
           title,
           description: undone.note,
-          durationMs: 2400,
+          durationMs: 2200,
         });
       }
-    } catch {
-      notifyActionError('undo last score', 'التراجع عن آخر حركة');
+    } catch (err) {
+      await handleCommandError(err, 'undo last action', 'التراجع عن آخر حركة');
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setBusyAction(false);
     }
   }, [
-    game,
+    match,
     user,
     nextUndoableEvent,
     flashPlayerDelta,
     loadConsoleState,
     toast,
     lang,
-    notifyActionError,
+    handleCommandError,
   ]);
 
+  const handleConfirmMarkAbsent = async (cascadeOpts?: {
+    confirmCascade?: boolean;
+    cascadePolicy?: CascadePolicy;
+  }) => {
+    if (!match || !user || !pendingAbsentPlayer || busyRef.current) return;
+    const targetPlayer = pendingAbsentPlayer;
+    busyRef.current = true;
+    setBusyAction(true);
+    try {
+      const res = await commands.markAbsent({
+        matchId: match.id,
+        playerId: targetPlayer.id,
+        byUserId: user.id,
+        reason: absenceReason.trim() || undefined,
+        confirmCascade: cascadeOpts?.confirmCascade,
+        cascadePolicy: cascadeOpts?.cascadePolicy,
+        expectedVersion: match.version,
+      });
+      setPendingAbsentPlayer(null);
+      setAbsenceReason('');
+      setPendingImpact(null);
+      await loadConsoleState();
+
+      if (res.match.status === 'void') {
+        toast({
+          variant: 'gold',
+          title:
+            lang === 'ar'
+              ? 'اللاعبان غائبان — المباراة ملغاة (Void)'
+              : 'Both Players Absent — Match Void',
+          description:
+            lang === 'ar'
+              ? 'بانتظار قرار مدير البطولة لاختيار المتأهل أو إعادة المباراة.'
+              : 'Super Admin decision required to award advancement or replay.',
+          durationMs: 4500,
+        });
+      } else if (res.requiresAdminDecision && isFinalMatch) {
+        toast({
+          variant: 'gold',
+          title:
+            lang === 'ar'
+              ? 'تم تسجيل غياب متأهل في النهائي — مطلوب قرار المدير'
+              : 'Finalist Marked Absent — Super Admin Decision Needed',
+          description:
+            lang === 'ar'
+              ? 'لا تُنهى مباراة النهائي تلقائياً؛ استخدم لوحة قرار مدير البطولة.'
+              : 'The Grand Final does not auto-end on absence. Super Admin must decide.',
+          durationMs: 5000,
+        });
+      } else if (res.match.result?.type === 'walkover') {
+        const winner = allPlayers.find(
+          (p) => p.id === res.match.result?.winnerId
+        );
+        toast({
+          variant: 'positive',
+          title:
+            lang === 'ar'
+              ? `فوز انسحابي فوري: ${winner?.fullNameAr ?? ''}`
+              : `Immediate Walkover Win: ${winner?.fullName ?? ''}`,
+          description:
+            match.type === 'group'
+              ? lang === 'ar'
+                ? 'تم احتساب +٣ نقاط للمجموعة وتحديث الترتيب والشجرة تلقائياً.'
+                : 'Awarded +3 group points and updated standings & bracket automatically.'
+              : lang === 'ar'
+                ? 'تم تأهيل الفائز تلقائياً للدور التالي عبر محرك البطولة.'
+                : 'Winner automatically advanced to the next knockout round.',
+          durationMs: 4500,
+        });
+      }
+    } catch (err) {
+      await handleCommandError(err, 'mark absent', 'تسجيل الغياب', (policy) =>
+        handleConfirmMarkAbsent({ confirmCascade: true, cascadePolicy: policy })
+      );
+    } finally {
+      busyRef.current = false;
+      if (mountedRef.current) setBusyAction(false);
+    }
+  };
+
+  const handleConfirmReverseAbsence = async (cascadeOpts?: {
+    confirmCascade?: boolean;
+    cascadePolicy?: CascadePolicy;
+  }) => {
+    if (!match || !user || !pendingReverseAbsentPlayer || busyRef.current) return;
+    const targetPlayer = pendingReverseAbsentPlayer;
+    busyRef.current = true;
+    setBusyAction(true);
+    try {
+      await commands.reverseAbsence({
+        matchId: match.id,
+        playerId: targetPlayer.id,
+        byUserId: user.id,
+        confirmCascade: cascadeOpts?.confirmCascade,
+        cascadePolicy: cascadeOpts?.cascadePolicy,
+        expectedVersion: match.version,
+      });
+      setPendingReverseAbsentPlayer(null);
+      setPendingImpact(null);
+      await loadConsoleState();
+      toast({
+        variant: 'info',
+        title:
+          lang === 'ar'
+            ? `تم إلغاء غياب ${targetPlayer.fullNameAr}`
+            : `Absence reversed for ${targetPlayer.fullName}`,
+        description:
+          lang === 'ar'
+            ? 'تمت إعادة حساب حالة المباراة والترتيب والتأهل تلقائياً.'
+            : 'Match status, standings, and downstream qualifiers recomputed automatically.',
+      });
+    } catch (err) {
+      await handleCommandError(
+        err,
+        'reverse absence',
+        'إلغاء الغياب',
+        (policy) =>
+          handleConfirmReverseAbsence({
+            confirmCascade: true,
+            cascadePolicy: policy,
+          })
+      );
+    } finally {
+      busyRef.current = false;
+      if (mountedRef.current) setBusyAction(false);
+    }
+  };
+
+  const handleAdminOverrideWinner = async (cascadeOpts?: {
+    confirmCascade?: boolean;
+    cascadePolicy?: CascadePolicy;
+  }) => {
+    if (!match || !user || !isSuperAdmin || !overrideWinnerId || busyRef.current)
+      return;
+    busyRef.current = true;
+    setBusyAction(true);
+    try {
+      await commands.overrideResult({
+        matchId: match.id,
+        resultType: 'walkover',
+        winnerId: overrideWinnerId,
+        reason:
+          overrideReason.trim() ||
+          (lang === 'ar' ? 'قرار مدير البطولة' : 'Super Admin decision'),
+        actorUserId: user.id,
+        confirmCascade: cascadeOpts?.confirmCascade,
+        cascadePolicy: cascadeOpts?.cascadePolicy,
+        expectedVersion: match.version,
+      });
+      setOverrideReason('');
+      setPendingImpact(null);
+      await loadConsoleState();
+      toast({
+        variant: 'positive',
+        title:
+          lang === 'ar'
+            ? 'تم اعتماد قرار مدير البطولة'
+            : 'Super Admin Decision Applied',
+      });
+    } catch (err) {
+      await handleCommandError(err, 'apply decision', 'اعتماد القرار', (policy) =>
+        handleAdminOverrideWinner({
+          confirmCascade: true,
+          cascadePolicy: policy,
+        })
+      );
+    } finally {
+      busyRef.current = false;
+      if (mountedRef.current) setBusyAction(false);
+    }
+  };
+
+  const handleAdminResolveReview = async (
+    action: 'invalidateForReplay' | 'keepAsIs'
+  ) => {
+    if (!match || !user || !isSuperAdmin || busyRef.current) return;
+    busyRef.current = true;
+    setBusyAction(true);
+    try {
+      await commands.resolveNeedsReview({
+        matchId: match.id,
+        action,
+        reason: overrideReason.trim() || undefined,
+        actorUserId: user.id,
+        expectedVersion: match.version,
+      });
+      setOverrideReason('');
+      await loadConsoleState();
+      toast({
+        variant: 'info',
+        title:
+          action === 'invalidateForReplay'
+            ? lang === 'ar'
+              ? 'تمت إعادة تهيئة المباراة لإعادة اللعب'
+              : 'Match Reset for Replay'
+            : lang === 'ar'
+              ? 'تمت الموافقة على إبقاء النتيجة'
+              : 'Existing Result Confirmed',
+      });
+    } catch (err) {
+      await handleCommandError(err, 'resolve review', 'تسوية المراجعة');
+    } finally {
+      busyRef.current = false;
+      if (mountedRef.current) setBusyAction(false);
+    }
+  };
+
+  const handleOpenTieBreakerNow = async () => {
+    if (!match || !user || busyRef.current) return;
+    busyRef.current = true;
+    setBusyAction(true);
+    try {
+      await commands.openTieBreaker({
+        matchId: match.id,
+        actorUserId: user.id,
+        expectedVersion: match.version,
+      });
+      await loadConsoleState();
+      toast({
+        variant: 'gold',
+        title:
+          lang === 'ar'
+            ? 'تم فتح جولة الحسم الفاصلة (#١٦)'
+            : 'Sudden-Death Tie-Breaker (#16) Opened',
+      });
+    } catch (err) {
+      await handleCommandError(err, 'open tie-breaker', 'فتح جولة الحسم');
+    } finally {
+      busyRef.current = false;
+      if (mountedRef.current) setBusyAction(false);
+    }
+  };
+
   const handleTimerStart = useCallback(async () => {
-    if (!game || !currentSegment || !user || game.status !== 'live') return;
-    const dur = game.timer?.durationSec ?? currentSegment.durationSec ?? 45;
+    if (
+      !match ||
+      !currentSegment ||
+      !user ||
+      (match.status !== 'live' && match.status !== 'needsTieBreak')
+    )
+      return;
+    const dur = match.timer?.durationSec ?? currentSegment.durationSec ?? 45;
     const rem = displayRemainingSec > 0 ? displayRemainingSec : dur;
     timerExpireHandledRef.current = false;
     if (rem > 5) timerWarnAnnouncedRef.current = false;
     try {
-      await gameRepo.updateTimer(
-        game.id,
-        {
+      await commands.updateTimer({
+        matchId: match.id,
+        timer: {
           status: 'running',
           durationSec: dur,
           remainingSec: rem,
           endsAt: new Date(Date.now() + rem * 1000).toISOString(),
         },
-        user.id
+        actorUserId: user.id,
+      });
+      setLiveAnnouncement(
+        lang === 'ar' ? 'بدأ مؤقت الفقرة' : 'Segment timer started'
       );
-      setLiveAnnouncement(lang === 'ar' ? 'بدأ مؤقت الفقرة' : 'Segment timer started');
       await loadConsoleState();
-    } catch {
-      notifyActionError('start timer', 'بدء المؤقت');
+    } catch (err) {
+      await handleCommandError(err, 'start timer', 'بدء المؤقت');
     }
-  }, [game, currentSegment, user, displayRemainingSec, loadConsoleState, lang, notifyActionError]);
+  }, [
+    match,
+    currentSegment,
+    user,
+    displayRemainingSec,
+    loadConsoleState,
+    lang,
+    handleCommandError,
+  ]);
 
   const handleTimerPause = useCallback(async () => {
-    if (!game || !currentSegment || !user) return;
-    const dur = game.timer?.durationSec ?? currentSegment.durationSec ?? 45;
+    if (!match || !currentSegment || !user) return;
+    const dur = match.timer?.durationSec ?? currentSegment.durationSec ?? 45;
     try {
-      await gameRepo.updateTimer(
-        game.id,
-        {
+      await commands.updateTimer({
+        matchId: match.id,
+        timer: {
           status: 'paused',
           durationSec: dur,
           remainingSec: displayRemainingSec,
           endsAt: null,
         },
-        user.id
+        actorUserId: user.id,
+      });
+      setLiveAnnouncement(
+        lang === 'ar' ? 'تم إيقاف المؤقت مؤقتاً' : 'Segment timer paused'
       );
-      setLiveAnnouncement(lang === 'ar' ? 'تم إيقاف المؤقت مؤقتاً' : 'Segment timer paused');
       await loadConsoleState();
-    } catch {
-      notifyActionError('pause timer', 'إيقاف المؤقت');
+    } catch (err) {
+      await handleCommandError(err, 'pause timer', 'إيقاف المؤقت');
     }
-  }, [game, currentSegment, user, displayRemainingSec, loadConsoleState, lang, notifyActionError]);
+  }, [
+    match,
+    currentSegment,
+    user,
+    displayRemainingSec,
+    loadConsoleState,
+    lang,
+    handleCommandError,
+  ]);
 
   const executeTimerReset = async () => {
-    if (!game || !currentSegment || !user) return;
+    if (!match || !currentSegment || !user) return;
     const dur = currentSegment.durationSec ?? 45;
     timerExpireHandledRef.current = false;
     timerWarnAnnouncedRef.current = false;
     try {
-      await gameRepo.updateTimer(
-        game.id,
-        {
+      await commands.updateTimer({
+        matchId: match.id,
+        timer: {
           status: 'idle',
           durationSec: dur,
           remainingSec: dur,
           endsAt: null,
         },
-        user.id
-      );
+        actorUserId: user.id,
+      });
       setDisplayRemainingSec(dur);
-      setLiveAnnouncement(lang === 'ar' ? 'تمت إعادة ضبط المؤقت' : 'Segment timer reset');
+      setLiveAnnouncement(
+        lang === 'ar' ? 'تمت إعادة ضبط المؤقت' : 'Segment timer reset'
+      );
       await loadConsoleState();
-    } catch {
-      notifyActionError('reset timer', 'إعادة ضبط المؤقت');
+    } catch (err) {
+      await handleCommandError(err, 'reset timer', 'إعادة ضبط المؤقت');
     }
   };
 
   const handleTimerResetClick = () => {
-    if (game?.timer?.status === 'running') {
+    if (match?.timer?.status === 'running') {
       setConfirmResetTimerOpen(true);
     } else {
       executeTimerReset();
@@ -824,21 +1273,26 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
   };
 
   const executeSegmentChange = async (nextIndex: number) => {
-    if (!game || !user || busyRef.current) return;
+    if (!match || !user || busyRef.current) return;
     busyRef.current = true;
     setBusyAction(true);
     try {
-      await gameRepo.changeSegment(game.id, nextIndex, user.id);
+      await commands.changeSegment({
+        matchId: match.id,
+        nextIndex,
+        actorUserId: user.id,
+        expectedVersion: match.version,
+      });
       await loadConsoleState();
-      const targetSegId = game.segmentIds[nextIndex];
+      const targetSegId = match.segmentIds[nextIndex];
       const targetSeg = allSegments.find((s) => s.id === targetSegId);
       setLiveAnnouncement(
         lang === 'ar'
           ? `الفقرة ${nextIndex + 1}: ${targetSeg?.nameAr ?? ''}`
           : `Segment ${nextIndex + 1}: ${targetSeg?.nameEn ?? ''}`
       );
-    } catch {
-      notifyActionError('switch segment', 'تغيير الفقرة');
+    } catch (err) {
+      await handleCommandError(err, 'switch segment', 'تغيير الفقرة');
     } finally {
       busyRef.current = false;
       if (mountedRef.current) {
@@ -849,9 +1303,9 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
   };
 
   const handleSegmentNavClick = (nextIndex: number) => {
-    if (!game) return;
-    const isBackward = nextIndex < game.currentSegmentIndex;
-    const isTimerRunning = game.timer?.status === 'running';
+    if (!match) return;
+    const isBackward = nextIndex < match.currentSegmentIndex;
+    const isTimerRunning = match.timer?.status === 'running';
     if (isBackward || isTimerRunning) {
       setPendingSegmentIndex(nextIndex);
     } else {
@@ -860,18 +1314,24 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
   };
 
   const handleConfirmFinish = async () => {
-    if (!game || !user || busyRef.current) return;
+    if (!match || !user || busyRef.current) return;
     busyRef.current = true;
     setBusyAction(true);
     try {
-      const result = await gameRepo.finishGame(game.id, user.id, {
+      const result = await commands.finishMatch({
+        matchId: match.id,
+        actorUserId: user.id,
         autoOpenTieBreaker: true,
+        expectedVersion: match.version,
       });
       await loadConsoleState();
 
       if (!result) return;
 
-      if (result.status === 'tie_breaker_opened') {
+      if (
+        result.status === 'tie_breaker_opened' ||
+        result.status === 'needsTieBreak'
+      ) {
         const tiedIds = result.tiedPlayerIds ?? [];
         setTieBreakerPlayerIds(tiedIds);
         const names = tiedIds
@@ -883,26 +1343,34 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
         const title =
           lang === 'ar'
             ? 'تعادل! تم فتح جولة الحسم تلقائياً'
-            : 'Qualifying Tie! Tie-Breaker #16 Opened';
+            : 'Scores Tied! Tie-Breaker #16 Opened';
         setLiveAnnouncement(title);
         toast({
           variant: 'gold',
           title,
           description:
             lang === 'ar'
-              ? `تعادل بين ${names} — جولة التحدي الفاصلة (${formatNumber(30, { useArabicIndicDigits: useArabicIndic })} ثانية) جاهزة الآن.`
-              : `Tie between ${names} — sudden-death Tie-Breaker (30s) inserted automatically.`,
-          durationMs: 5000,
+              ? `تعادل بين ${names} — لا يُسمح بالتعادل، فقرة الحسم جاهزة الآن.`
+              : `Tie between ${names} — draws are not allowed; sudden-death Tie-Breaker (30s) inserted.`,
+          durationMs: 4500,
         });
       } else if (result.status === 'finished') {
         setTieBreakerPlayerIds([]);
         const winner = allPlayers.find(
-          (p) => p.id === result.game.winnerPlayerId
+          (p) => p.id === result.match.result?.winnerId
         );
+        const resultTypeLabel =
+          result.match.result?.type === 'walkover'
+            ? lang === 'ar'
+              ? 'فوز انسحابي'
+              : 'Walkover'
+            : lang === 'ar'
+              ? 'فوز عادي'
+              : 'Normal Win';
         const title =
           lang === 'ar'
-            ? `انتهت الجلسة — الفائز: ${winner?.fullNameAr ?? ''}`
-            : `Session Finished — Winner: ${winner?.fullName ?? ''}`;
+            ? `انتهت المباراة (${resultTypeLabel}) — الفائز: ${winner?.fullNameAr ?? ''}`
+            : `Match Finished (${resultTypeLabel}) — Winner: ${winner?.fullName ?? ''}`;
         const advancedTables = Array.from(
           new Set(
             (result.advancedTo ?? []).map((a) =>
@@ -913,18 +1381,21 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
         const advancedToFinal = Boolean(
           result.advancedTo?.some((a) => a.isFinal)
         );
-        const description =
-          advancedToFinal
+        const description = advancedToFinal
+          ? lang === 'ar'
+            ? 'تم حجز مقاعد النهائي الكبير تلقائياً في مواجهة مروان سري!'
+            : 'Finalist automatically advanced into the Grand Final vs. Marwan Serry!'
+          : advancedTables.length > 0
             ? lang === 'ar'
-              ? 'تم حجز مقاعد النهائي الكبير تلقائياً في مواجهة مروان سري!'
-              : 'Finalists automatically advanced into the Grand Final vs. Marwan Serry!'
-            : advancedTables.length > 0
+              ? `تم تأهيل الفائز تلقائياً إلى: ${advancedTables.join('، ')}.`
+              : `Automatically advanced to: ${advancedTables.join(', ')}.`
+            : match.type === 'group'
               ? lang === 'ar'
-                ? `تم تأهيل الفائز تلقائياً إلى: ${advancedTables.join('، ')}.`
-                : `Automatically advanced to: ${advancedTables.join(', ')}.`
+                ? 'تم احتساب +٣ نقاط في ترتيب المجموعة وتحديث لوحة الصدارة.'
+                : '+3 group points credited; standings and leaderboard updated.'
               : lang === 'ar'
                 ? 'تم تحديث لوحة الصدارة وشجرة البطولة وسجل المراجعة.'
-                : 'Leaderboard, bracket standings, and Audit Log updated.';
+                : 'Leaderboard, bracket, and Audit Log updated.';
         setLiveAnnouncement(title);
         toast({
           variant: 'positive',
@@ -933,31 +1404,35 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
           durationMs: 5000,
         });
       }
-    } catch {
-      notifyActionError('finish game', 'إنهاء الجلسة');
+    } catch (err) {
+      await handleCommandError(err, 'finish match', 'إنهاء المباراة');
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setBusyAction(false);
     }
   };
 
-  const handleConfirmReopen = async (
-    cascadeOpts?: { confirmCascade?: boolean; cascadePolicy?: CascadePolicy }
-  ) => {
-    if (!game || !user || busyRef.current || !canReopen) return;
+  const handleConfirmReopen = async (cascadeOpts?: {
+    confirmCascade?: boolean;
+    cascadePolicy?: CascadePolicy;
+  }) => {
+    if (!match || !user || busyRef.current || !canReopen) return;
     busyRef.current = true;
     setBusyAction(true);
     try {
-      await gameRepo.reopenGame(game.id, user.id, {
-        ...cascadeOpts,
-        expectedVersion: game.version,
+      await commands.reopenMatch({
+        matchId: match.id,
+        actorUserId: user.id,
+        confirmCascade: cascadeOpts?.confirmCascade,
+        cascadePolicy: cascadeOpts?.cascadePolicy,
+        expectedVersion: match.version,
       });
-      setReopenImpact(null);
+      setPendingImpact(null);
       await loadConsoleState();
       const title =
         lang === 'ar'
-          ? 'تمت إعادة فتح الجلسة للتعديل'
-          : 'Session reopened for live scoring';
+          ? 'تمت إعادة فتح المباراة للتعديل'
+          : 'Match reopened for live scoring';
       setLiveAnnouncement(title);
       toast({
         variant: 'info',
@@ -968,45 +1443,26 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
             : 'Reopen action logged in Audit Log.',
       });
     } catch (err) {
-      if (err instanceof CascadeConfirmationRequiredError) {
-        setReopenImpact(err.impact);
-        return;
-      }
-      if (err instanceof VersionConflictError) {
-        await loadConsoleState();
-        toast({
-          variant: 'gold',
-          title: lang === 'ar' ? 'تم تحديث المباراة في نافذة أخرى' : 'Match Updated Elsewhere',
-          description: err.message,
-        });
-        return;
-      }
-      notifyActionError('reopen session', 'إعادة فتح الجلسة');
+      await handleCommandError(
+        err,
+        'reopen match',
+        'إعادة فتح المباراة',
+        (policy) =>
+          handleConfirmReopen({ confirmCascade: true, cascadePolicy: policy })
+      );
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setBusyAction(false);
     }
   };
 
-  const toggleCustomSign = () => {
-    if (customError) setCustomError(null);
-    const normalized = normalizeNumericInput(customPoints);
-    if (!normalized) {
-      setCustomPoints('-');
-      return;
-    }
-    if (normalized.startsWith('-')) {
-      setCustomPoints(normalized.slice(1));
-    } else if (normalized.startsWith('+')) {
-      setCustomPoints(`-${normalized.slice(1)}`);
-    } else {
-      setCustomPoints(`-${normalized}`);
-    }
-  };
-
-  // Bonus Idea: Desktop/Tablet keyboard shortcuts for ultra-fast zero-mistake operation
+  // Desktop / Tablet Keyboard Shortcuts (v2: +1, -1, Y yellow, R red, B buzz, Space timer, Ctrl+Z undo)
   useEffect(() => {
-    if (!game || game.status !== 'live' || !canAccessScorerGame(user, game.scorerUserId)) {
+    if (
+      !match ||
+      (match.status !== 'live' && match.status !== 'needsTieBreak') ||
+      !canAccessScorerGame(user, match.judgeUserId || match.scorerUserId)
+    ) {
       return;
     }
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1017,7 +1473,7 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
           target.tagName === 'TEXTAREA' ||
           target.tagName === 'SELECT' ||
           target.isContentEditable);
-      if (isTyping || historyOpen) return;
+      if (isTyping || historyOpen || contactPlayer || pendingAbsentPlayer) return;
 
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
@@ -1032,12 +1488,44 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
         setSelectedPlayerId(seatedPlayers[1].id);
       } else if (e.key === '3' && seatedPlayers[2]) {
         setSelectedPlayerId(seatedPlayers[2].id);
-      } else if (e.key.toLowerCase() === 'b' && selectedPlayer) {
+      } else if (
+        e.key.toLowerCase() === 'b' &&
+        selectedPlayer &&
+        !absentSet.has(selectedPlayer.id)
+      ) {
         e.preventDefault();
         handleBuzz(selectedPlayer);
+      } else if (
+        (e.key === '+' || e.key === '=') &&
+        selectedPlayer &&
+        !absentSet.has(selectedPlayer.id)
+      ) {
+        e.preventDefault();
+        handleApplyPoint(selectedPlayer, 1);
+      } else if (
+        e.key === '-' &&
+        selectedPlayer &&
+        !absentSet.has(selectedPlayer.id)
+      ) {
+        e.preventDefault();
+        handleApplyPoint(selectedPlayer, -1);
+      } else if (
+        e.key.toLowerCase() === 'y' &&
+        selectedPlayer &&
+        !absentSet.has(selectedPlayer.id)
+      ) {
+        e.preventDefault();
+        handleApplyCard(selectedPlayer, 'yellow');
+      } else if (
+        e.key.toLowerCase() === 'r' &&
+        selectedPlayer &&
+        !absentSet.has(selectedPlayer.id)
+      ) {
+        e.preventDefault();
+        handleApplyCard(selectedPlayer, 'red');
       } else if (e.key === ' ') {
         e.preventDefault();
-        if (game.timer?.status === 'running') {
+        if (match.timer?.status === 'running') {
           handleTimerPause();
         } else {
           handleTimerStart();
@@ -1048,12 +1536,17 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
-    game,
+    match,
     user,
     historyOpen,
+    contactPlayer,
+    pendingAbsentPlayer,
     seatedPlayers,
     selectedPlayer,
+    absentSet,
     handleBuzz,
+    handleApplyPoint,
+    handleApplyCard,
     handleUndoLast,
     handleTimerPause,
     handleTimerStart,
@@ -1068,12 +1561,10 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
           <Skeleton className="h-11 w-40 bg-red-800" />
         </div>
         <Skeleton className="h-32 w-full rounded-card bg-red-800" />
-        <div className="grid gap-4 md:grid-cols-3">
-          <PlayerPanelSkeleton />
+        <div className="grid gap-4 md:grid-cols-2">
           <PlayerPanelSkeleton />
           <PlayerPanelSkeleton />
         </div>
-        <Skeleton className="h-28 w-full rounded-card bg-red-800" />
       </div>
     );
   }
@@ -1081,10 +1572,7 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
   // 1b. Load Error Recovery State
   if (loadError) {
     return (
-      <section
-        role="alert"
-        className="mx-auto max-w-2xl py-6"
-      >
+      <section role="alert" className="mx-auto max-w-2xl py-6">
         <div className="space-y-5 rounded-card border-[3px] border-gold-400 bg-red-800 p-6 sm:p-8 text-center shadow-sticker-lg">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-pill border-[2.5px] border-outline bg-negative text-white shadow-sticker-sm">
             <AlertTriangle className="h-8 w-8" aria-hidden="true" />
@@ -1097,8 +1585,8 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
             </h1>
             <p className="text-sm sm:text-base text-red-100 leading-relaxed break-words">
               {lang === 'ar'
-                ? 'حدث خطأ أثناء قراءة بيانات هذه الجلسة. اضغط إعادة المحاولة لاستئناف التحكيم.'
-                : `An error occurred loading session "${gameId}" (${loadError}). Tap Retry to recover.`}
+                ? 'حدث خطأ أثناء قراءة بيانات هذه المباراة. اضغط إعادة المحاولة لاستئناف التحكيم.'
+                : `An error occurred loading match "${resolvedMatchId}" (${loadError}). Tap Retry to recover.`}
             </p>
           </div>
           <div className="flex flex-col xs:flex-row flex-wrap justify-center gap-3 pt-2">
@@ -1117,7 +1605,10 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
             </Button>
             <Button asChild variant="secondary" size="scorer">
               <Link href="/scorer">
-                <ArrowLeft className="h-5 w-5 rtl:rotate-180" aria-hidden="true" />
+                <ArrowLeft
+                  className="h-5 w-5 rtl:rotate-180"
+                  aria-hidden="true"
+                />
                 <span>
                   {lang === 'ar' ? 'العودة إلى طاولاتي' : 'Back to My Tables'}
                 </span>
@@ -1130,20 +1621,23 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
   }
 
   // 2. Not Found State
-  if (!game) {
+  if (!match) {
     return (
       <div className="mx-auto max-w-2xl rounded-card border-[2.5px] border-outline bg-white p-2 shadow-sticker">
         <EmptyState
-          title={lang === 'ar' ? 'الجلسة غير موجودة' : 'Game session not found'}
+          title={lang === 'ar' ? 'المباراة غير موجودة' : 'Match session not found'}
           description={
             lang === 'ar'
-              ? `لم يتم العثور على طاولة بالمعرّف (${gameId}). عُد إلى قائمة الطاولات لاختيار جلسة صالحة.`
-              : `No table session matches ID "${gameId}". Return to your assigned tables to pick a valid match.`
+              ? `لم يتم العثور على مباراة بالمعرّف (${resolvedMatchId}). عُد إلى قائمة الطاولات لاختيار مباراة صالحة.`
+              : `No match exists for ID "${resolvedMatchId}". Return to your assigned tables to pick a valid match.`
           }
           action={
             <Button asChild variant="red" size="scorer">
               <Link href="/scorer">
-                <ArrowLeft className="h-5 w-5 rtl:rotate-180" aria-hidden="true" />
+                <ArrowLeft
+                  className="h-5 w-5 rtl:rotate-180"
+                  aria-hidden="true"
+                />
                 <span>
                   {lang === 'ar' ? 'العودة إلى طاولاتي' : 'Back to My Tables'}
                 </span>
@@ -1155,8 +1649,9 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
     );
   }
 
-  // 3. Per-Game Scorer Assignment Access Guard
-  if (!canAccessScorerGame(user, game.scorerUserId)) {
+  // 3. Per-Match Judge Assignment Guard
+  const assignedJudgeId = match.judgeUserId || match.scorerUserId;
+  if (!canAccessScorerGame(user, assignedJudgeId)) {
     return (
       <section className="mx-auto max-w-2xl py-6">
         <div className="space-y-5 rounded-card border-[3px] border-gold-400 bg-red-800 p-6 sm:p-8 text-center shadow-sticker-lg">
@@ -1167,34 +1662,41 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
           <div className="space-y-2">
             <h1 className="font-display text-fluid-2xl text-white">
               {lang === 'ar'
-                ? 'هذه الطاولة مخصصة لحكم آخر'
-                : 'Table Assigned to Another Scorer'}
+                ? 'هذه المباراة مخصصة لحكم آخر'
+                : 'Match Assigned to Another Judge'}
             </h1>
             <p className="text-sm sm:text-base text-red-100 leading-relaxed">
               {lang === 'ar'
-                ? `طاولة "${localizeText(lang, game.tableName, game.tableNameAr)}" مخصصة حالياً لـ ${assignedScorer ? localizeText(lang, assignedScorer.name, assignedScorer.nameAr) : game.scorerUserId}. يمكن لحكم الطاولة المعين أو مدير البطولة فقط فتح هذه اللوحة.`
-                : `"${game.tableName}" is assigned to ${assignedScorer ? assignedScorer.name : game.scorerUserId}. Only the assigned scorer or a Super Admin can operate this console.`}
+                ? `"${localizeText(lang, match.tableName, match.tableNameAr)}" مخصصة حالياً لـ ${assignedJudge ? localizeText(lang, assignedJudge.name, assignedJudge.nameAr) : assignedJudgeId}. يمكن للحكم المعين أو مدير البطولة فقط إدارة هذه اللوحة.`
+                : `"${match.tableName}" is assigned to ${assignedJudge ? assignedJudge.name : assignedJudgeId}. Only the assigned judge or a Super Admin can operate this console.`}
             </p>
           </div>
 
           <div className="flex flex-col xs:flex-row flex-wrap justify-center gap-3 pt-2">
             <Button asChild variant="gold" size="scorer">
               <Link href="/scorer">
-                <ArrowLeft className="h-5 w-5 rtl:rotate-180" aria-hidden="true" />
+                <ArrowLeft
+                  className="h-5 w-5 rtl:rotate-180"
+                  aria-hidden="true"
+                />
                 <span>
-                  {lang === 'ar' ? 'عرض طاولاتي المخصصة' : 'View My Assigned Tables'}
+                  {lang === 'ar'
+                    ? 'عرض طاولاتي المخصصة'
+                    : 'View My Assigned Tables'}
                 </span>
               </Link>
             </Button>
             <Button asChild variant="secondary" size="scorer">
               <Link
-                href={`/screen/${game.id}`}
+                href={`/screen/${match.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 <MonitorPlay className="h-5 w-5" aria-hidden="true" />
                 <span>
-                  {lang === 'ar' ? 'مشاهدة شاشة العرض فقط' : 'Watch Big Screen Only'}
+                  {lang === 'ar'
+                    ? 'مشاهدة شاشة العرض فقط'
+                    : 'Watch Big Screen Only'}
                 </span>
               </Link>
             </Button>
@@ -1204,28 +1706,249 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
     );
   }
 
+  const isLiveOrTieBreak =
+    match.status === 'live' || match.status === 'needsTieBreak';
   const isTimerUrgent = displayRemainingSec > 0 && displayRemainingSec <= 5;
   const isTieBreakerActive = currentSegment?.id === 'seg-16';
-  const totalEventsCount = scoreEvents.length + buzzEvents.length;
+  const totalEventsCount =
+    scoreEvents.length + absenceEvents.length + buzzEvents.length;
   const currentCatMeta = currentSegment
     ? CATEGORY_LABELS[currentSegment.category]
     : null;
-  const hasPrevSeg = game.currentSegmentIndex > 0;
-  const hasNextSeg = game.currentSegmentIndex < game.segmentIds.length - 1;
+  const hasPrevSeg = match.currentSegmentIndex > 0;
+  const hasNextSeg = match.currentSegmentIndex < match.segmentIds.length - 1;
+  const isWalkoverFinished =
+    match.status === 'finished' && match.result?.type === 'walkover';
+
+  const undoPreview = nextUndoableEvent
+    ? formatScoreEventDisplay(nextUndoableEvent, lang, useArabicIndic)
+    : null;
+
+  // Reusable inline Super Admin Decision Panel (for void, needsReview, or Final absence)
+  const renderAdminDecisionBanner = (
+    mode: 'void' | 'finalAbsence' | 'needsReview'
+  ) => {
+    const headline =
+      mode === 'void'
+        ? lang === 'ar'
+          ? 'المباراة ملغاة — كلا اللاعبين غائب (قرار المدير مطلوب)'
+          : 'Match Void — Both Players Absent (Admin Decision Required)'
+        : mode === 'finalAbsence'
+          ? lang === 'ar'
+            ? 'غياب متأهل في النهائي الكبير — مطلوب قرار مدير البطولة'
+            : 'Finalist Absent in Grand Final — Super Admin Decision Required'
+          : lang === 'ar'
+            ? 'المباراة بحاجة لمراجعة إدارية بعد تعديل نتيجة سابقة'
+            : 'Match Flagged for Admin Review After Upstream Change';
+
+    const subcopy =
+      mode === 'void'
+        ? lang === 'ar'
+          ? 'عند غياب كلا اللاعبين لا يتأهل أحد تلقائياً. اختر الفائز أو ألغِ غياب أحد اللاعبين أو أعد تهيئة المباراة لإعادة اللعب.'
+          : 'With both contestants absent, nobody advances automatically. Super Admin may award a winner, reverse an absence, or reset for replay.'
+        : mode === 'finalAbsence'
+          ? lang === 'ar'
+            ? 'مباراة النهائي مع مروان سري لا تُنهى تلقائياً بالغياب. يمكن لمدير البطولة إلغاء الغياب أو اعتماد النتيجة الإدارية أو متابعة اللعب.'
+            : 'The Grand Final with Marwan Serry never auto-ends on absence. Super Admin may reverse the absence, override the result, or continue play.'
+          : match.needsReviewReason ??
+            (lang === 'ar'
+              ? 'تغيّرت نتيجة مباراة سابقة تؤثر على هذه المواجهة.'
+              : 'An upstream match result changed after this match started or finished.');
+
+    const selectableWinners = seatedPlayers.filter((p) =>
+      mode === 'void' ? true : !absentSet.has(p.id)
+    );
+
+    return (
+      <section
+        role="alert"
+        className="space-y-4 rounded-card border-[3px] border-gold-400 bg-red-800 p-4 sm:p-5 text-white shadow-sticker-lg"
+      >
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill border-2 border-outline bg-gold-400 text-red-900 shadow-sticker-sm">
+            <Gavel className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1 space-y-1">
+            <h2 className="font-display text-fluid-xl leading-tight text-white">
+              {headline}
+            </h2>
+            <p className="text-sm text-red-100 leading-relaxed">{subcopy}</p>
+          </div>
+        </div>
+
+        {isSuperAdmin ? (
+          <div className="space-y-3 rounded-input border-2 border-white/20 bg-red-900/80 p-3.5 sm:p-4">
+            {mode === 'needsReview' ? (
+              <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+                <Button
+                  type="button"
+                  variant="gold"
+                  size="scorer"
+                  disabled={busyAction}
+                  onClick={() => handleAdminResolveReview('invalidateForReplay')}
+                  className="flex-1"
+                >
+                  <RotateCcw className="h-5 w-5 shrink-0" aria-hidden="true" />
+                  <span>
+                    {lang === 'ar'
+                      ? 'إلغاء النتيجة وإعادة اللعب (٠-٠)'
+                      : 'Invalidate & Reset for Replay (0–0)'}
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="scorer"
+                  disabled={busyAction}
+                  onClick={() => handleAdminResolveReview('keepAsIs')}
+                  className="flex-1"
+                >
+                  <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden="true" />
+                  <span>
+                    {lang === 'ar'
+                      ? 'اعتماد النتيجة الحالية كما هي'
+                      : 'Keep Existing Result'}
+                  </span>
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-2.5 sm:grid-cols-12 sm:items-end">
+                  <div className="sm:col-span-5">
+                    <label
+                      htmlFor="admin-override-winner"
+                      className="mb-1 block text-xs font-extrabold uppercase text-gold-200"
+                    >
+                      {lang === 'ar'
+                        ? 'اعتماد فائز بقرار إداري'
+                        : 'Award Winner (Override)'}
+                    </label>
+                    <select
+                      id="admin-override-winner"
+                      value={overrideWinnerId}
+                      onChange={(e) => setOverrideWinnerId(e.target.value)}
+                      className="min-h-[48px] w-full rounded-input border-2 border-outline bg-white px-3 text-base font-bold text-ink focus:border-blue-500 focus:outline-none"
+                    >
+                      {(selectableWinners.length > 0
+                        ? selectableWinners
+                        : seatedPlayers
+                      ).map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {localizeText(lang, p.fullName, p.fullNameAr)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-4">
+                    <label
+                      htmlFor="admin-override-reason"
+                      className="mb-1 block text-xs font-extrabold uppercase text-gold-200"
+                    >
+                      {lang === 'ar' ? 'سبب القرار' : 'Decision Reason'}
+                    </label>
+                    <Input
+                      id="admin-override-reason"
+                      type="text"
+                      maxLength={NOTE_MAX_LENGTH}
+                      value={overrideReason}
+                      onChange={(e) => setOverrideReason(e.target.value)}
+                      placeholder={
+                        lang === 'ar'
+                          ? 'مثال: تأهل بالقرعة أو قرار اللجنة'
+                          : 'e.g. Committee ruling / forfeit'
+                      }
+                      className="min-h-[48px]"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-3">
+                    <Button
+                      type="button"
+                      variant="gold"
+                      size="scorer"
+                      disabled={busyAction || !overrideWinnerId}
+                      onClick={() => handleAdminOverrideWinner()}
+                      className="w-full"
+                    >
+                      <Gavel className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span>
+                        {lang === 'ar' ? 'اعتماد الفائز' : 'Award Winner'}
+                      </span>
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 border-t border-white/15 pt-3">
+                  {absentPlayerIds.map((pid) => {
+                    const pl = seatedPlayers.find((p) => p.id === pid);
+                    if (!pl) return null;
+                    return (
+                      <Button
+                        key={pid}
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={busyAction}
+                        onClick={() => setPendingReverseAbsentPlayer(pl)}
+                      >
+                        <RotateCcw className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span>
+                          {lang === 'ar'
+                            ? `إلغاء غياب ${pl.fullNameAr}`
+                            : `Reverse Absence: ${pl.fullName}`}
+                        </span>
+                      </Button>
+                    );
+                  })}
+
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={busyAction}
+                    onClick={() =>
+                      handleAdminResolveReview('invalidateForReplay')
+                    }
+                  >
+                    <RotateCcw className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>
+                      {lang === 'ar'
+                        ? 'إعادة تهيئة للعب مجدداً'
+                        : 'Reset for Replay'}
+                    </span>
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-input border border-gold-300/60 bg-red-900/90 px-3.5 py-2.5 text-sm font-bold text-gold-200">
+            <ShieldAlert className="h-5 w-5 shrink-0" aria-hidden="true" />
+            <span>
+              {lang === 'ar'
+                ? 'بانتظار تدخل مدير البطولة (Super Admin) لاتخاذ القرار الرسمي.'
+                : 'Awaiting Super Admin decision to resolve this match.'}
+            </span>
+          </div>
+        )}
+      </section>
+    );
+  };
 
   return (
     <div
       className={cn(
         'space-y-3',
-        game.status === 'live' && 'pb-52 md:pb-3'
+        isLiveOrTieBreak && 'pb-60 md:pb-4'
       )}
     >
-      {/* Screen-reader polite status announcer for live scoring, buzzes, segments & timer milestones */}
+      {/* Screen-reader live region */}
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {liveAnnouncement}
       </div>
 
-      {/* Top Session Command Strip */}
+      {/* TOP SESSION COMMAND STRIP */}
       <header className="flex flex-col gap-2.5 border-b-2 border-red-800 pb-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-1 items-start gap-2.5 sm:items-center">
           <Button
@@ -1233,28 +1956,72 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
             variant="surface"
             size="icon"
             className="h-11 w-11 shrink-0"
-            aria-label={lang === 'ar' ? 'العودة إلى قائمة الطاولات' : 'Back to assigned tables'}
+            aria-label={
+              lang === 'ar'
+                ? 'العودة إلى قائمة الطاولات'
+                : 'Back to assigned tables'
+            }
           >
             <Link href="/scorer">
-              <ArrowLeft className="h-5 w-5 rtl:rotate-180" aria-hidden="true" />
+              <ArrowLeft
+                className="h-5 w-5 rtl:rotate-180"
+                aria-hidden="true"
+              />
             </Link>
           </Button>
 
           <div className="min-w-0 flex-1 space-y-0.5">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-display text-fluid-xl leading-tight text-white break-words [overflow-wrap:anywhere] md:truncate">
-                {localizeText(lang, game.tableName, game.tableNameAr)}
+                {localizeText(lang, match.tableName, match.tableNameAr)}
               </h1>
-              {game.status === 'live' ? (
+
+              <Badge variant="neutral" className="tabular-nums">
+                {lang === 'ar'
+                  ? `طاولة #${formatNumber(match.tableNumber, { useArabicIndicDigits: useArabicIndic })}`
+                  : `Table #${match.tableNumber}`}
+              </Badge>
+
+              {isFinalMatch && (
+                <Badge variant="gold">
+                  <Crown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>{lang === 'ar' ? 'النهائي ٣ لاعبين' : '1v1v1 FINAL'}</span>
+                </Badge>
+              )}
+
+              {match.status === 'live' ? (
                 <LiveBadge surface="stage" />
-              ) : game.status === 'scheduled' ? (
+              ) : match.status === 'needsTieBreak' ? (
+                <Badge variant="gold">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>{lang === 'ar' ? 'تعادل — حسم مطلوب' : 'TIE-BREAK REQUIRED'}</span>
+                </Badge>
+              ) : match.status === 'void' ? (
+                <Badge variant="negative">
+                  <UserX className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>{lang === 'ar' ? 'ملغاة (غياب الطرفين)' : 'VOID · BOTH ABSENT'}</span>
+                </Badge>
+              ) : match.status === 'needsReview' ? (
+                <Badge variant="gold">
+                  <Gavel className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>{lang === 'ar' ? 'بحاجة لمراجعة' : 'NEEDS REVIEW'}</span>
+                </Badge>
+              ) : match.status === 'scheduled' ? (
                 <Badge variant="upcoming">
                   {lang === 'ar' ? 'مجدولة' : 'SCHEDULED'}
                 </Badge>
               ) : (
                 <Badge variant="gold">
                   <Trophy className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  <span>{lang === 'ar' ? 'منتهية' : 'FINISHED'}</span>
+                  <span>
+                    {isWalkoverFinished
+                      ? lang === 'ar'
+                        ? 'منتهية · فوز انسحابي'
+                        : 'FINISHED · WALKOVER'
+                      : lang === 'ar'
+                        ? 'منتهية · فوز عادي'
+                        : 'FINISHED · NORMAL'}
+                  </span>
                 </Badge>
               )}
             </div>
@@ -1265,19 +2032,19 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
               )}
               <span className="inline-flex items-center gap-1">
                 <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                {formatDateTime(game.scheduledAt, lang, useArabicIndic)}
+                {formatDateTime(match.scheduledAt, lang, useArabicIndic)}
               </span>
-              {isSuperAdmin && assignedScorer && (
+              {isSuperAdmin && assignedJudge && (
                 <span className="text-white">
-                  · {lang === 'ar' ? 'الحكم:' : 'Scorer:'}{' '}
-                  {localizeText(lang, assignedScorer.name, assignedScorer.nameAr)}
+                  · {lang === 'ar' ? 'الحكم:' : 'Judge:'}{' '}
+                  {localizeText(lang, assignedJudge.name, assignedJudge.nameAr)}
                 </span>
               )}
             </div>
           </div>
         </div>
 
-        {/* Utility Controls — single row on tablet/desktop */}
+        {/* Utility Controls */}
         <div className="flex shrink-0 flex-wrap lg:flex-nowrap items-center gap-2">
           <Button
             type="button"
@@ -1287,9 +2054,15 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
             onClick={() => setHistoryOpen(true)}
           >
             {canManageHistory ? (
-              <ShieldCheck className="h-4 w-4 shrink-0 text-positive-ink" aria-hidden="true" />
+              <ShieldCheck
+                className="h-4 w-4 shrink-0 text-positive-ink"
+                aria-hidden="true"
+              />
             ) : (
-              <History className="h-4 w-4 shrink-0 text-red-700" aria-hidden="true" />
+              <History
+                className="h-4 w-4 shrink-0 text-red-700"
+                aria-hidden="true"
+              />
             )}
             <span>
               {canManageHistory
@@ -1297,8 +2070,8 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                   ? 'السجل والتحكم'
                   : 'History'
                 : lang === 'ar'
-                  ? 'سجل الجلسة'
-                  : 'Session Log'}
+                  ? 'سجل المباراة'
+                  : 'Match Log'}
             </span>
             <span className="rounded-pill bg-red-900 px-2 py-0.5 text-xs font-black tabular-nums text-white">
               {formatNumber(totalEventsCount, {
@@ -1314,7 +2087,7 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
             className="min-h-[44px] flex-1 sm:flex-none px-3.5"
           >
             <Link
-              href={`/screen/${game.id}`}
+              href={`/screen/${match.id}`}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -1323,7 +2096,7 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
             </Link>
           </Button>
 
-          {game.status === 'live' && (
+          {isLiveOrTieBreak && (
             <div ref={shortcutsRef} className="relative hidden lg:block">
               <Button
                 type="button"
@@ -1342,7 +2115,9 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
               {shortcutsOpen && (
                 <div
                   role="dialog"
-                  aria-label={lang === 'ar' ? 'اختصارات لوحة المفاتيح' : 'Keyboard shortcuts'}
+                  aria-label={
+                    lang === 'ar' ? 'اختصارات لوحة المفاتيح' : 'Keyboard shortcuts'
+                  }
                   className="absolute end-0 top-14 z-40 w-64 rounded-card border-[2.5px] border-outline bg-white p-4 text-ink shadow-sticker-lg"
                 >
                   <div className="mb-2 flex items-center justify-between gap-2">
@@ -1362,13 +2137,25 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                     <li className="flex items-center justify-between">
                       <span>{lang === 'ar' ? 'اختيار لاعب' : 'Select player'}</span>
                       <kbd className="rounded border border-outline bg-paper px-1.5 py-0.5 font-mono">
-                        1 / 2 / 3
+                        {isThreeColLayout ? '1 / 2 / 3' : '1 / 2'}
                       </kbd>
                     </li>
                     <li className="flex items-center justify-between">
-                      <span>{lang === 'ar' ? 'جرس اللاعب المختار' : 'Buzz selected'}</span>
+                      <span>{lang === 'ar' ? 'جرس المختار' : 'Buzz selected'}</span>
                       <kbd className="rounded border border-outline bg-paper px-1.5 py-0.5 font-mono">
                         B
+                      </kbd>
+                    </li>
+                    <li className="flex items-center justify-between">
+                      <span>{lang === 'ar' ? 'نقطة +١ / −١' : '+1 / −1 point'}</span>
+                      <kbd className="rounded border border-outline bg-paper px-1.5 py-0.5 font-mono">
+                        + / -
+                      </kbd>
+                    </li>
+                    <li className="flex items-center justify-between">
+                      <span>{lang === 'ar' ? 'صفراء / حمراء' : 'Yellow / Red card'}</span>
+                      <kbd className="rounded border border-outline bg-paper px-1.5 py-0.5 font-mono">
+                        Y / R
                       </kbd>
                     </li>
                     <li className="flex items-center justify-between">
@@ -1378,7 +2165,7 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                       </kbd>
                     </li>
                     <li className="flex items-center justify-between">
-                      <span>{lang === 'ar' ? 'تراجع عن آخر حركة' : 'Undo last score'}</span>
+                      <span>{lang === 'ar' ? 'تراجع عن آخر حركة' : 'Undo last action'}</span>
                       <kbd className="rounded border border-outline bg-paper px-1.5 py-0.5 font-mono">
                         Ctrl+Z
                       </kbd>
@@ -1392,28 +2179,45 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
       </header>
 
       {/* =================================================================== */}
-      {/* STATE A: SCHEDULED GAME START GATE                                  */}
+      {/* INLINE ADMIN DECISION BANNERS (VOID / NEEDS REVIEW / FINAL ABSENCE) */}
       {/* =================================================================== */}
-      {game.status === 'scheduled' && (
+      {match.status === 'void' && renderAdminDecisionBanner('void')}
+      {match.status === 'needsReview' && renderAdminDecisionBanner('needsReview')}
+      {isFinalAbsenceDecisionNeeded && renderAdminDecisionBanner('finalAbsence')}
+
+      {/* =================================================================== */}
+      {/* STATE A: SCHEDULED MATCH START GATE                                 */}
+      {/* =================================================================== */}
+      {match.status === 'scheduled' && (
         <section className="space-y-5 rounded-card border-[3px] border-gold-400 bg-red-800 p-5 sm:p-6 shadow-sticker-lg">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 rounded-pill border border-white/25 bg-red-900 px-3 py-1 text-xs font-bold text-white">
-                <CalendarClock className="h-4 w-4 text-gold-300" aria-hidden="true" />
+                <CalendarClock
+                  className="h-4 w-4 text-gold-300"
+                  aria-hidden="true"
+                />
                 <span>
-                  {lang === 'ar' ? 'موعد الجلسة:' : 'Scheduled:'}{' '}
-                  {formatDateTime(game.scheduledAt, lang, useArabicIndic)}
+                  {lang === 'ar' ? 'موعد المباراة:' : 'Scheduled:'}{' '}
+                  {formatDateTime(match.scheduledAt, lang, useArabicIndic)} ·{' '}
+                  {lang === 'ar'
+                    ? `طاولة #${formatNumber(match.tableNumber, { useArabicIndicDigits: useArabicIndic })}`
+                    : `Table #${match.tableNumber}`}
                 </span>
               </div>
               <h2 className="font-display text-fluid-2xl text-white">
                 {lang === 'ar'
-                  ? 'الجلسة جاهزة للبدء المباشر'
-                  : 'Table Ready for Live Broadcast'}
+                  ? 'المباراة جاهزة للبدء المباشر'
+                  : 'Match Ready for Live Broadcast'}
               </h2>
               <p className="max-w-2xl text-sm sm:text-base text-red-100">
-                {lang === 'ar'
-                  ? 'راجع المتسابقين الثلاثة وترتيب الفقرات ثم اضغط بدء الجلسة المباشرة لتفعيل المؤقت والجرس واحتساب النقاط.'
-                  : 'Verify the 3 seated contestants and segment lineup below, then start the live session to unlock the timer, buzzer, and point controls.'}
+                {isFinalMatch
+                  ? lang === 'ar'
+                    ? 'راجع المتأهلين ومقعد مروان سري ثم اضغط بدء النهائي الكبير. يمكنك التواصل مع أي لاعب متأخر أو تسجيل غيابه من البطاقة.'
+                    : 'Verify the two finalists and Marwan Serry’s seat, then start the Grand Final. Contact late players or record absence directly below.'
+                  : lang === 'ar'
+                    ? 'تحقق من حضور اللاعبين. يمكنك الاتصال باللاعب المتأخر أو تسجيل غيابه (فوز انسحابي فوري في ١ ضد ١) أو بدء المباراة المباشرة.'
+                    : 'Verify both players are seated. Call a late player, mark a no-show absent (immediate walkover in 1v1), or start the live match.'}
               </p>
             </div>
 
@@ -1432,8 +2236,8 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                     ? 'بانتظار اكتمال المقاعد'
                     : 'Awaiting Qualifiers'
                   : lang === 'ar'
-                    ? 'بدء الجلسة المباشرة'
-                    : 'Start Live Session'}
+                    ? 'بدء المباراة المباشرة'
+                    : 'Start Live Match'}
               </span>
             </Button>
           </div>
@@ -1444,49 +2248,64 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
               className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between rounded-card border-2 border-gold-300 bg-red-900/90 px-4 py-3 text-sm text-white"
             >
               <div className="flex items-start gap-2.5">
-                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-gold-300" aria-hidden="true" />
+                <AlertCircle
+                  className="mt-0.5 h-5 w-5 shrink-0 text-gold-300"
+                  aria-hidden="true"
+                />
                 <p className="leading-relaxed">
                   {lang === 'ar'
-                    ? `لا يمكن بدء هذه الطاولة قبل اكتمال جميع المقاعد (${formatNumber(unresolvedSeatIds.length, { useArabicIndicDigits: useArabicIndic })} مقعد بانتظار المتأهلين من الجولة السابقة).`
-                    : `This table cannot go live yet — ${unresolvedSeatIds.length} qualifier seat(s) are still TBD. Finish the previous round games or assign players in Admin Bracket first.`}
+                    ? `لا يمكن بدء هذه المباراة قبل اكتمال المقاعد (${formatNumber(unresolvedParticipants.length, { useArabicIndicDigits: useArabicIndic })} بانتظار المتأهلين من الدور السابق).`
+                    : `Cannot go live yet — ${unresolvedParticipants.length} qualifier slot(s) are still TBD. Finish upstream matches first.`}
                 </p>
               </div>
               {isSuperAdmin && (
                 <Button asChild variant="surface" size="sm" className="shrink-0">
                   <Link href="/admin/bracket">
-                    {lang === 'ar' ? 'فتح شجرة البطولة' : 'Open Bracket Builder'}
+                    {lang === 'ar' ? 'فتح شجرة البطولة' : 'Open Bracket'}
                   </Link>
                 </Button>
               )}
             </div>
           )}
 
-          <div className="grid gap-3 md:grid-cols-3">
-            {game.playerIds.map((pid, sIdx) => {
-              const player = allPlayers.find((p) => p.id === pid);
+          <div
+            className={cn(
+              'grid gap-3',
+              isThreeColLayout ? 'md:grid-cols-3' : 'md:grid-cols-2'
+            )}
+          >
+            {match.participants.map((part, sIdx) => {
+              const player = part.playerId
+                ? allPlayers.find((p) => p.id === part.playerId)
+                : undefined;
               if (!player) {
                 return (
                   <div
-                    key={`${pid}-${sIdx}`}
+                    key={`tbd-${part.slotIndex}-${sIdx}`}
                     className="flex min-h-[168px] flex-col items-center justify-center gap-2 rounded-card border-2 border-dashed border-gold-300/60 bg-red-900/60 p-5 text-center text-white"
                   >
                     <Badge variant="upcoming">
-                      {lang === 'ar'
-                        ? `مقعد #${formatNumber(sIdx + 1, { useArabicIndicDigits: useArabicIndic })} · TBD`
-                        : `SEAT #${sIdx + 1} · TBD`}
+                      {part.isBye
+                        ? 'BYE'
+                        : lang === 'ar'
+                          ? `مقعد #${formatNumber(sIdx + 1, { useArabicIndicDigits: useArabicIndic })} · TBD`
+                          : `SEAT #${sIdx + 1} · TBD`}
                     </Badge>
                     <div className="font-display text-lg text-gold-200">
-                      {game.isFinal
-                        ? lang === 'ar'
-                          ? `المتأهل النهائي #${formatNumber(sIdx + 1, { useArabicIndicDigits: useArabicIndic })}`
-                          : `Finalist Qualifier #${sIdx + 1}`
-                        : lang === 'ar'
-                          ? 'بانتظار الفائز من الجولة السابقة'
-                          : 'Awaiting Previous Round Winner'}
+                      {localizeText(
+                        lang,
+                        part.placeholderLabelEn ?? `Qualifier #${sIdx + 1}`,
+                        part.placeholderLabelAr ?? `متأهل #${sIdx + 1}`
+                      )}
                     </div>
                   </div>
                 );
               }
+
+              const showContact = canViewPlayerContactForMatch(user, match, player);
+              const isAbsent = absentSet.has(player.id);
+              const canMark = !player.isGuest && !player.isHost && !hasUnfilledSeats;
+
               return (
                 <PlayerPanel
                   key={player.id}
@@ -1495,10 +2314,25 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                   nickname={localizeText(lang, player.nickname, player.nicknameAr)}
                   avatarSeed={player.avatarSeed}
                   score={totals[player.id] ?? 0}
-                  isHost={player.isHost}
+                  yellowCards={yellowCardsByPlayer[player.id] ?? 0}
+                  redCards={redCardsByPlayer[player.id] ?? 0}
+                  isAbsent={isAbsent}
+                  isHost={Boolean(player.isGuest || player.isHost)}
                   variant="scorer"
                   surface="dark"
                   useArabicIndicDigits={useArabicIndic}
+                  disabledActions={busyAction}
+                  onContact={showContact ? () => setContactPlayer(player) : undefined}
+                  onMarkAbsent={
+                    canMark && !isAbsent
+                      ? () => setPendingAbsentPlayer(player)
+                      : undefined
+                  }
+                  onReverseAbsence={
+                    isSuperAdmin && isAbsent
+                      ? () => setPendingReverseAbsentPlayer(player)
+                      : undefined
+                  }
                 />
               );
             })}
@@ -1507,11 +2341,11 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
           <div className="space-y-2.5 border-t border-white/15 pt-4">
             <h3 className="text-sm font-extrabold uppercase ltr:tracking-wider rtl:tracking-normal text-white">
               {lang === 'ar'
-                ? `ترتيب الفقرات (${formatNumber(gameSegments.length, { useArabicIndicDigits: useArabicIndic })})`
-                : `Segment Lineup (${gameSegments.length})`}
+                ? `ترتيب الفقرات (${formatNumber(matchSegments.length, { useArabicIndicDigits: useArabicIndic })})`
+                : `Segment Lineup (${matchSegments.length})`}
             </h3>
             <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {gameSegments.map((seg, i) => (
+              {matchSegments.map((seg, i) => (
                 <li
                   key={`${seg.id}-${i}`}
                   className="flex items-center gap-2.5 rounded-input border border-red-900 bg-red-900/75 px-3 py-2.5 text-sm"
@@ -1535,22 +2369,50 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
       )}
 
       {/* =================================================================== */}
-      {/* STATE B: FINISHED GAME SUMMARY                                      */}
+      {/* STATE B: FINISHED / VOID / NEEDS REVIEW SUMMARY                     */}
       {/* =================================================================== */}
-      {game.status === 'finished' && (
+      {(match.status === 'finished' ||
+        match.status === 'void' ||
+        match.status === 'needsReview') && (
         <section className="space-y-5 rounded-card border-[3px] border-gold-400 bg-red-800 p-5 sm:p-6 shadow-sticker-lg">
-
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-1.5">
-              <h2 className="font-display text-fluid-2xl text-white">
-                {lang === 'ar'
-                  ? 'النتيجة النهائية للجلسة'
-                  : 'Official Final Standings'}
-              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-display text-fluid-2xl text-white">
+                  {match.status === 'void'
+                    ? lang === 'ar'
+                      ? 'مباراة ملغاة (غياب الطرفين)'
+                      : 'Void Match — Both Absent'
+                    : match.status === 'needsReview'
+                      ? lang === 'ar'
+                        ? 'مباراة قيد المراجعة الإدارية'
+                        : 'Match Pending Admin Review'
+                      : lang === 'ar'
+                        ? 'النتيجة النهائية المعتمدة'
+                        : 'Official Final Result'}
+                </h2>
+                {match.status === 'finished' && match.result && (
+                  <Badge variant={isWalkoverFinished ? 'gold' : 'positive'}>
+                    {isWalkoverFinished
+                      ? match.result.reason === 'bye'
+                        ? lang === 'ar'
+                          ? 'تأهل تلقائي (BYE)'
+                          : 'BYE Walkover'
+                        : lang === 'ar'
+                          ? 'النتيجة: فوز انسحابي'
+                          : 'Result: Walkover'
+                      : lang === 'ar'
+                        ? 'النتيجة: فوز عادي'
+                        : 'Result: Normal'}
+                  </Badge>
+                )}
+              </div>
               <p className="text-sm text-red-100">
-                {lang === 'ar'
-                  ? `انتهت الجلسة في ${formatDateTime(game.finishedAt, lang, useArabicIndic)} · يتأهل أعلى ${formatNumber(round?.advancePerGame ?? 1, { useArabicIndicDigits: useArabicIndic })}`
-                  : `Concluded ${formatDateTime(game.finishedAt, lang, useArabicIndic)} · Top ${round?.advancePerGame ?? 1} advance`}
+                {match.finishedAt
+                  ? lang === 'ar'
+                    ? `انتهت في ${formatDateTime(match.finishedAt, lang, useArabicIndic)}${match.type === 'group' && match.status === 'finished' ? ' · الفائز حصل على +٣ نقاط بالمجموعة' : ''}`
+                    : `Concluded ${formatDateTime(match.finishedAt, lang, useArabicIndic)}${match.type === 'group' && match.status === 'finished' ? ' · Winner awarded +3 group points' : ''}`
+                  : formatDateTime(match.scheduledAt, lang, useArabicIndic)}
               </p>
             </div>
 
@@ -1565,15 +2427,15 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                 <span>
                   {canManageHistory
                     ? lang === 'ar'
-                      ? 'إدارة سجل النقاط'
-                      : 'Manage Scoring History'
+                      ? 'إدارة سجل المباراة'
+                      : 'Manage History'
                     : lang === 'ar'
-                      ? 'مراجعة سجل النقاط'
-                      : 'Review Score History'}
+                      ? 'مراجعة السجل'
+                      : 'Review Log'}
                 </span>
               </Button>
 
-              {canReopen && (
+              {canReopen && match.status === 'finished' && (
                 <Button
                   type="button"
                   variant="destructive"
@@ -1583,35 +2445,73 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                 >
                   <RotateCcw className="h-5 w-5" aria-hidden="true" />
                   <span>
-                    {lang === 'ar' ? 'إعادة فتح الجلسة' : 'Reopen Session'}
+                    {lang === 'ar' ? 'إعادة فتح المباراة' : 'Reopen Match'}
                   </span>
                 </Button>
               )}
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div
+            className={cn(
+              'grid gap-4',
+              isThreeColLayout ? 'md:grid-cols-3' : 'md:grid-cols-2'
+            )}
+          >
             {sortedStandings.map(({ player, score, rank }) => {
-              const isWinner = game.winnerPlayerId === player.id;
-              const isAdvancing = Boolean(
-                game.advancingPlayerIds?.includes(player.id)
-              );
+              const isWinner =
+                match.status === 'finished' &&
+                match.result?.winnerId === player.id;
+              const isWalkoverWin = isWinner && isWalkoverFinished;
+              const isAbsent = absentSet.has(player.id);
+              const showContact = canViewPlayerContactForMatch(user, match, player);
+              // On a 1v1 walkover (1 absent), allow marking the 2nd player absent too -> Void!
+              const canMarkSecondAbsent =
+                match.status === 'finished' &&
+                isWalkoverFinished &&
+                match.result?.reason === 'absence' &&
+                !isFinalMatch &&
+                !isAbsent &&
+                !player.isGuest &&
+                !player.isHost;
+
               return (
-                <div key={player.id} className="space-y-2">
-                  <PlayerPanel
-                    playerId={player.id}
-                    name={localizeText(lang, player.fullName, player.fullNameAr)}
-                    nickname={localizeText(lang, player.nickname, player.nicknameAr)}
-                    avatarSeed={player.avatarSeed}
-                    score={score}
-                    rank={rank}
-                    isWinner={isWinner || isAdvancing}
-                    isHost={player.isHost}
-                    variant="scorer"
-                    surface="dark"
-                    useArabicIndicDigits={useArabicIndic}
-                  />
-                </div>
+                <PlayerPanel
+                  key={player.id}
+                  playerId={player.id}
+                  name={localizeText(lang, player.fullName, player.fullNameAr)}
+                  nickname={localizeText(lang, player.nickname, player.nicknameAr)}
+                  avatarSeed={player.avatarSeed}
+                  score={score}
+                  rank={rank}
+                  yellowCards={yellowCardsByPlayer[player.id] ?? 0}
+                  redCards={redCardsByPlayer[player.id] ?? 0}
+                  showCardCounters
+                  isWinner={isWinner}
+                  isWalkoverWinner={isWalkoverWin}
+                  isAbsent={isAbsent}
+                  isHost={Boolean(player.isGuest || player.isHost)}
+                  variant="scorer"
+                  surface="dark"
+                  useArabicIndicDigits={useArabicIndic}
+                  disabledActions={busyAction}
+                  onContact={showContact ? () => setContactPlayer(player) : undefined}
+                  onReverseAbsence={
+                    isSuperAdmin && isAbsent
+                      ? () => setPendingReverseAbsentPlayer(player)
+                      : undefined
+                  }
+                  onMarkAbsent={
+                    canMarkSecondAbsent
+                      ? () => setPendingAbsentPlayer(player)
+                      : undefined
+                  }
+                  markAbsentLabel={
+                    lang === 'ar'
+                      ? 'تسجيل غياب المنافس أيضاً (إلغاء المباراة)'
+                      : 'Mark Also Absent (Both Absent → Void)'
+                  }
+                />
               );
             })}
           </div>
@@ -1619,25 +2519,29 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
       )}
 
       {/* =================================================================== */}
-      {/* STATE C: ACTIVE LIVE SCORER CONSOLE                                 */}
+      {/* STATE C: ACTIVE LIVE / NEEDS-TIE-BREAK SCORER CONSOLE               */}
       {/* =================================================================== */}
-      {game.status === 'live' && currentSegment && (
+      {isLiveOrTieBreak && currentSegment && (
         <>
-          {/* Tie-Breaker Active Alert Banner */}
-          {isTieBreakerActive && (
+          {/* Tie-Break Active / Required Alert Banner */}
+          {(isTieBreakerActive || match.status === 'needsTieBreak') && (
             <div
               role="alert"
               className="flex flex-wrap items-center justify-between gap-3 rounded-card border-[3px] border-outline bg-gold-gradient px-4 py-3 text-red-900 shadow-sticker"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill border-2 border-outline bg-red-900 text-gold-300">
                   <AlertTriangle className="h-5 w-5" aria-hidden="true" />
                 </span>
-                <div>
+                <div className="min-w-0">
                   <div className="font-display text-lg leading-tight">
-                    {lang === 'ar'
-                      ? 'جولة الحسم الفاصلة نشطة (التعادل)'
-                      : 'Sudden-Death Tie-Breaker Active'}
+                    {isTieBreakerActive
+                      ? lang === 'ar'
+                        ? 'جولة الحسم الفاصلة نشطة (التعادل ممنوع)'
+                        : 'Sudden-Death Tie-Breaker Active'
+                      : lang === 'ar'
+                        ? 'المباراة متعادلة — يجب كسر التعادل قبل الإنهاء'
+                        : 'Match Tied — Tie-Breaker Required Before Finishing'}
                   </div>
                   <p className="text-xs sm:text-sm font-bold text-red-900">
                     {tieBreakerPlayerIds.length > 0
@@ -1647,29 +2551,46 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                               const p = seatedPlayers.find((pl) => pl.id === pid);
                               return p ? p.fullNameAr : pid;
                             })
-                            .join(' و ')} — امنح النقاط الحاسمة ثم اضغط إنهاء الجلسة.`
-                        : `Tied at cutoff: ${tieBreakerPlayerIds
+                            .join(' و ')} — سجل نقطة الحسم ثم اضغط إنهاء المباراة.`
+                        : `Tied: ${tieBreakerPlayerIds
                             .map((pid) => {
                               const p = seatedPlayers.find((pl) => pl.id === pid);
                               return p ? p.fullName : pid;
                             })
-                            .join(' & ')} — award decisive points then Finish Game.`
+                            .join(' & ')} — score the deciding point then Finish Match.`
                       : lang === 'ar'
-                        ? 'فقرة الحسم الفاصلة مفعّلة لحسم بطاقة التأهل في هذه الطاولة.'
-                        : 'Segment #16 is active to break the qualifying tie and determine the advancing player.'}
+                        ? 'لا يُسمح بإنهاء المباراة بالتعادل؛ امنح نقطة حاسمة أو افتح جولة الحسم (#١٦).'
+                        : 'Draws are forbidden — break the tie with a point or open Sudden-Death Tie-Breaker (#16).'}
                   </p>
                 </div>
               </div>
-              <Badge variant="red">
-                {lang === 'ar' ? 'فقرة ١٦ · حسم' : 'SEG #16 · TIE-BREAKER'}
-              </Badge>
+
+              {!isTieBreakerActive ? (
+                <Button
+                  type="button"
+                  variant="red"
+                  size="sm"
+                  disabled={busyAction}
+                  onClick={handleOpenTieBreakerNow}
+                >
+                  {lang === 'ar'
+                    ? 'فتح جولة الحسم (#١٦)'
+                    : 'Open Tie-Breaker (#16)'}
+                </Button>
+              ) : (
+                <Badge variant="red">
+                  {lang === 'ar' ? 'فقرة ١٦ · حسم' : 'SEG #16 · TIE-BREAKER'}
+                </Badge>
+              )}
             </div>
           )}
 
           {/* ZONE 1: SEGMENT & TIMER COMMAND BAND */}
           <section
             aria-label={
-              lang === 'ar' ? 'الفقرة الحالية ومؤقت الجولة' : 'Current Segment and Timer'
+              lang === 'ar'
+                ? 'الفقرة الحالية ومؤقت الجولة'
+                : 'Current Segment and Timer'
             }
             className={cn(
               'rounded-card border-[2.5px] bg-red-800 p-3 sm:p-3.5 lg:p-4 shadow-sticker transition-all',
@@ -1681,13 +2602,13 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
             )}
           >
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              {/* Segment Info + Dual EN/AR Title + Progress + Steppers */}
+              {/* Segment Title, Progress & Prev/Next */}
               <div className="min-w-0 flex-1 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="gold" className="font-extrabold">
                     {lang === 'ar'
-                      ? `الفقرة ${formatNumber(game.currentSegmentIndex + 1, { useArabicIndicDigits: useArabicIndic })} / ${formatNumber(game.segmentIds.length, { useArabicIndicDigits: useArabicIndic })}`
-                      : `SEGMENT ${game.currentSegmentIndex + 1} / ${game.segmentIds.length}`}
+                      ? `الفقرة ${formatNumber(match.currentSegmentIndex + 1, { useArabicIndicDigits: useArabicIndic })} / ${formatNumber(match.segmentIds.length, { useArabicIndicDigits: useArabicIndic })}`
+                      : `SEGMENT ${match.currentSegmentIndex + 1} / ${match.segmentIds.length}`}
                   </Badge>
                   {currentCatMeta && (
                     <Badge variant={currentCatMeta.badge}>
@@ -1702,30 +2623,38 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                   )}
                 </div>
 
-                {/* Bilingual Segment Headline (both EN and AR aligned cleanly to start edge) */}
                 <div className="space-y-0.5 text-start">
                   <h2 className="font-display text-fluid-xl leading-tight text-white">
-                    {localizeText(lang, currentSegment.nameEn, currentSegment.nameAr)}
+                    {localizeText(
+                      lang,
+                      currentSegment.nameEn,
+                      currentSegment.nameAr
+                    )}
                   </h2>
                   <p className="text-sm font-bold text-red-100">
-                    <span dir={lang === 'ar' ? 'ltr' : 'rtl'} className="inline-block">
-                      {lang === 'ar' ? currentSegment.nameEn : currentSegment.nameAr}
+                    <span
+                      dir={lang === 'ar' ? 'ltr' : 'rtl'}
+                      className="inline-block"
+                    >
+                      {lang === 'ar'
+                        ? currentSegment.nameEn
+                        : currentSegment.nameAr}
                     </span>
                   </p>
                 </div>
 
-                {/* Visual Segmented Progress Track */}
+                {/* Progress Track */}
                 <div
                   className="flex items-center gap-1.5"
                   aria-label={
                     lang === 'ar'
-                      ? `تقدم الفقرات: ${game.currentSegmentIndex + 1} من ${game.segmentIds.length}`
-                      : `Segment progress: ${game.currentSegmentIndex + 1} of ${game.segmentIds.length}`
+                      ? `تقدم الفقرات: ${match.currentSegmentIndex + 1} من ${match.segmentIds.length}`
+                      : `Segment progress: ${match.currentSegmentIndex + 1} of ${match.segmentIds.length}`
                   }
                 >
-                  {game.segmentIds.map((sid, idx) => {
-                    const isCurrent = idx === game.currentSegmentIndex;
-                    const isDone = idx < game.currentSegmentIndex;
+                  {match.segmentIds.map((sid, idx) => {
+                    const isCurrent = idx === match.currentSegmentIndex;
+                    const isDone = idx < match.currentSegmentIndex;
                     const isTb = sid === 'seg-16';
                     return (
                       <span
@@ -1745,7 +2674,7 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                   })}
                 </div>
 
-                {/* Prev / Next Segment Controls (>= 56px tall) */}
+                {/* Prev / Next Segment Controls (>= 56px) */}
                 <div className="flex flex-wrap items-center gap-2 pt-0.5">
                   <Button
                     type="button"
@@ -1753,7 +2682,7 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                     size="scorer"
                     disabled={!hasPrevSeg || busyAction}
                     onClick={() =>
-                      handleSegmentNavClick(game.currentSegmentIndex - 1)
+                      handleSegmentNavClick(match.currentSegmentIndex - 1)
                     }
                     className="flex-1 sm:flex-none px-4"
                   >
@@ -1761,7 +2690,9 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                       className="h-5 w-5 shrink-0 rtl:rotate-180"
                       aria-hidden="true"
                     />
-                    <span>{lang === 'ar' ? 'الفقرة السابقة' : 'Prev Segment'}</span>
+                    <span>
+                      {lang === 'ar' ? 'الفقرة السابقة' : 'Prev Segment'}
+                    </span>
                   </Button>
 
                   <Button
@@ -1770,11 +2701,13 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                     size="scorer"
                     disabled={!hasNextSeg || busyAction}
                     onClick={() =>
-                      handleSegmentNavClick(game.currentSegmentIndex + 1)
+                      handleSegmentNavClick(match.currentSegmentIndex + 1)
                     }
                     className="flex-1 sm:flex-none px-4"
                   >
-                    <span>{lang === 'ar' ? 'الفقرة التالية' : 'Next Segment'}</span>
+                    <span>
+                      {lang === 'ar' ? 'الفقرة التالية' : 'Next Segment'}
+                    </span>
                     <ChevronRight
                       className="h-5 w-5 shrink-0 rtl:rotate-180"
                       aria-hidden="true"
@@ -1783,14 +2716,14 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                 </div>
               </div>
 
-              {/* Segment Countdown Timer (Start / Pause / Reset >= 56px + 5s Visual Warning) */}
+              {/* Segment Timer */}
               <div className="flex flex-row items-center justify-between gap-3 border-t border-white/15 pt-3 sm:justify-center lg:border-t-0 lg:border-s lg:border-white/15 lg:ps-4 lg:pt-0">
                 <TimerRing
                   durationSec={
-                    game.timer?.durationSec ?? currentSegment.durationSec ?? 45
+                    match.timer?.durationSec ?? currentSegment.durationSec ?? 45
                   }
                   remainingSec={displayRemainingSec}
-                  status={game.timer?.status ?? 'idle'}
+                  status={match.timer?.status ?? 'idle'}
                   size="sm"
                   surface="stage"
                   showControls
@@ -1805,18 +2738,65 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
             </div>
           </section>
 
-          {/* ZONE 2: 3-PLAYER STAGE ARENA */}
+          {/* ZONE 2: PLAYER PANELS (2 columns for 1v1, 3 columns for Grand Final) */}
           <section
-            aria-label={lang === 'ar' ? 'المتسابقون الثلاثة' : 'Three Contestants'}
+            aria-label={
+              isFinalMatch
+                ? lang === 'ar'
+                  ? 'المتسابقون في النهائي الكبير'
+                  : 'Grand Final Participants'
+                : lang === 'ar'
+                  ? 'المتنافسان (١ ضد ١)'
+                  : '1v1 Contestants'
+            }
             className="space-y-2.5"
           >
-            {/* Active Buzz Status + Clear Buzz Bar */}
+            {/* Buzz Status Bar + Bonus Live Recent Plays Ticker */}
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-xs sm:text-sm font-bold text-red-100">
-                {lang === 'ar'
-                  ? 'اضغط "ضغط الجرس أولاً" أو اضغط بطاقة اللاعب لاختياره قبل احتساب النقاط.'
-                  : 'Tap "Buzzed First" or any player card to select them for one-tap scoring.'}
-              </div>
+              {recentPlays.length > 0 ? (
+                <div
+                  className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-xs"
+                  aria-label={lang === 'ar' ? 'آخر الحركات' : 'Recent plays'}
+                >
+                  <span className="font-extrabold uppercase text-gold-200">
+                    {lang === 'ar' ? 'آخر الحركات:' : 'Recent:'}
+                  </span>
+                  {recentPlays.map((ev) => {
+                    const pl = seatedPlayers.find((p) => p.id === ev.playerId);
+                    const d = formatScoreEventDisplay(ev, lang, useArabicIndic);
+                    return (
+                      <span
+                        key={ev.id}
+                        className="inline-flex max-w-full items-center gap-1.5 rounded-pill border border-white/20 bg-red-800 px-2.5 py-1 font-bold text-white"
+                      >
+                        {d.cardType && (
+                          <DisciplinaryCardIcon card={d.cardType} size="xs" />
+                        )}
+                        <span className="truncate max-w-[220px]">
+                          {pl
+                            ? localizeText(
+                                lang,
+                                pl.fullName.split(' ')[0] ?? pl.fullName,
+                                pl.fullNameAr.split(' ')[0] ?? pl.fullNameAr
+                              )
+                            : ev.playerId}
+                          : {d.kindLabel}
+                          {d.userNote ? ` (${d.userNote})` : ''}
+                        </span>
+                        <span className="text-[10px] text-red-100/80 tabular-nums">
+                          {formatTimeShort(ev.createdAt, lang, useArabicIndic)}
+                        </span>
+                      </span>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-xs sm:text-sm font-bold text-red-100">
+                  {lang === 'ar'
+                    ? 'استخدم +١ أو −١ أو البطاقة الصفراء (−١) أو الحمراء (−٢) مباشرة لكل لاعب.'
+                    : 'Use +1, −1, Yellow card (−1), or Red card (−2) per player with optional note.'}
+                </div>
+              )}
 
               {buzzedPlayer && (
                 <button
@@ -1825,7 +2805,10 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                   onClick={handleClearBuzz}
                   className="inline-flex min-h-[44px] items-center gap-1.5 rounded-button border-2 border-outline bg-white px-3.5 py-2 text-xs sm:text-sm font-extrabold text-red-900 shadow-sticker-sm sticker-press hover:bg-paper focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                 >
-                  <XCircle className="h-4 w-4 text-negative shrink-0" aria-hidden="true" />
+                  <XCircle
+                    className="h-4 w-4 text-negative shrink-0"
+                    aria-hidden="true"
+                  />
                   <span>
                     {lang === 'ar'
                       ? `مسح الجرس (${buzzedPlayer.fullNameAr})`
@@ -1835,11 +2818,23 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
               )}
             </div>
 
-            {/* 3 Columns Side-by-Side on Tablet Landscape (md+) / Stacked on Phones */}
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:gap-4">
+            {/* Hybrid Panels: 2-col for 1v1, 3-col for Final; direct 4-button scoring visible on md+ */}
+            <div
+              className={cn(
+                'grid grid-cols-1 gap-3 lg:gap-4',
+                isThreeColLayout ? 'md:grid-cols-3' : 'md:grid-cols-2'
+              )}
+            >
               {seatedPlayers.map((player) => {
                 const isSelected = selectedPlayer?.id === player.id;
-                const isBuzzed = game.activeBuzzPlayerId === player.id;
+                const isBuzzed = match.activeBuzzPlayerId === player.id;
+                const isAbsent = absentSet.has(player.id);
+                const showContact = canViewPlayerContactForMatch(
+                  user,
+                  match,
+                  player
+                );
+
                 return (
                   <PlayerPanel
                     key={player.id}
@@ -1849,36 +2844,127 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                     avatarSeed={player.avatarSeed}
                     score={totals[player.id] ?? 0}
                     rank={rankByPlayerId[player.id]}
+                    yellowCards={yellowCardsByPlayer[player.id] ?? 0}
+                    redCards={redCardsByPlayer[player.id] ?? 0}
+                    showCardCounters
                     isSelected={isSelected}
                     isBuzzed={isBuzzed}
-                    isHost={player.isHost}
+                    isAbsent={isAbsent}
+                    isHost={Boolean(player.isGuest || player.isHost)}
                     recentDelta={recentDeltaByPlayer[player.id] ?? null}
                     variant="scorer"
                     surface="dark"
                     useArabicIndicDigits={useArabicIndic}
+                    disabledActions={busyAction}
+                    scoringControlsClassName="hidden md:grid"
                     onSelect={() => setSelectedPlayerId(player.id)}
                     onBuzz={() => handleBuzz(player)}
+                    onPointPlus={() => handleApplyPoint(player, 1)}
+                    onPointMinus={() => handleApplyPoint(player, -1)}
+                    onYellowCard={() => handleApplyCard(player, 'yellow')}
+                    onRedCard={() => handleApplyCard(player, 'red')}
+                    onContact={
+                      showContact ? () => setContactPlayer(player) : undefined
+                    }
+                    onMarkAbsent={
+                      !player.isGuest && !player.isHost && !isAbsent
+                        ? () => setPendingAbsentPlayer(player)
+                        : undefined
+                    }
+                    onReverseAbsence={
+                      isSuperAdmin && isAbsent
+                        ? () => setPendingReverseAbsentPlayer(player)
+                        : undefined
+                    }
                   />
                 );
               })}
             </div>
           </section>
 
-          {/* ZONE 3: SINGLE SELECTED-PLAYER ACTION DOCK (Sticky on Phones, Docked on Tablet/Desktop) */}
+          {/* ZONE 3A: TABLET / DESKTOP ACTION BAR (Optional Note + Undo + Finish Match — md+) */}
           <section
             aria-label={
-              lang === 'ar' ? 'شريط احتساب النقاط والتراجع' : 'Selected Player Scoring Dock'
+              lang === 'ar'
+                ? 'الملاحظة والتراجع وإنهاء المباراة'
+                : 'Optional Note, Undo and Finish Match'
             }
-            className={cn(
-              'fixed inset-x-0 bottom-0 z-30 border-t-[3px] border-gold-400 bg-red-900/95 px-3 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_28px_rgb(var(--ink-rgb)/0.65)] backdrop-blur-md',
-              'md:static md:inset-auto md:z-auto md:rounded-card md:border-[3px] md:border-outline md:bg-red-800 md:p-4 lg:p-5 md:shadow-sticker-lg'
-            )}
+            className="hidden md:block rounded-card border-[3px] border-outline bg-red-800 p-4 shadow-sticker-lg"
           >
-            <div className="mx-auto max-w-content-wide space-y-2.5 md:space-y-3.5">
-              {/* Mobile Quick-Switch Target Pills (< md) for One-Handed Phone Operation */}
-              <div className="flex items-center gap-1.5 md:hidden">
+            <div className="flex flex-wrap lg:flex-nowrap items-center gap-3">
+              {/* Shared Optional Note attached to next +1 / -1 / Yellow / Red action */}
+              <div className="min-w-[200px] flex-1">
+                <label htmlFor="desktop-scorer-note" className="sr-only">
+                  {lang === 'ar'
+                    ? 'ملاحظة اختيارية للنقطة أو البطاقة القادمة'
+                    : 'Optional note for next point or card'}
+                </label>
+                <Input
+                  id="desktop-scorer-note"
+                  type="text"
+                  maxLength={NOTE_MAX_LENGTH}
+                  value={actionNote}
+                  onChange={(e) => setActionNote(e.target.value)}
+                  placeholder={
+                    lang === 'ar'
+                      ? 'ملاحظة اختيارية تُرفق مع الحركة القادمة (+١ / −١ / بطاقة)...'
+                      : 'Optional note attached to next +1 / −1 / card tap...'
+                  }
+                  className="min-h-[56px]"
+                />
+              </div>
+
+              {/* Undo Last Action (with exact event preview, including Yellow/Red card wording) */}
+              <button
+                type="button"
+                disabled={!nextUndoableEvent || busyAction}
+                onClick={handleUndoLast}
+                className="flex min-h-[56px] shrink-0 items-center justify-center gap-2 rounded-button border-[2.5px] border-outline bg-white px-4 text-sm font-extrabold text-red-900 shadow-sticker sticker-press hover:bg-paper disabled:opacity-45 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+              >
+                <Undo2 className="h-5 w-5 shrink-0" aria-hidden="true" />
+                <span className="max-w-[260px] truncate">
+                  {undoPreview
+                    ? lang === 'ar'
+                      ? `تراجع: ${undoPreview.kindLabel}${nextUndoablePlayer ? ` · ${nextUndoablePlayer.fullNameAr.split(' ')[0]}` : ''}`
+                      : `Undo ${undoPreview.kindLabel}${nextUndoablePlayer ? ` · ${nextUndoablePlayer.fullName.split(' ')[0]}` : ''}`
+                    : lang === 'ar'
+                      ? 'تراجع'
+                      : 'Undo'}
+                </span>
+              </button>
+
+              {/* Finish Match */}
+              <Button
+                type="button"
+                variant="destructive"
+                size="scorer"
+                disabled={busyAction}
+                onClick={() => setConfirmFinishOpen(true)}
+                className="shrink-0 px-5"
+              >
+                <Flag className="h-5 w-5 shrink-0" aria-hidden="true" />
+                <span>
+                  {lang === 'ar' ? 'إنهاء المباراة' : 'Finish Match'}
+                </span>
+              </Button>
+            </div>
+          </section>
+
+          {/* ZONE 3B: ONE-HANDED PHONE STICKY THUMB DOCK (< md only) */}
+          <section
+            aria-label={
+              lang === 'ar'
+                ? 'شريط التحكيم بيد واحدة'
+                : 'One-Handed Scoring Thumb Dock'
+            }
+            className="fixed inset-x-0 bottom-0 z-30 border-t-[3px] border-gold-400 bg-red-900/95 px-2.5 pt-2 pb-[calc(0.65rem+env(safe-area-inset-bottom))] shadow-[0_-8px_28px_rgb(var(--ink-rgb)/0.7)] backdrop-blur-md md:hidden"
+          >
+            <div className="mx-auto max-w-lg space-y-2">
+              {/* Row 1: One-Handed Player Switcher Pills */}
+              <div className="flex items-center gap-1.5">
                 {seatedPlayers.map((player) => {
                   const active = selectedPlayer?.id === player.id;
+                  const isAbsent = absentSet.has(player.id);
                   const firstName = localizeText(
                     lang,
                     player.fullName.split(' ')[0] ?? player.fullName,
@@ -1888,10 +2974,11 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                     <button
                       key={player.id}
                       type="button"
+                      disabled={isAbsent}
                       aria-pressed={active}
                       onClick={() => setSelectedPlayerId(player.id)}
                       className={cn(
-                        'flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-1.5 rounded-button border-2 px-1.5 py-1 text-xs font-extrabold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
+                        'flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-1.5 rounded-button border-2 px-2 py-1 text-xs font-extrabold transition-colors disabled:opacity-45 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
                         active
                           ? 'border-white bg-blue-600 text-white shadow-sticker-sm'
                           : 'border-red-700 bg-red-800 text-red-100'
@@ -1908,315 +2995,165 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
                 })}
               </div>
 
-              {/* Row 1 (Tablet/Desktop Target Header + One-Tap Segment Presets >= 56px) */}
-              <div className="flex flex-col gap-2.5 md:flex-row md:items-center md:justify-between">
-                {/* Selected Target Badge (Tablet/Desktop) */}
-                {selectedPlayer && (
-                  <div className="hidden md:flex min-w-0 items-center gap-3 rounded-input border-2 border-white bg-blue-600 px-3.5 py-2 text-white shadow-sticker-sm">
-                    <PlayerAvatar
-                      name={localizeText(
-                        lang,
-                        selectedPlayer.fullName,
-                        selectedPlayer.fullNameAr
-                      )}
-                      avatarSeed={selectedPlayer.avatarSeed}
-                      size="sm"
-                      isHost={selectedPlayer.isHost}
-                      className="h-10 w-10"
-                    />
-                    <div className="min-w-0">
-                      <div className="text-[11px] font-bold uppercase ltr:tracking-wider rtl:tracking-normal text-blue-100">
-                        {lang === 'ar' ? 'اللاعب المختار للنقاط' : 'SCORING TARGET'}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="truncate font-display text-lg leading-none text-white">
-                          {localizeText(
-                            lang,
-                            selectedPlayer.fullName,
-                            selectedPlayer.fullNameAr
-                          )}
-                        </span>
-                        <AnimatedNumber
-                          value={totals[selectedPlayer.id] ?? 0}
-                          useArabicIndicDigits={useArabicIndic}
-                          className="rounded-pill bg-red-900 px-2 py-0.5 font-score text-lg font-black leading-none text-gold-300"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Dynamic Preset Point Buttons from Current Segment (>= 56px) */}
-                <div className="grid flex-1 grid-cols-3 gap-2 md:max-w-xl">
-                  {currentSegment.presetPoints.map((pts) => {
-                    const isPos = pts > 0;
-                    return (
-                      <button
-                        key={pts}
-                        type="button"
-                        disabled={busyAction || !selectedPlayer}
-                        onClick={() => handleApplyPoints(pts, 'preset')}
-                        aria-label={
-                          selectedPlayer
-                            ? lang === 'ar'
-                              ? `تطبيق ${pts > 0 ? `+${pts}` : pts} نقطة على ${selectedPlayer.fullNameAr}`
-                              : `Apply ${pts > 0 ? `+${pts}` : pts} points to ${selectedPlayer.fullName}`
-                            : undefined
-                        }
-                        className={cn(
-                          'flex min-h-[56px] items-center justify-center gap-1 rounded-button border-[2.5px] border-outline font-score text-2xl sm:text-3xl font-black tabular-nums shadow-sticker sticker-press transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
-                          isPos
-                            ? 'bg-positive-soft text-positive-ink hover:bg-positive hover:text-ink'
-                            : 'bg-negative text-white hover:bg-red-900'
-                        )}
-                      >
-                        {isPos ? (
-                          <Plus
-                            className="h-5 w-5 stroke-[3] shrink-0"
-                            aria-hidden="true"
-                          />
-                        ) : (
-                          <Minus
-                            className="h-5 w-5 stroke-[3] shrink-0"
-                            aria-hidden="true"
-                          />
-                        )}
-                        <span>
-                          {formatNumber(Math.abs(pts), {
-                            useArabicIndicDigits: useArabicIndic,
-                          })}
-                        </span>
-                      </button>
-                    );
-                  })}
+              {/* Collapsible Optional Note Input */}
+              {mobileNoteOpen && (
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="text"
+                    maxLength={NOTE_MAX_LENGTH}
+                    value={actionNote}
+                    onChange={(e) => setActionNote(e.target.value)}
+                    placeholder={
+                      lang === 'ar'
+                        ? 'ملاحظة اختيارية للنقطة أو البطاقة...'
+                        : 'Optional note for next point or card...'
+                    }
+                    aria-label={lang === 'ar' ? 'ملاحظة اختيارية' : 'Optional note'}
+                    className="min-h-[44px] flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMobileNoteOpen(false)}
+                    aria-label={lang === 'ar' ? 'إغلاق الملاحظة' : 'Close note'}
+                    className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-button border-2 border-outline bg-white text-red-900"
+                  >
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </button>
                 </div>
-              </div>
-
-              {/* Mobile Expandable Custom Amount + Note Panel (< md) */}
-              {mobileCustomOpen && (
-                <form
-                  onSubmit={handleCustomSubmit}
-                  noValidate
-                  className="space-y-2 rounded-input border-2 border-gold-400 bg-red-800 p-2.5 md:hidden"
-                >
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={toggleCustomSign}
-                      aria-label={
-                        lang === 'ar'
-                          ? 'تبديل الإشارة موجب أو سالب'
-                          : 'Toggle positive or negative sign'
-                      }
-                      className="flex min-h-[56px] w-14 shrink-0 items-center justify-center rounded-button border-2 border-outline bg-white text-xl font-black text-red-900 shadow-sticker-sm sticker-press"
-                    >
-                      ±
-                    </button>
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={7}
-                      value={customPoints}
-                      aria-invalid={Boolean(customError)}
-                      aria-describedby={customError ? 'mobile-custom-score-error' : undefined}
-                      onChange={(e) => {
-                        setCustomPoints(e.target.value);
-                        if (customError) setCustomError(null);
-                      }}
-                      placeholder="+15 / -10"
-                      aria-label={lang === 'ar' ? 'قيمة نقاط مخصصة' : 'Custom points amount'}
-                      className="min-h-[56px] w-20 shrink-0 px-2 text-center font-score text-2xl font-black"
-                    />
-                    <Input
-                      type="text"
-                      maxLength={NOTE_MAX_LENGTH}
-                      value={customNote}
-                      onChange={(e) => setCustomNote(e.target.value)}
-                      placeholder={
-                        lang === 'ar' ? 'ملاحظة اختيارية...' : 'Optional note...'
-                      }
-                      aria-label={lang === 'ar' ? 'ملاحظة اختيارية' : 'Optional note'}
-                      className="min-h-[56px] min-w-0 flex-1"
-                    />
-                  </div>
-                  {customError && (
-                    <p
-                      id="mobile-custom-score-error"
-                      role="alert"
-                      className="flex items-center gap-1.5 rounded-input border border-white/25 bg-red-900 px-2.5 py-1.5 text-xs font-bold text-gold-200"
-                    >
-                      <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      <span>{customError}</span>
-                    </p>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="scorer"
-                      className="flex-1"
-                      onClick={() => {
-                        setMobileCustomOpen(false);
-                        setCustomError(null);
-                      }}
-                    >
-                      {lang === 'ar' ? 'إغلاق' : 'Close'}
-                    </Button>
-                    <Button
-                      type="submit"
-                      variant="gold"
-                      size="scorer"
-                      disabled={busyAction}
-                      className="flex-[2]"
-                    >
-                      <Check className="h-5 w-5" aria-hidden="true" />
-                      <span>
-                        {lang === 'ar' ? 'تطبيق النقاط' : 'Apply Custom'}
-                      </span>
-                    </Button>
-                  </div>
-                </form>
               )}
 
-              {/* Row 2: Custom +/- with Note (single sleek row on lg+), Undo Last Action, and Finish Game */}
-              <div className="space-y-2 lg:border-t lg:border-white/15 lg:pt-3">
-                <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
-                  {/* Inline Custom +/- & Note Form on Tablet/Desktop (md+) */}
-                  <form
-                    onSubmit={handleCustomSubmit}
-                    noValidate
-                    className="hidden md:flex min-w-0 flex-1 flex-nowrap items-center gap-2"
-                  >
-                    <button
-                      type="button"
-                      onClick={toggleCustomSign}
-                      aria-label={
-                        lang === 'ar'
-                          ? 'تبديل الإشارة موجب أو سالب'
-                          : 'Toggle positive or negative sign'
-                      }
-                      className="flex min-h-[56px] w-14 shrink-0 items-center justify-center rounded-button border-[2.5px] border-outline bg-white text-xl font-black text-red-900 shadow-sticker-sm sticker-press hover:bg-paper focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-                    >
-                      ±
-                    </button>
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={7}
-                      value={customPoints}
-                      aria-invalid={Boolean(customError)}
-                      aria-describedby={customError ? 'desktop-custom-score-error' : undefined}
-                      onChange={(e) => {
-                        setCustomPoints(e.target.value);
-                        if (customError) setCustomError(null);
-                      }}
-                      placeholder="+15 / -10"
-                      aria-label={lang === 'ar' ? 'قيمة نقاط مخصصة' : 'Custom point delta'}
-                      className="min-h-[56px] w-20 shrink-0 px-2 text-center font-score text-2xl font-black"
-                    />
-                    <Input
-                      type="text"
-                      maxLength={NOTE_MAX_LENGTH}
-                      value={customNote}
-                      onChange={(e) => setCustomNote(e.target.value)}
-                      placeholder={
-                        lang === 'ar'
-                          ? 'ملاحظة اختيارية...'
-                          : 'Optional note...'
-                      }
-                      aria-label={lang === 'ar' ? 'ملاحظة اختيارية' : 'Optional score note'}
-                      className="min-h-[56px] min-w-[110px] flex-1"
-                    />
-                    <Button
-                      type="submit"
-                      variant="gold"
-                      size="scorer"
-                      disabled={busyAction || !selectedPlayer}
-                      className="shrink-0 px-4"
-                    >
-                      <Check className="h-5 w-5 shrink-0" aria-hidden="true" />
-                      <span>{lang === 'ar' ? 'تطبيق' : 'Apply'}</span>
-                    </Button>
-                  </form>
+              {/* Row 2: The ONLY 4 Scoring Controls (+1, −1, Yellow −1, Red −2), >= 56px tall */}
+              <div className="grid grid-cols-4 gap-1.5">
+                <button
+                  type="button"
+                  disabled={busyAction || !selectedPlayer || absentSet.has(selectedPlayer.id)}
+                  onClick={() => selectedPlayer && handleApplyPoint(selectedPlayer, 1)}
+                  aria-label={
+                    selectedPlayer
+                      ? lang === 'ar'
+                        ? `منح +١ نقطة إلى ${selectedPlayer.fullNameAr}`
+                        : `Award +1 point to ${selectedPlayer.fullName}`
+                      : '+1'
+                  }
+                  className="flex min-h-[56px] flex-col items-center justify-center rounded-button border-[2.5px] border-outline bg-positive-soft font-score text-2xl font-black tabular-nums text-positive-ink shadow-sticker-sm sticker-press disabled:opacity-45"
+                >
+                  <span className="inline-flex items-center gap-0.5 leading-none">
+                    <Plus className="h-4 w-4 stroke-[3]" aria-hidden="true" />
+                    {formatNumber(1, { useArabicIndicDigits: useArabicIndic })}
+                  </span>
+                </button>
 
-                  {/* Mobile Custom Toggle + Always-Visible Undo + Finish Game (>= 56px) */}
-                  <div className="grid shrink-0 grid-cols-3 gap-1.5 xs:gap-2 md:flex md:flex-nowrap md:items-center md:justify-end">
-                    {/* Mobile Custom Trigger (< md only) */}
-                    <button
-                      type="button"
-                      onClick={() => setMobileCustomOpen((prev) => !prev)}
-                      aria-expanded={mobileCustomOpen}
-                      className={cn(
-                        'flex min-h-[56px] min-w-0 items-center justify-center gap-1 rounded-button border-[2.5px] border-outline px-2 text-xs xs:text-sm font-extrabold shadow-sticker-sm sticker-press md:hidden focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500',
-                        mobileCustomOpen
-                          ? 'bg-gold-400 text-red-900'
-                          : 'bg-white text-red-900'
-                      )}
-                    >
-                      <SlidersHorizontal className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      <span className="truncate">
-                        {lang === 'ar' ? 'مخصص' : 'Custom'}
-                      </span>
-                    </button>
+                <button
+                  type="button"
+                  disabled={busyAction || !selectedPlayer || absentSet.has(selectedPlayer.id)}
+                  onClick={() => selectedPlayer && handleApplyPoint(selectedPlayer, -1)}
+                  aria-label={
+                    selectedPlayer
+                      ? lang === 'ar'
+                        ? `خصم −١ نقطة من ${selectedPlayer.fullNameAr}`
+                        : `Deduct −1 point from ${selectedPlayer.fullName}`
+                      : '−1'
+                  }
+                  className="flex min-h-[56px] flex-col items-center justify-center rounded-button border-[2.5px] border-outline bg-white font-score text-2xl font-black tabular-nums text-negative shadow-sticker-sm sticker-press disabled:opacity-45"
+                >
+                  <span className="inline-flex items-center gap-0.5 leading-none">
+                    <Minus className="h-4 w-4 stroke-[3]" aria-hidden="true" />
+                    {formatNumber(1, { useArabicIndicDigits: useArabicIndic })}
+                  </span>
+                </button>
 
-                    {/* Always-Visible Undo Last Action with Live Event Preview */}
-                    <button
-                      type="button"
-                      disabled={!nextUndoableEvent || busyAction}
-                      onClick={handleUndoLast}
-                      className="flex min-h-[56px] min-w-0 items-center justify-center gap-1 rounded-button border-[2.5px] border-outline bg-white px-2 md:px-4 text-xs xs:text-sm font-extrabold text-red-900 shadow-sticker sticker-press hover:bg-paper disabled:opacity-45 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-                    >
-                      <Undo2 className="h-4 w-4 md:h-5 md:w-5 shrink-0" aria-hidden="true" />
-                      <span className="truncate md:hidden">
-                        {nextUndoableEvent
-                          ? lang === 'ar'
-                            ? `تراجع ${formatSignedDelta(nextUndoableEvent.delta)}`
-                            : `Undo ${formatSignedDelta(nextUndoableEvent.delta)}`
-                          : lang === 'ar'
-                            ? 'تراجع'
-                            : 'Undo'}
-                      </span>
-                      <span className="hidden truncate md:inline">
-                        {nextUndoableEvent
-                          ? lang === 'ar'
-                            ? `تراجع (${formatSignedDelta(nextUndoableEvent.delta)})`
-                            : `Undo ${formatSignedDelta(nextUndoableEvent.delta)}${nextUndoablePlayer ? ` · ${nextUndoablePlayer.fullName.split(' ')[0]}` : ''}`
-                          : lang === 'ar'
-                            ? 'تراجع'
-                            : 'Undo'}
-                      </span>
-                    </button>
+                <button
+                  type="button"
+                  disabled={busyAction || !selectedPlayer || absentSet.has(selectedPlayer.id)}
+                  onClick={() => selectedPlayer && handleApplyCard(selectedPlayer, 'yellow')}
+                  aria-label={
+                    selectedPlayer
+                      ? lang === 'ar'
+                        ? `بطاقة صفراء (−١) إلى ${selectedPlayer.fullNameAr}`
+                        : `Yellow card (−1) to ${selectedPlayer.fullName}`
+                      : 'Yellow card (−1)'
+                  }
+                  className="flex min-h-[56px] items-center justify-center gap-1 rounded-button border-[2.5px] border-outline bg-gold-400 px-1 text-red-900 shadow-sticker-sm sticker-press disabled:opacity-45"
+                >
+                  <DisciplinaryCardIcon card="yellow" size="xs" />
+                  <span className="font-score text-xl font-black tabular-nums leading-none">
+                    −{formatNumber(1, { useArabicIndicDigits: useArabicIndic })}
+                  </span>
+                </button>
 
-                    {/* Finish Game (Explicit Confirmation Dialog) */}
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="scorer"
-                      disabled={busyAction}
-                      onClick={() => setConfirmFinishOpen(true)}
-                      className="min-w-0 px-2 md:px-5 text-xs xs:text-sm md:text-base"
-                    >
-                      <Flag className="h-4 w-4 md:h-5 md:w-5 shrink-0" aria-hidden="true" />
-                      <span className="truncate md:hidden">
-                        {lang === 'ar' ? 'إنهاء' : 'Finish'}
-                      </span>
-                      <span className="hidden truncate md:inline">
-                        {lang === 'ar' ? 'إنهاء الجلسة' : 'Finish Game'}
-                      </span>
-                    </Button>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  disabled={busyAction || !selectedPlayer || absentSet.has(selectedPlayer.id)}
+                  onClick={() => selectedPlayer && handleApplyCard(selectedPlayer, 'red')}
+                  aria-label={
+                    selectedPlayer
+                      ? lang === 'ar'
+                        ? `بطاقة حمراء (−٢) إلى ${selectedPlayer.fullNameAr}`
+                        : `Red card (−2) to ${selectedPlayer.fullName}`
+                      : 'Red card (−2)'
+                  }
+                  className="flex min-h-[56px] items-center justify-center gap-1 rounded-button border-[2.5px] border-outline bg-negative px-1 text-white shadow-sticker-sm sticker-press disabled:opacity-45"
+                >
+                  <DisciplinaryCardIcon card="red" size="xs" />
+                  <span className="font-score text-xl font-black tabular-nums leading-none">
+                    −{formatNumber(2, { useArabicIndicDigits: useArabicIndic })}
+                  </span>
+                </button>
+              </div>
 
-                {customError && (
-                  <p
-                    id="desktop-custom-score-error"
-                    role="alert"
-                    className="hidden md:flex items-center gap-1.5 rounded-input border border-white/25 bg-red-900 px-3 py-1.5 text-xs font-bold text-gold-200"
-                  >
-                    <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span>{customError}</span>
-                  </p>
-                )}
+              {/* Row 3: Note Toggle + Undo + Finish Match (>= 56px) */}
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setMobileNoteOpen((prev) => !prev)}
+                  aria-expanded={mobileNoteOpen}
+                  className={cn(
+                    'flex min-h-[56px] min-w-0 items-center justify-center gap-1 rounded-button border-[2.5px] border-outline px-2 text-xs font-extrabold shadow-sticker-sm sticker-press',
+                    mobileNoteOpen || actionNote.trim()
+                      ? 'bg-gold-300 text-red-900'
+                      : 'bg-white text-red-900'
+                  )}
+                >
+                  <MessageSquarePlus
+                    className="h-4 w-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">
+                    {actionNote.trim()
+                      ? lang === 'ar'
+                        ? 'ملاحظة ✓'
+                        : 'Note ✓'
+                      : lang === 'ar'
+                        ? 'ملاحظة'
+                        : 'Note'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={!nextUndoableEvent || busyAction}
+                  onClick={handleUndoLast}
+                  className="flex min-h-[56px] min-w-0 items-center justify-center gap-1 rounded-button border-[2.5px] border-outline bg-white px-2 text-xs font-extrabold text-red-900 shadow-sticker-sm sticker-press disabled:opacity-45"
+                >
+                  <Undo2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="truncate">
+                    {lang === 'ar' ? 'تراجع' : 'Undo'}
+                  </span>
+                </button>
+
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="scorer"
+                  disabled={busyAction}
+                  onClick={() => setConfirmFinishOpen(true)}
+                  className="min-w-0 px-2 text-xs"
+                >
+                  <Flag className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="truncate">
+                    {lang === 'ar' ? 'إنهاء' : 'Finish'}
+                  </span>
+                </Button>
               </div>
             </div>
           </section>
@@ -2224,126 +3161,194 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
       )}
 
       {/* =================================================================== */}
-      {/* SESSION HISTORY & FULL SCORE CONTROL DRAWER (lazy-loaded on open)   */}
+      {/* DIALOGS: HISTORY, CONTACT, ABSENCE, LIFECYCLE, IMPACT PREVIEW       */}
       {/* =================================================================== */}
       {historyOpen && (
         <SessionHistoryDrawer
           open={historyOpen}
           onOpenChange={setHistoryOpen}
-          game={game}
+          game={match}
           players={seatedPlayers}
           segments={allSegments}
           users={allUsers}
           scoreEvents={scoreEvents}
+          absenceEvents={absenceEvents}
+          absentPlayerIds={absentPlayerIds}
           buzzEvents={buzzEvents}
           useArabicIndicDigits={useArabicIndic}
           onChanged={loadConsoleState}
         />
       )}
 
-      {/* =================================================================== */}
-      {/* CONFIRMATION DIALOGS (Destructive & State-Transition Guardrails)    */}
-      {/* =================================================================== */}
+      {/* Role-Gated Contact Dialog (automatically logs contact.viewed audit entry) */}
+      <PlayerContactDialog
+        open={Boolean(contactPlayer)}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setContactPlayer(null);
+        }}
+        player={contactPlayer}
+        actorUserId={user?.id}
+        matchId={match.id}
+        tableLabel={localizeText(lang, match.tableName, match.tableNameAr)}
+      />
 
-      {/* 1. Confirm Start Live Session */}
+      {/* 1. Confirm Start Live Match */}
       <ConfirmDialog
         open={confirmStartOpen}
         onOpenChange={setConfirmStartOpen}
-        title={lang === 'ar' ? 'بدء الجلسة المباشرة؟' : 'Start Live Session?'}
+        title={lang === 'ar' ? 'بدء المباراة المباشرة؟' : 'Start Live Match?'}
         description={
           lang === 'ar'
-            ? `سيتم تحويل "${localizeText(lang, game.tableName, game.tableNameAr)}" إلى حالة مباشر وتفعيل شاشة العرض وتسجيل النقاط.`
-            : `This sets "${game.tableName}" to LIVE, starts the broadcast timer at Segment 1, and notifies open Big Screen displays.`
+            ? `سيتم تحويل "${localizeText(lang, match.tableName, match.tableNameAr)}" إلى حالة مباشر وتفعيل شاشة العرض وتسجيل النقاط والبطاقات.`
+            : `This sets "${match.tableName}" to LIVE, initializes the timer at Segment 1, and syncs open Big Screen displays.`
         }
-        confirmLabel={lang === 'ar' ? 'بدء الجلسة الآن' : 'Start Live Now'}
+        confirmLabel={lang === 'ar' ? 'بدء المباراة الآن' : 'Start Live Now'}
         cancelLabel={lang === 'ar' ? 'إلغاء' : 'Cancel'}
-        onConfirm={handleStartGame}
+        onConfirm={handleStartMatch}
       />
 
-      {/* 2. Confirm Finish Game (Computes Winner or Auto-Inserts Tie-Breaker #16) */}
+      {/* 2. Confirm Mark Player Absent (with exact 1v1 walkover / void / Final explanation) */}
+      <ConfirmDialog
+        open={Boolean(pendingAbsentPlayer) && !pendingImpact}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            setPendingAbsentPlayer(null);
+            setAbsenceReason('');
+          }
+        }}
+        destructive
+        title={
+          pendingAbsentPlayer
+            ? lang === 'ar'
+              ? `تسجيل غياب ${pendingAbsentPlayer.fullNameAr}؟`
+              : `Mark ${pendingAbsentPlayer.fullName} Absent?`
+            : ''
+        }
+        description={
+          pendingAbsentPlayer
+            ? isFinalMatch
+              ? lang === 'ar'
+                ? 'في النهائي الكبير لا تُنهى المباراة تلقائياً بالغياب — سيتم تسجيل الغياب وإظهار تنبيه لمدير البطولة لاتخاذ القرار الرسمي.'
+                : 'In the Grand Final, absence does not auto-end the match. It will record the absence and prompt a Super Admin decision.'
+              : absentPlayerIds.length >= 1
+                ? lang === 'ar'
+                  ? 'المنافس مسجّل غائباً بالفعل! تسجيل هذا اللاعب غائباً أيضاً سيجعل المباراة ملغاة (Void) وبحاجة لقرار مدير البطولة.'
+                  : 'The opponent is already absent! Marking this player absent too makes the match VOID and requires a Super Admin decision.'
+                : match.type === 'group'
+                  ? lang === 'ar'
+                    ? 'في مباريات ١ ضد ١ تنتهي المباراة فوراً بفوز انسحابي للمنافس الحاضر ويحصل تلقائياً على +٣ نقاط في ترتيب المجموعة.'
+                    : 'In 1v1 group matches, this ends the match immediately as a Walkover Win (+3 group points) for the present player.'
+                  : lang === 'ar'
+                    ? 'في مباريات الإقصاء ١ ضد ١ تنتهي المباراة فوراً بفوز انسحابي ويتأهل المنافس الحاضر تلقائياً للدور التالي.'
+                    : 'In 1v1 knockout matches, this ends the match immediately as a Walkover Win and advances the present player automatically.'
+            : ''
+        }
+        confirmLabel={lang === 'ar' ? 'تأكيد تسجيل الغياب' : 'Confirm Mark Absent'}
+        cancelLabel={lang === 'ar' ? 'إلغاء' : 'Cancel'}
+        onConfirm={() => handleConfirmMarkAbsent()}
+      >
+        <div className="pt-1">
+          <label
+            htmlFor="absent-reason-input"
+            className="mb-1 block text-xs font-bold text-ink"
+          >
+            {lang === 'ar' ? 'السبب (اختياري)' : 'Reason (optional)'}
+          </label>
+          <Input
+            id="absent-reason-input"
+            type="text"
+            maxLength={NOTE_MAX_LENGTH}
+            value={absenceReason}
+            onChange={(e) => setAbsenceReason(e.target.value)}
+            placeholder={
+              lang === 'ar'
+                ? 'مثال: لم يحضر للطاولة بعد النداء'
+                : 'e.g. No-show after final call'
+            }
+          />
+        </div>
+      </ConfirmDialog>
+
+      {/* 3. Confirm Reverse Absence (Super Admin Only) */}
+      <ConfirmDialog
+        open={Boolean(pendingReverseAbsentPlayer) && !pendingImpact}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setPendingReverseAbsentPlayer(null);
+        }}
+        title={lang === 'ar' ? 'إلغاء تسجيل الغياب؟' : 'Reverse Player Absence?'}
+        description={
+          pendingReverseAbsentPlayer
+            ? lang === 'ar'
+              ? `سيتم إلغاء غياب ${pendingReverseAbsentPlayer.fullNameAr} عبر حركة عكسية (دون حذف السجل) وإعادة حساب نتيجة المباراة والتأهل تلقائياً.`
+              : `Reverse the absence of ${pendingReverseAbsentPlayer.fullName} (append-only) and recompute match status, group standings, and knockout slots.`
+            : ''
+        }
+        confirmLabel={lang === 'ar' ? 'تأكيد إلغاء الغياب' : 'Reverse Absence'}
+        cancelLabel={lang === 'ar' ? 'إلغاء' : 'Cancel'}
+        onConfirm={() => handleConfirmReverseAbsence()}
+      />
+
+      {/* 4. Confirm Finish Match (Blocks tie -> requires Tie-Breaker #16) */}
       <ConfirmDialog
         open={confirmFinishOpen}
         onOpenChange={setConfirmFinishOpen}
-        destructive={!finishPreview.hasQualifyingTie}
+        destructive={!finishPreview.isTied}
         title={
-          finishPreview.hasQualifyingTie
+          finishPreview.isTied
             ? lang === 'ar'
-              ? 'تعادل على التأهل — فتح جولة الحسم؟'
-              : 'Qualifying Tie Detected — Open Tie-Breaker?'
+              ? 'النتيجة متعادلة — فتح جولة الحسم؟'
+              : 'Scores Tied — Tie-Breaker Required'
             : lang === 'ar'
-              ? 'إنهاء الجلسة واعتماد النتيجة؟'
-              : 'Finish Game & Lock Final Winner?'
+              ? 'إنهاء المباراة واعتماد الفائز؟'
+              : 'Finish Match & Lock Official Winner?'
         }
         description={
-          finishPreview.hasQualifyingTie
+          finishPreview.isTied
             ? lang === 'ar'
-              ? `يوجد تعادل عند ${formatNumber(finishPreview.cutoffScore, { useArabicIndicDigits: useArabicIndic })} نقطة بين: ${finishPreview.tiedPlayers
+              ? `تعادل عند ${formatNumber(finishPreview.topScore, { useArabicIndicDigits: useArabicIndic })} نقطة بين: ${finishPreview.tiedPlayers
                   .map((p) => p.fullNameAr)
-                  .join(' و ')}. بالتأكيد سيتم إدراج "جولة التحدي / الحسم (#${formatNumber(16, { useArabicIndicDigits: useArabicIndic })})" تلقائياً بمؤقت ${formatNumber(30, { useArabicIndicDigits: useArabicIndic })} ثانية.`
-              : `Tie at ${finishPreview.cutoffScore} pts between ${finishPreview.tiedPlayers
+                  .join(' و ')}. لا يُسمح بالتعادل — بالتأكيد ستُفتح "جولة التحدي / الحسم (#١٦)" فوراً.`
+              : `Scores are level at ${finishPreview.topScore} pts between ${finishPreview.tiedPlayers
                   .map((p) => p.fullName)
-                  .join(' & ')}. Confirming will automatically insert Tie-Breaker Segment #16 (30s) so you can break the tie.`
+                  .join(' & ')}. Draws are not allowed — confirming opens Sudden-Death Tie-Breaker (#16, 30s) first.`
             : lang === 'ar'
-              ? `المتأهل الحالي: ${finishPreview.advancingPlayers
-                  .map(
-                    (p) =>
-                      `${p.fullNameAr} (${formatNumber(totals[p.id] ?? 0, { useArabicIndicDigits: useArabicIndic })} نقطة)`
-                  )
-                  .join(' و ')}. سيتم إغلاق الطاولة وتحديث شجرة البطولة ولوحة الصدارة.`
-              : `Advancing: ${finishPreview.advancingPlayers
-                  .map((p) => `${p.fullName} (${totals[p.id] ?? 0} pts)`)
-                  .join(' & ')}. Confirming finalizes this table, updates player statuses, and broadcasts the official winner.`
+              ? `الفائز (فوز عادي): ${finishPreview.leader?.fullNameAr ?? ''} (${formatNumber(finishPreview.topScore, { useArabicIndicDigits: useArabicIndic })} نقطة). سيتم إغلاق المباراة وتحديث الترتيب والشجرة تلقائياً.`
+              : `Winner (Normal Win): ${finishPreview.leader?.fullName ?? ''} (${finishPreview.topScore} pts). Confirming locks this result and propagates standings & bracket slots automatically.`
         }
         confirmLabel={
-          finishPreview.hasQualifyingTie
+          finishPreview.isTied
             ? lang === 'ar'
               ? 'فتح جولة الحسم (#١٦)'
               : 'Open Tie-Breaker (#16)'
             : lang === 'ar'
-              ? 'اعتماد الفائز وإنهاء الجلسة'
+              ? 'اعتماد الفائز وإنهاء المباراة'
               : 'Confirm Winner & Finish'
         }
         cancelLabel={lang === 'ar' ? 'عودة للتحكيم' : 'Back to Console'}
         onConfirm={handleConfirmFinish}
       />
 
-      {/* 3. Confirm Reopen Finished Session (Authorized Roles Only) */}
+      {/* 5. Confirm Reopen Finished Match (Super Admin Only) */}
       <ConfirmDialog
-        open={confirmReopenOpen}
+        open={confirmReopenOpen && !pendingImpact}
         onOpenChange={setConfirmReopenOpen}
         destructive
         title={
           lang === 'ar'
-            ? 'إعادة فتح الجلسة المنتهية؟'
-            : 'Reopen Finished Session?'
+            ? 'إعادة فتح المباراة المنتهية؟'
+            : 'Reopen Finished Match?'
         }
         description={
           lang === 'ar'
-            ? 'سيتم إرجاع الطاولة إلى حالة "مباشر" وإلغاء قفل الفائز مؤقتاً لتتمكن من تعديل النقاط ثم إنهائها مجدداً. يُسجّل الإجراء في سجل المراجعة.'
-            : 'This restores the table to LIVE status and clears the locked winner so you can adjust scores and re-finish. Logged in the Audit Log.'
+            ? 'سيتم إرجاع المباراة إلى حالة "مباشر" وإعادة حساب التأهل تلقائياً (مع معاينة الأثر إذا بدأت مباريات تالية).'
+            : 'Restores the match to LIVE status and recomputes downstream standings/slots (prompting Impact Preview if downstream matches started).'
         }
-        confirmLabel={lang === 'ar' ? 'إعادة فتح الجلسة' : 'Reopen Session'}
+        confirmLabel={lang === 'ar' ? 'إعادة فتح المباراة' : 'Reopen Match'}
         cancelLabel={lang === 'ar' ? 'إلغاء' : 'Cancel'}
         onConfirm={() => handleConfirmReopen()}
       />
 
-      {/* 3b. Impact Preview Dialog when reopening affects downstream live/finished matches */}
-      <ImpactPreviewDialog
-        open={Boolean(reopenImpact)}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) setReopenImpact(null);
-        }}
-        impact={reopenImpact}
-        busy={busyAction}
-        onConfirm={async (policy) => {
-          await handleConfirmReopen({
-            confirmCascade: true,
-            cascadePolicy: policy,
-          });
-        }}
-      />
-
-      {/* 4. Confirm Reset Running Timer */}
+      {/* 6. Confirm Reset Running Timer */}
       <ConfirmDialog
         open={confirmResetTimerOpen}
         onOpenChange={setConfirmResetTimerOpen}
@@ -2352,14 +3357,14 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
         description={
           lang === 'ar'
             ? 'المؤقت يعمل حالياً. هل تريد إيقافه وإعادته للوقت الكامل لهذه الفقرة؟'
-            : 'The segment countdown is currently running. Resetting will stop the clock and restore the full segment duration.'
+            : 'The segment countdown is running. Resetting stops the clock and restores full segment time.'
         }
         confirmLabel={lang === 'ar' ? 'إعادة ضبط المؤقت' : 'Reset Timer'}
         cancelLabel={lang === 'ar' ? 'إبقاء العد' : 'Keep Running'}
         onConfirm={executeTimerReset}
       />
 
-      {/* 5. Confirm Segment Jump (Backward or While Timer Running) */}
+      {/* 7. Confirm Segment Jump */}
       <ConfirmDialog
         open={pendingSegmentIndex !== null}
         onOpenChange={(isOpen) => {
@@ -2367,7 +3372,7 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
         }}
         title={
           pendingSegmentIndex !== null &&
-          pendingSegmentIndex < game.currentSegmentIndex
+          pendingSegmentIndex < match.currentSegmentIndex
             ? lang === 'ar'
               ? 'العودة إلى الفقرة السابقة؟'
               : 'Go Back to Previous Segment?'
@@ -2377,14 +3382,29 @@ export function ScorerConsoleView({ gameId }: { gameId: string }) {
         }
         description={
           lang === 'ar'
-            ? 'سيؤدي تغيير الفقرة إلى إيقاف المؤقت وإعادة ضبطه ومسح إشارة الجرس النشطة، مع الاحتفاظ بجميع النقاط المسجلة.'
-            : 'Switching segments resets the timer and clears the active buzz highlight. All recorded points stay intact.'
+            ? 'سيؤدي تغيير الفقرة إلى إيقاف المؤقت ومسح إشارة الجرس النشطة، مع الاحتفاظ بجميع النقاط والبطاقات.'
+            : 'Switching segments resets the timer and clears the active buzz highlight. All points and cards stay intact.'
         }
         confirmLabel={lang === 'ar' ? 'تأكيد الانتقال' : 'Switch Segment'}
-        cancelLabel={lang === 'ar' ? 'إلغاء' : 'Stay Here'}
+        cancelLabel={lang === 'ar' ? 'البقاء هنا' : 'Stay Here'}
         onConfirm={() => {
           if (pendingSegmentIndex !== null) {
             executeSegmentChange(pendingSegmentIndex);
+          }
+        }}
+      />
+
+      {/* 8. Shared Cascade Impact Preview Dialog */}
+      <ImpactPreviewDialog
+        open={Boolean(pendingImpact)}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setPendingImpact(null);
+        }}
+        impact={pendingImpact?.impact ?? null}
+        busy={busyAction}
+        onConfirm={async (policy) => {
+          if (pendingImpact) {
+            await pendingImpact.retry(policy);
           }
         }}
       />

@@ -42,4 +42,9 @@ export {
   MarqueeBulbs,
   Spotlight,
   AnimatedNumber,
+  DisciplinaryCardIcon,
+  CardCountChip,
+  CardCounterGroup,
+  ContactIconButton,
+  PlayerContactDialog,
 } from '@/components/brand';

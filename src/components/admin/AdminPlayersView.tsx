@@ -58,6 +58,11 @@ import { useToast } from '@/components/ui/toast';
 import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
 import { ScoreChip } from '@/components/brand/ScoreChip';
 import {
+  CardCounterGroup,
+  DisciplinaryCardIcon,
+  formatScoreEventDisplay,
+} from '@/components/brand/DisciplinaryCards';
+import {
   AdminErrorBanner,
   AdminPageHeader,
   AdminStatChipStrip,
@@ -1279,6 +1284,30 @@ export function AdminPlayersView() {
                 </div>
               </div>
 
+              {/* Disciplinary Cards & Absences Summary */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-input border border-border-paper bg-paper/60 px-3.5 py-2.5 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-ink-muted">
+                    {lang === 'ar' ? 'البطاقات:' : 'Cards:'}
+                  </span>
+                  <CardCounterGroup
+                    yellowCount={profilePlayer.stats.yellowCards}
+                    redCount={profilePlayer.stats.redCards}
+                    surface="light"
+                    size="sm"
+                    lang={lang}
+                    useArabicIndicDigits={useArabicIndic}
+                  />
+                </div>
+                <Badge
+                  variant={profilePlayer.stats.absences > 0 ? 'negative' : 'muted'}
+                >
+                  {lang === 'ar'
+                    ? `غياب: ${formatNumber(profilePlayer.stats.absences, { useArabicIndicDigits: useArabicIndic })}`
+                    : `Absences: ${formatNumber(profilePlayer.stats.absences, { useArabicIndicDigits: useArabicIndic })}`}
+                </Badge>
+              </div>
+
               {/* Contact Metadata */}
               <div className="rounded-input border border-border-paper bg-paper/60 p-3.5 text-xs space-y-1.5">
                 <div className="flex justify-between gap-2">
@@ -1375,40 +1404,68 @@ export function AdminPlayersView() {
                       const g = gameMap.get(ev.gameId);
                       const seg = segmentMap.get(ev.segmentId);
                       const isPos = ev.delta >= 0;
+                      const display = formatScoreEventDisplay(ev, lang, useArabicIndic);
                       return (
                         <li
                           key={ev.id}
                           className="flex items-start justify-between gap-2.5 p-3 text-xs"
                         >
                           <div className="min-w-0 space-y-0.5">
-                            <div className="font-bold text-ink truncate">
-                              {seg
-                                ? localizeText(lang, seg.nameEn, seg.nameAr)
-                                : ev.segmentId}
+                            <div className="flex flex-wrap items-center gap-1.5 font-bold text-ink">
+                              {display.cardType && (
+                                <DisciplinaryCardIcon
+                                  card={display.cardType}
+                                  size="sm"
+                                />
+                              )}
+                              <span className="truncate">
+                                {seg
+                                  ? localizeText(lang, seg.nameEn, seg.nameAr)
+                                  : ev.segmentId}
+                              </span>
                             </div>
                             <div className="text-ink-muted truncate">
                               {g ? localizeText(lang, g.tableName, g.tableNameAr) : ev.gameId}
-                              {ev.note ? ` · ${ev.note}` : ''}
+                              {display.cardType ? (
+                                <>
+                                  {' · '}
+                                  <strong className="text-ink">{display.kindLabel}</strong>
+                                  {display.userNote ? ` — ${display.userNote}` : ''}
+                                </>
+                              ) : ev.note ? (
+                                ` · ${ev.note}`
+                              ) : (
+                                ''
+                              )}
                             </div>
                             <time className="block text-[11px] text-ink-faint tabular-nums">
                               {formatAdminDateTime(ev.createdAt, lang, useArabicIndic)}
                             </time>
                           </div>
-                          <Badge
-                            variant={isPos ? 'positive' : 'negative'}
-                            className="shrink-0 font-score text-sm tabular-nums"
-                          >
-                            {isPos ? (
-                              <Plus className="h-3 w-3 stroke-[3]" aria-hidden="true" />
-                            ) : (
-                              <Minus className="h-3 w-3 stroke-[3]" aria-hidden="true" />
-                            )}
-                            <span>
-                              {formatNumber(Math.abs(ev.delta), {
-                                useArabicIndicDigits: useArabicIndic,
-                              })}
-                            </span>
-                          </Badge>
+                          {display.cardType ? (
+                            <Badge
+                              variant={display.cardType === 'yellow' ? 'gold' : 'negative'}
+                              className="shrink-0 text-[11px] font-extrabold"
+                            >
+                              {display.kindLabel}
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant={isPos ? 'positive' : 'negative'}
+                              className="shrink-0 font-score text-sm tabular-nums"
+                            >
+                              {isPos ? (
+                                <Plus className="h-3 w-3 stroke-[3]" aria-hidden="true" />
+                              ) : (
+                                <Minus className="h-3 w-3 stroke-[3]" aria-hidden="true" />
+                              )}
+                              <span>
+                                {formatNumber(Math.abs(ev.delta), {
+                                  useArabicIndicDigits: useArabicIndic,
+                                })}
+                              </span>
+                            </Badge>
+                          )}
                         </li>
                       );
                     })}

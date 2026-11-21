@@ -37,6 +37,10 @@ import { DataTable, type DataTableColumn } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/toast';
 import {
+  DisciplinaryCardIcon,
+  formatScoreEventDisplay,
+} from '@/components/brand/DisciplinaryCards';
+import {
   AdminErrorBanner,
   AdminPageHeader,
   AdminStatChipStrip,
@@ -61,6 +65,7 @@ interface UnifiedResultRecord {
   kind?: ScoreEvent['kind'];
   note?: string;
   gameScoreSummary?: string;
+  resultType?: 'normal' | 'walkover' | 'void';
 }
 
 export function AdminResultsView() {
@@ -149,6 +154,7 @@ export function AdminResultsView() {
     const unsub = realtime.subscribe('*', (msg) => {
       if (
         msg.event === 'score.changed' ||
+        msg.event === 'absence.recorded' ||
         msg.event === 'game.finished' ||
         msg.event === 'bracket.updated' ||
         msg.event === 'data.reset'
@@ -206,6 +212,7 @@ export function AdminResultsView() {
             : g.scorerUserId,
           segmentLabel: lang === 'ar' ? 'النتيجة النهائية للمباراة' : 'Final Match Result',
           gameScoreSummary: scoreSummary,
+          resultType: g.result?.type ?? 'normal',
         };
       });
 
@@ -299,18 +306,40 @@ export function AdminResultsView() {
         'Scorer',
         'Note / Standings',
       ],
-      unifiedRecords.map((r) => [
-        r.createdAt,
-        r.recordType === 'finishedGame' ? 'Finished Game' : 'Score Event',
-        r.roundLabel,
-        r.tableName,
-        r.playerName,
-        r.segmentLabel,
-        r.delta ?? '',
-        r.kind ?? 'final',
-        r.scorerName,
-        r.note ?? r.gameScoreSummary ?? '',
-      ])
+      unifiedRecords.map((r) => {
+        const display =
+          r.recordType === 'scoreEvent' && r.kind
+            ? formatScoreEventDisplay(
+                { kind: r.kind, delta: r.delta ?? 0, note: r.note },
+                lang,
+                useArabicIndic
+              )
+            : null;
+        return [
+          r.createdAt,
+          r.recordType === 'finishedGame'
+            ? r.resultType === 'walkover'
+              ? 'Finished Match (Walkover)'
+              : 'Finished Match (Normal)'
+            : 'Score Event',
+          r.roundLabel,
+          r.tableName,
+          r.playerName,
+          r.segmentLabel,
+          r.delta ?? '',
+          r.recordType === 'finishedGame'
+            ? (r.resultType ?? 'normal')
+            : display?.cardType
+              ? display.kindLabel
+              : (r.kind ?? 'point'),
+          r.scorerName,
+          display?.cardType
+            ? display.userNote
+              ? `${display.kindLabel} — ${display.userNote}`
+              : display.kindLabel
+            : (r.note ?? r.gameScoreSummary ?? ''),
+        ];
+      })
     );
     toast({
       variant: 'positive',
@@ -364,8 +393,8 @@ export function AdminResultsView() {
       {
         id: 'events',
         value: scoreEvents.length,
-        label: lang === 'ar' ? 'حركات النقاط' : 'Score Events',
-        detail: lang === 'ar' ? 'مسبقة + مخصصة + تراجع' : 'Preset, custom & undo',
+        label: lang === 'ar' ? 'حركات النقاط والبطاقات' : 'Score & Card Events',
+        detail: lang === 'ar' ? '+١، −١، بطاقات وتراجع' : '+1, −1, cards & undo',
         tone: 'red' as const,
         useArabicIndicDigits: useArabicIndic,
       },
@@ -419,11 +448,23 @@ export function AdminResultsView() {
         header: lang === 'ar' ? 'النتيجة / النقاط' : 'Result / Delta',
         render: (r) => {
           if (r.recordType === 'finishedGame') {
+            const isWalkover = r.resultType === 'walkover';
             return (
               <div className="space-y-1">
-                <Badge variant="gold">
-                  {lang === 'ar' ? 'فائز المباراة' : 'MATCH WINNER'}
-                </Badge>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge variant="gold">
+                    {lang === 'ar' ? 'فائز المباراة' : 'MATCH WINNER'}
+                  </Badge>
+                  <Badge variant={isWalkover ? 'negative' : 'white'} className="text-[10px]">
+                    {isWalkover
+                      ? lang === 'ar'
+                        ? 'انسحاب (Walkover)'
+                        : 'WALKOVER'
+                      : lang === 'ar'
+                        ? 'نتيجة عادية'
+                        : 'NORMAL'}
+                  </Badge>
+                </div>
                 {r.gameScoreSummary && (
                   <div className="text-[11px] font-semibold text-ink-muted">
                     {r.gameScoreSummary}
@@ -433,6 +474,29 @@ export function AdminResultsView() {
             );
           }
           const isPos = (r.delta ?? 0) >= 0;
+          const isYellow = r.kind === 'yellow';
+          const isRed = r.kind === 'red';
+          const display = formatScoreEventDisplay(
+            { kind: r.kind ?? 'point', delta: r.delta ?? 0, note: r.note },
+            lang,
+            useArabicIndic
+          );
+          if (isYellow || isRed) {
+            return (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge
+                  variant={isYellow ? 'gold' : 'negative'}
+                  className="text-xs font-extrabold"
+                >
+                  <DisciplinaryCardIcon
+                    card={isYellow ? 'yellow' : 'red'}
+                    size="sm"
+                  />
+                  <span>{display.kindLabel}</span>
+                </Badge>
+              </div>
+            );
+          }
           return (
             <div className="flex items-center gap-1.5">
               <Badge
@@ -462,16 +526,33 @@ export function AdminResultsView() {
       {
         key: 'segment',
         header: lang === 'ar' ? 'الفقرة والملاحظة' : 'Segment & Note',
-        render: (r) => (
-          <div className="min-w-0 max-w-xs">
-            <div className="truncate text-xs font-bold text-ink">
-              {r.segmentLabel}
+        render: (r) => {
+          const display =
+            r.recordType === 'scoreEvent' && r.kind
+              ? formatScoreEventDisplay(
+                  { kind: r.kind, delta: r.delta ?? 0, note: r.note },
+                  lang,
+                  useArabicIndic
+                )
+              : null;
+          return (
+            <div className="min-w-0 max-w-xs">
+              <div className="truncate text-xs font-bold text-ink">
+                {r.segmentLabel}
+              </div>
+              {display?.cardType ? (
+                <div className="truncate text-xs text-ink-muted">
+                  <strong className="font-bold text-ink">{display.kindLabel}</strong>
+                  {display.userNote ? ` · ${display.userNote}` : ''}
+                </div>
+              ) : (
+                r.note && (
+                  <div className="truncate text-xs text-ink-muted">{r.note}</div>
+                )
+              )}
             </div>
-            {r.note && (
-              <div className="truncate text-xs text-ink-muted">{r.note}</div>
-            )}
-          </div>
-        ),
+          );
+        },
       },
       {
         key: 'scorer',

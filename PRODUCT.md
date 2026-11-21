@@ -10,7 +10,7 @@ web
 
 - **Prospective Celebrity Sponsor & Host (Marwan Serry):** Evaluating the live pitch prototype on `/` and `/final` to decide on sponsoring the tournament and attending the Grand Final as the 3rd player.
 - **Super Admin:** Full operational oversight—manages players, staff managers/roles, bracket configuration, games, segments library, tournament settings, results feed, and the complete audit log.
-- **Table Scorer:** Runs individual 3-player game sessions on a tablet (landscape) or phone—operates the segment timer, records who buzzed first, applies preset or custom +/- point adjustments with optional notes, undoes their last action, advances segments, and resolves tie-breakers.
+- **Table Scorer (Judge):** Runs 1v1 group/knockout matches and the 3-participant Final on a tablet (landscape) or phone—operates the segment timer, records who buzzed first, applies `+1`, `−1`, Yellow card (`−1`), and Red card (`−2`) with optional notes, undoes their last action, marks absences, views assigned player contacts (audited), advances segments, and resolves tie-breakers.
 - **Check-In Staff:** Views scheduled games and contestants for the day and marks players as checked in or absent at the venue gate.
 - **Content Manager:** Edits tournament schedule blurbs, announcements, sponsor details, rules text, and segment descriptions without altering players, bracket, or scores.
 - **Tournament Players (27 seeded contestants):** Log in to view their personal profile, tournament stats, upcoming table assignment, and score history.
@@ -35,7 +35,7 @@ Combines a broadcast-ready sponsor pitch with a working multi-role live event sy
 - **3-Player Session Model:** Every game has exactly 3 players and 1 assigned scorer; multiple games can run concurrently on separate tables. Winner is determined by highest total points across ordered segments.
 - **Grand Final Format:** 2 semi-finalists + Marwan Serry (`player-marwan`, host slot) in a 3-player Final.
 - **Manual Buzzing:** The scorer taps who buzzed first on the Scorer Console; no contestant phone buzzers exist.
-- **Scoring & Auditability:** Preset per-segment points plus custom +/- numeric input with optional note and compensating undo; every score change writes an immutable `ScoreEvent` and `AuditEntry` with date and time and updates the leaderboard/results feed.
+- **Scoring & Auditability:** Uniform Scorer v2 actions (`+1`, `−1`, Yellow card `−1`, Red card `−2`) with optional note and compensating undo; card counts derive separately from `ScoreEvent.kind`; every action writes an immutable event and `AuditEntry` with date and time and updates the leaderboard/results feed.
 - **Flexible Bracket:** Admin-configurable player count, game size (default 3), and advancement per round (default demo: 27 players -> Round 1: 9 games, 1 advances each -> Round 2: 3 games, 1 advances each -> Semi-Final: 1 game, top 2 advance -> Final vs. Marwan Serry). Qualifying ties trigger an appended Tie-Breaker segment (#16).
 - **No Public Registration & No Quiz:** Admins create/import player accounts; a separate randomized registration quiz is explicitly out of scope and must not appear anywhere.
 - **Role-Based Access (Mock Auth):** Demo account picker per role (`/login` plus quick presenter switcher) enforcing `Super Admin`, `Scorer`, `Check-In Staff`, `Content Manager`, `Player`, and `Public Visitor` permissions.

@@ -40,6 +40,11 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
+import {
+  CardCounterGroup,
+  DisciplinaryCardIcon,
+  formatScoreEventDisplay,
+} from '@/components/brand/DisciplinaryCards';
 import { LiveBadge } from '@/components/brand/LiveBadge';
 import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
 import { ScoreChip } from '@/components/brand/ScoreChip';
@@ -398,7 +403,7 @@ export function PlayerHistoryView() {
           </div>
         </div>
 
-        {/* Positive / Penalty Quick Breakdown */}
+        {/* Positive / Penalty / Cards / Absences Quick Breakdown */}
         <div className="flex flex-wrap items-center gap-2 border-t border-border-paper pt-4 text-xs font-bold">
           <Badge variant="positive">
             <Plus className="h-3.5 w-3.5 stroke-[3]" aria-hidden="true" />
@@ -418,6 +423,23 @@ export function PlayerHistoryView() {
               {lang === 'ar' ? 'خصومات' : 'Penalties'}
             </span>
           </Badge>
+          <CardCounterGroup
+            yellowCount={player.stats.yellowCards}
+            redCount={player.stats.redCards}
+            surface="light"
+            size="sm"
+            lang={lang}
+            useArabicIndicDigits={useArabicIndic}
+          />
+          {player.stats.absences > 0 && (
+            <Badge variant="negative">
+              <span>
+                {lang === 'ar'
+                  ? `غياب: ${formatNumber(player.stats.absences, { useArabicIndicDigits: useArabicIndic })}`
+                  : `Absences: ${formatNumber(player.stats.absences, { useArabicIndicDigits: useArabicIndic })}`}
+              </span>
+            </Badge>
+          )}
           <Badge variant="muted">
             <span>
               {formatNumber(allMyGamesCount ?? 0, {
@@ -620,6 +642,14 @@ export function PlayerHistoryView() {
                           <Badge variant="gold">
                             <Crown className="h-3 w-3 shrink-0" aria-hidden="true" />
                             <span>{lang === 'ar' ? 'النهائي' : 'FINAL'}</span>
+                          </Badge>
+                        )}
+
+                        {game.result?.type === 'walkover' && (
+                          <Badge variant="negative">
+                            <span>
+                              {lang === 'ar' ? 'انسحاب (Walkover)' : 'WALKOVER'}
+                            </span>
                           </Badge>
                         )}
 
@@ -850,58 +880,68 @@ export function PlayerHistoryView() {
                                   <div className="space-y-1.5 ps-3 border-s border-border-paper">
                                     {segRow.events.map((ev) => {
                                       const isPos = ev.delta >= 0;
+                                      const display = formatScoreEventDisplay(
+                                        ev,
+                                        lang,
+                                        useArabicIndic
+                                      );
                                       return (
                                         <div
                                           key={ev.id}
                                           className="flex flex-wrap items-center justify-between gap-2 text-xs"
                                         >
                                           <div className="flex flex-wrap items-center gap-2 min-w-0">
-                                            <span
-                                              className={cn(
-                                                'inline-flex items-center gap-0.5 rounded-pill border px-2 py-0.5 font-score text-xs font-black tabular-nums',
-                                                isPos
-                                                  ? 'border-positive bg-positive-soft text-positive-ink'
-                                                  : 'border-outline bg-negative text-white'
-                                              )}
-                                            >
-                                              {isPos ? (
-                                                <Plus
-                                                  className="h-2.5 w-2.5 stroke-[3]"
-                                                  aria-hidden="true"
+                                            {display.cardType ? (
+                                              <span
+                                                className={cn(
+                                                  'inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-0.5 text-xs font-extrabold',
+                                                  display.cardType === 'yellow'
+                                                    ? 'border-outline bg-gold-400 text-red-900'
+                                                    : 'border-outline bg-negative text-white'
+                                                )}
+                                              >
+                                                <DisciplinaryCardIcon
+                                                  card={display.cardType}
+                                                  size="sm"
                                                 />
-                                              ) : (
-                                                <Minus
-                                                  className="h-2.5 w-2.5 stroke-[3]"
-                                                  aria-hidden="true"
-                                                />
-                                              )}
-                                              <span>
-                                                {formatNumber(Math.abs(ev.delta), {
-                                                  useArabicIndicDigits:
-                                                    useArabicIndic,
-                                                })}
+                                                <span>{display.kindLabel}</span>
                                               </span>
-                                            </span>
-                                            <span className="rounded-pill bg-paper-2 px-2 py-0.5 text-[10px] font-bold uppercase text-ink-muted">
-                                              {ev.kind === 'undo'
-                                                ? lang === 'ar'
-                                                  ? 'تراجع'
-                                                  : 'Undo'
-                                                : ev.kind === 'yellow'
-                                                  ? lang === 'ar'
-                                                    ? 'بطاقة صفراء (−١)'
-                                                    : 'Yellow (−1)'
-                                                  : ev.kind === 'red'
-                                                    ? lang === 'ar'
-                                                      ? 'بطاقة حمراء (−٢)'
-                                                      : 'Red (−2)'
-                                                    : lang === 'ar'
-                                                      ? 'نقطة'
-                                                      : 'Point'}
-                                            </span>
-                                            {ev.note && (
+                                            ) : (
+                                              <>
+                                                <span
+                                                  className={cn(
+                                                    'inline-flex items-center gap-0.5 rounded-pill border px-2 py-0.5 font-score text-xs font-black tabular-nums',
+                                                    isPos
+                                                      ? 'border-positive bg-positive-soft text-positive-ink'
+                                                      : 'border-outline bg-negative text-white'
+                                                  )}
+                                                >
+                                                  {isPos ? (
+                                                    <Plus
+                                                      className="h-2.5 w-2.5 stroke-[3]"
+                                                      aria-hidden="true"
+                                                    />
+                                                  ) : (
+                                                    <Minus
+                                                      className="h-2.5 w-2.5 stroke-[3]"
+                                                      aria-hidden="true"
+                                                    />
+                                                  )}
+                                                  <span>
+                                                    {formatNumber(Math.abs(ev.delta), {
+                                                      useArabicIndicDigits:
+                                                        useArabicIndic,
+                                                    })}
+                                                  </span>
+                                                </span>
+                                                <span className="rounded-pill bg-paper-2 px-2 py-0.5 text-[10px] font-bold uppercase text-ink-muted">
+                                                  {display.kindLabel}
+                                                </span>
+                                              </>
+                                            )}
+                                            {display.userNote && (
                                               <span className="min-w-0 break-all sm:break-words text-ink font-medium">
-                                                {ev.note}
+                                                {display.userNote}
                                               </span>
                                             )}
                                           </div>
