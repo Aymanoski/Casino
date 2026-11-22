@@ -1,0 +1,5 @@
+# Overnight Autonomous Pipeline Artifacts (generated per iteration)
+out/v*/*.mp4
+out/BEST/*.mp4
+out/preview/
+review-sheets/
