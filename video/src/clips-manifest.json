@@ -1,0 +1,87 @@
+{
+  "recordedAt": "2026-11-22T02:04:12.858Z",
+  "clips": {
+    "a1-final-showcase": {
+      "path": "clips/a1-final-showcase.mp4",
+      "durationSec": 11.83
+    },
+    "a1-final-bigscreen": {
+      "path": "clips/a1-final-bigscreen.mp4",
+      "durationSec": 11.17
+    },
+    "b1-admin-settings": {
+      "path": "clips/b1-admin-settings.mp4",
+      "durationSec": 6.67
+    },
+    "b1-admin-groups": {
+      "path": "clips/b1-admin-groups.mp4",
+      "durationSec": 8.6
+    },
+    "b2-player-phone": {
+      "path": "clips/b2-player-phone.mp4",
+      "durationSec": 25.8
+    },
+    "b1-admin-schedule": {
+      "path": "clips/b1-admin-schedule.mp4",
+      "durationSec": 3.83
+    },
+    "b3-scorer-console": {
+      "path": "clips/b3-scorer-console.mp4",
+      "durationSec": 76.73
+    },
+    "b3b-sync-scorer": {
+      "path": "clips/b3b-sync-scorer.mp4",
+      "durationSec": 11.53
+    },
+    "b3b-sync-bigscreen": {
+      "path": "clips/b3b-sync-bigscreen.mp4",
+      "durationSec": 11.57
+    },
+    "b3b-sync-fan": {
+      "path": "clips/b3b-sync-fan.mp4",
+      "durationSec": 11.57
+    },
+    "b4-bigscreen-tiebreak-win": {
+      "path": "clips/b4-bigscreen-tiebreak-win.mp4",
+      "durationSec": 26.4
+    },
+    "b4-bigscreen-leaderboard": {
+      "path": "clips/b4-bigscreen-leaderboard.mp4",
+      "durationSec": 4.8
+    },
+    "b5-fan-bracket": {
+      "path": "clips/b5-fan-bracket.mp4",
+      "durationSec": 11.77
+    },
+    "e1-sponsors": {
+      "path": "clips/e1-sponsors.mp4",
+      "durationSec": 8
+    },
+    "b6-admin-results-audit": {
+      "path": "clips/b6-admin-results-audit.mp4",
+      "durationSec": 11.4
+    },
+    "b6-admin-revert-impact": {
+      "path": "clips/b6-admin-revert-impact.mp4",
+      "durationSec": 37.4
+    },
+    "b6-admin-consistency": {
+      "path": "clips/b6-admin-consistency.mp4",
+      "durationSec": 8.13
+    },
+    "b5-fan-phone": {
+      "path": "clips/b5-fan-phone.mp4",
+      "durationSec": 9.67
+    },
+    "b3-scorer-contact": {
+      "path": "clips/b3-scorer-contact.mp4",
+      "durationSec": 6.2
+    }
+  },
+  "cues": {
+    "scorerAbsentOffsetSec": 73.48,
+    "bigWinnerOffsetSec": 22.01,
+    "impactDialogOffsetSec": 19.29,
+    "winnerFlippedOffsetSec": 30.4
+  }
+}

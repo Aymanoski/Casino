@@ -1,5 +1,14 @@
 # dependencies
 /node_modules
+/video/node_modules
+/video/recordings-raw/
+/video/public/clips/
+/video/public/audio/music/
+/video/public/audio/sfx/
+/video/public/audio/narration/en/
+/video/public/audio/narration/ar/
+/video/out/*.mp4
+/video/.verify-frames/
 /.pnp
 .pnp.*
 .yarn/*
@@ -13,6 +22,7 @@
 
 # next.js
 /.next/
+/.next-video/
 /out/
 
 # production

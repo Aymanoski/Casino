@@ -1410,3 +1410,9 @@ export async function createSeedSnapshotAsync(
   }
   return createSeedSnapshot(options);
 }
+
+export {
+  createVideoDemoSnapshot,
+  VIDEO_DEMO_CONSTANTS,
+  type VideoDemoPreset,
+} from './videoDemo';

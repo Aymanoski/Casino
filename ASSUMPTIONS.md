@@ -363,6 +363,21 @@
 
 ---
 
+## Pitch Video Production Pipeline (`v0.1.1-video`, 2026-11-22)
+
+### 51. Pitch Video Scope, Deterministic Demo State & Recording Decisions
+- **Step 0 Confirmed Preferences:**
+  - **Narration & Captions:** Separate English (`en-US-AndrewNeural`) and Egyptian Arabic (`ar-EG-ShakirNeural`) neural TTS narrated exports with burned-in EN/RTL-AR captions plus 4 sidecar `.srt` files (`video/out/casino-pitch-{en,ar}.srt`, `video/out/casino-teaser-{en,ar}.srt`), with drop-in custom human voice slots under `video/public/audio/narration/custom/{en,ar}/<sceneId>.{mp3,wav}`.
+  - **Outputs & Ratios:** Main Pitch `16:9` (`1920×1080`, `3:12`), Vertical Teaser `9:16` (`1080×1920`, `1:08`), and `1920×1080` PNG thumbnail (`video/out/thumbnail-16x9.png`).
+  - **Scope:** Recorded strictly against the base version (`v0.1.1-client-feedback-1`, Phase 10 Delighters OFF) with zero mocked/faked UI. Focused strictly on the 5 headline entities (**Admin**, **Scorer**, **Player**, **Big Screens**, **Public Fan View**) — excluding Check-in Staff & Content Manager per Step 0. Included the 9-Invariant Consistency Check, 24-avatar 3D + square crop studio, 256-slot zoomable bracket with 16 BYEs & minimap, and live EN→Arabic RTL toggle.
+- **Per-Tab Demo Overrides & Isolated Recording Build:**
+  - Added deterministic video demo presets (`createVideoDemoSnapshot('fresh' | 'main' | 'final')` in `src/lib/seed/videoDemo.ts`, wired through `commands.loadVideoDemoState` and zero-DOM `VideoDemoBridge`) so every take starts from exact repeatable IDs (`match-g1-m3`, `match-ko-256-17`, `match-final`) anchored 12h in the past so live actions top `/admin/results` & `/admin/audit`.
+  - Added demo-only `sessionStorage` per-tab role (`?demoRole=`, `?demoUserId=`, `?demoPlayerId=`) and language (`?tabLang=`) overrides in `AuthProvider` and `I18nProvider` so Admin, Scorer, Big Screen, and Public Fan tabs run simultaneously inside ONE Playwright `BrowserContext` sharing IndexedDB + `BroadcastChannel`.
+  - `video/scripts/record-all.mjs` builds & serves the app from an isolated `NEXT_DIST_DIR=.next-video` production bundle so recordings show zero Next.js dev UI overlays without colliding with any running `next dev` server.
+- **Audio & Licensing:** All music (`gameshow-ramadan-bed.wav`) and 7 SFX clips are original procedurally synthesized PCM WAVs (CC0 / Project-Original), and TTS narration uses Microsoft Edge Neural TTS, documented in `video/LICENSES.md`.
+
+---
+
 ## To Confirm With Client
 
 > Consolidated list of every remaining product, rules, or branding ambiguity from Phases 1–9 and Change Request 1 (`v0.1.1-client-feedback-1`). Every item below currently runs with a clean, documented, editable default — confirm each with the client before locking production launch rules.

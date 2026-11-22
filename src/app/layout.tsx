@@ -10,6 +10,7 @@ import './globals.css';
 import { I18nProvider } from '@/lib/i18n';
 import { AuthProvider } from '@/lib/auth';
 import { ToastProvider } from '@/components/ui/toast';
+import { VideoDemoBridge } from '@/components/layout/VideoDemoBridge';
 
 const lilitaOne = Lilita_One({
   subsets: ['latin'],
@@ -72,6 +73,7 @@ export default function RootLayout({
       <body className="min-h-dvh theme-paper bg-paper text-ink antialiased selection:bg-gold-400 selection:text-red-900">
         <I18nProvider>
           <AuthProvider>
+            <VideoDemoBridge />
             <ToastProvider>{children}</ToastProvider>
           </AuthProvider>
         </I18nProvider>

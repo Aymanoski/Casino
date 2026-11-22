@@ -17,6 +17,81 @@ import {
 import { realtime } from '@/lib/realtime';
 
 const AUTH_STORAGE_KEY = 'casino_el_al3ab_auth_user_v1';
+const TAB_ROLE_OVERRIDE_KEY = 'casino_el_al3ab_demo_tab_role_v1';
+
+interface TabRoleOverride {
+  role?: string;
+  userId?: string;
+  playerId?: string;
+}
+
+function readTabRoleOverride(): TabRoleOverride | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const qRole = params.get('demoRole');
+    const qUserId = params.get('demoUserId');
+    const qPlayerId = params.get('demoPlayerId');
+    if (qRole || qUserId || qPlayerId) {
+      const override: TabRoleOverride = {
+        ...(qRole ? { role: qRole } : {}),
+        ...(qUserId ? { userId: qUserId } : {}),
+        ...(qPlayerId ? { playerId: qPlayerId } : {}),
+      };
+      window.sessionStorage.setItem(TAB_ROLE_OVERRIDE_KEY, JSON.stringify(override));
+      return override;
+    }
+    const raw = window.sessionStorage.getItem(TAB_ROLE_OVERRIDE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as TabRoleOverride;
+  } catch {
+    return null;
+  }
+}
+
+function resolveUserFromTabOverride(
+  override: TabRoleOverride,
+  allUsers: User[]
+): { resolved: boolean; user: User | null } {
+  if (override.userId) {
+    if (override.userId === 'visitor') return { resolved: true, user: null };
+    const byId = allUsers.find((u) => u.id === override.userId) ?? null;
+    if (byId) return { resolved: true, user: byId };
+  }
+  if (override.playerId) {
+    const byPlayer = allUsers.find(
+      (u) => u.role === 'player' && u.playerId === override.playerId
+    );
+    if (byPlayer) return { resolved: true, user: byPlayer };
+  }
+  if (override.role) {
+    const r = override.role.toLowerCase();
+    if (r === 'visitor' || r === 'fan' || r === 'public' || r === 'guest') {
+      return { resolved: true, user: null };
+    }
+    if (r === 'admin' || r === 'superadmin') {
+      const admin = allUsers.find((u) => u.role === 'superAdmin') ?? null;
+      return { resolved: true, user: admin };
+    }
+    if (r === 'scorer' || r === 'judge') {
+      const scorer = allUsers.find((u) => u.role === 'scorer') ?? null;
+      return { resolved: true, user: scorer };
+    }
+    if (r === 'player' || r === 'contestant') {
+      const player = allUsers.find((u) => u.role === 'player') ?? null;
+      return { resolved: true, user: player };
+    }
+    if (r === 'checkin') {
+      const ci = allUsers.find((u) => u.role === 'checkIn') ?? null;
+      return { resolved: true, user: ci };
+    }
+    if (r === 'content') {
+      const cm = allUsers.find((u) => u.role === 'content') ?? null;
+      return { resolved: true, user: cm };
+    }
+  }
+  return { resolved: false, user: null };
+}
 
 /**
  * Role Permission Matrix per AGENTS.md §4:
@@ -124,6 +199,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const allUsers = await userRepo.list();
     setDemoUsers(allUsers);
 
+    // Demo-only per-tab role override (stored in sessionStorage so multiple tabs in ONE
+    // browser context can simultaneously operate as Admin, Scorer, Player, Big Screen, Fan).
+    const tabOverride = readTabRoleOverride();
+    if (tabOverride) {
+      const { resolved, user: tabUser } = resolveUserFromTabOverride(tabOverride, allUsers);
+      if (resolved) {
+        setUser(tabUser);
+        setIsLoading(false);
+        return;
+      }
+    }
+
     let savedId: string | null = null;
     try {
       savedId = window.localStorage.getItem(AUTH_STORAGE_KEY);
@@ -168,7 +255,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const matched = await userRepo.get(userId);
     setUser(matched);
     try {
-      if (matched) {
+      const hasTabOverride = Boolean(window.sessionStorage.getItem(TAB_ROLE_OVERRIDE_KEY));
+      if (hasTabOverride) {
+        window.sessionStorage.setItem(
+          TAB_ROLE_OVERRIDE_KEY,
+          JSON.stringify({ userId: matched ? matched.id : 'visitor' })
+        );
+      } else if (matched) {
         window.localStorage.setItem(AUTH_STORAGE_KEY, matched.id);
       } else {
         window.localStorage.setItem(AUTH_STORAGE_KEY, 'visitor');
@@ -182,7 +275,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     setUser(null);
     try {
-      window.localStorage.setItem(AUTH_STORAGE_KEY, 'visitor');
+      const hasTabOverride = Boolean(window.sessionStorage.getItem(TAB_ROLE_OVERRIDE_KEY));
+      if (hasTabOverride) {
+        window.sessionStorage.setItem(
+          TAB_ROLE_OVERRIDE_KEY,
+          JSON.stringify({ userId: 'visitor' })
+        );
+      } else {
+        window.localStorage.setItem(AUTH_STORAGE_KEY, 'visitor');
+      }
     } catch {
       // ignore
     }

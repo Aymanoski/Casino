@@ -70,10 +70,12 @@ import { assertRepoPermission, PermissionDeniedError } from '@/lib/repos/permiss
 import {
   buildBracketConfigCompat,
   createDemoSeedState,
+  createVideoDemoSnapshot,
   deterministicAvatarKey,
   formatFakePhone,
   generateProceduralPlayers,
   type CreateSeedOptions,
+  type VideoDemoPreset,
 } from '@/lib/seed';
 import { storage, type StorageDelta } from '@/lib/storage';
 import {
@@ -5346,6 +5348,32 @@ export const commands = {
       await storage.commitDelta({ putAuditEntries: [resetAudit] }, freshDb);
       realtime.publish('data.reset', { reason: 'admin-reset' });
       return freshDb.settings;
+    });
+  },
+
+  /**
+   * Restores a deterministic, invariant-verified Video Demo State (`fresh` | `main` | `final`)
+   * in one atomic write + broadcast so Playwright recordings always start clean.
+   */
+  async loadVideoDemoState(preset: VideoDemoPreset = 'main'): Promise<{
+    preset: VideoDemoPreset;
+    playersCount: number;
+    groupsCount: number;
+    matchesCount: number;
+    violationsCount: number;
+  }> {
+    return runSerialized(async () => {
+      const snap = createVideoDemoSnapshot(preset);
+      const report = checkInvariants(snap);
+      await storage.writeSnapshot(snap);
+      realtime.publish('data.reset', { reason: `video-demo-${preset}` });
+      return {
+        preset,
+        playersCount: snap.players.length,
+        groupsCount: snap.groups.length,
+        matchesCount: snap.matches.length,
+        violationsCount: report.violations.length,
+      };
     });
   },
 };

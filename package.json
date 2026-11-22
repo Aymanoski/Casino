@@ -10,7 +10,10 @@
     "lint:derived": "node scripts/check-derived-writes.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "video:record": "npm --prefix video run record",
+    "video:render": "npm --prefix video run render",
+    "video:preview": "npm --prefix video run preview"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.6",

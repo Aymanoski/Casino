@@ -11,6 +11,7 @@ import React, {
 import type { Language } from '@/lib/schemas';
 
 const LANG_STORAGE_KEY = 'casino_el_al3ab_lang_v1';
+const TAB_LANG_OVERRIDE_KEY = 'casino_el_al3ab_tab_lang_v1';
 
 const dictionary = {
   en: {
@@ -166,7 +167,19 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
-      const urlLang = new URLSearchParams(window.location.search).get('lang');
+      const params = new URLSearchParams(window.location.search);
+      const tabLang = params.get('tabLang');
+      if (tabLang === 'en' || tabLang === 'ar') {
+        setLangState(tabLang);
+        window.sessionStorage.setItem(TAB_LANG_OVERRIDE_KEY, tabLang);
+        return;
+      }
+      const savedTab = window.sessionStorage.getItem(TAB_LANG_OVERRIDE_KEY);
+      if (savedTab === 'en' || savedTab === 'ar') {
+        setLangState(savedTab);
+        return;
+      }
+      const urlLang = params.get('lang');
       if (urlLang === 'en' || urlLang === 'ar') {
         setLangState(urlLang);
         window.localStorage.setItem(LANG_STORAGE_KEY, urlLang);
@@ -192,7 +205,11 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const setLang = useCallback((next: Language) => {
     setLangState(next);
     try {
-      window.localStorage.setItem(LANG_STORAGE_KEY, next);
+      if (window.sessionStorage.getItem(TAB_LANG_OVERRIDE_KEY)) {
+        window.sessionStorage.setItem(TAB_LANG_OVERRIDE_KEY, next);
+      } else {
+        window.localStorage.setItem(LANG_STORAGE_KEY, next);
+      }
     } catch {
       // ignore
     }

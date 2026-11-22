@@ -1,0 +1,33 @@
+{
+  "name": "casino-el-al3ab-pitch-video",
+  "version": "0.1.1",
+  "private": true,
+  "description": "Standalone Remotion + Playwright pitch video pipeline for Casino El Al3ab Ramadan Tournament",
+  "scripts": {
+    "preview": "remotion studio src/index.ts",
+    "record": "node scripts/record-all.mjs",
+    "audio": "node scripts/generate-audio.mjs",
+    "srt": "node scripts/generate-srt.mjs",
+    "render": "node scripts/render-all.mjs",
+    "verify": "node scripts/verify-frames.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.286",
+    "@remotion/compositor-win32-x64-msvc": "^4.0.545",
+    "@remotion/google-fonts": "^4.0.286",
+    "@remotion/media-utils": "^4.0.286",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "^4.0.286",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@types/node": "^22.13.5",
+    "@types/react": "^19.0.10",
+    "msedge-tts": "^2.0.3",
+    "playwright": "^1.52.0",
+    "typescript": "^5.7.3"
+  }
+}
