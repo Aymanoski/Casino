@@ -45,7 +45,7 @@ import {
 } from '@/lib/seed';
 
 const DB_NAME = 'casino_el_al3ab_idb_v1';
-const DB_SCHEMA_VERSION = 2;
+const DB_SCHEMA_VERSION = 3;
 const LEGACY_LOCALSTORAGE_KEY = 'casino_el_al3ab_db_v1';
 const IDB_SYNC_CHANNEL = 'casino_el_al3ab_idb_sync_v1';
 const IDB_SYNC_STORAGE_KEY = 'casino_el_al3ab_idb_ping_v1';
@@ -160,7 +160,7 @@ interface CasinoIDBSchema extends DBSchema {
   quizEvents: {
     key: string;
     value: QuizAttemptEvent;
-    indexes: { 'by-attemptId': string; 'by-applicantId': string; 'by-type': string };
+    indexes: { 'by-attemptId': string };
   };
   quizHandoffs: {
     key: string;
@@ -260,12 +260,30 @@ export interface StorageAdapter {
 
 let dbPromise: Promise<IDBPDatabase<CasinoIDBSchema>> | null = null;
 let memorySnapshot: DatabaseSnapshot | null = null;
+let bgSeedWritePromise: Promise<void> | null = null;
+let idbUnavailable = false;
 let syncBound = false;
 let syncChannel: BroadcastChannel | null = null;
 const tabInstanceId = `tab-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 function hasIndexedDB(): boolean {
-  return typeof indexedDB !== 'undefined';
+  return !idbUnavailable && typeof indexedDB !== 'undefined';
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('IndexedDB operation timed out')), ms);
+    promise.then(
+      (val) => {
+        clearTimeout(timer);
+        resolve(val);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
 }
 
 function cloneData<T>(val: T): T {
@@ -331,7 +349,7 @@ function cleanupLegacyLocalStorage(): void {
 async function getDb(): Promise<IDBPDatabase<CasinoIDBSchema>> {
   if (!dbPromise) {
     dbPromise = openDB<CasinoIDBSchema>(DB_NAME, DB_SCHEMA_VERSION, {
-      upgrade(db) {
+      upgrade(db, _oldVersion, _newVersion, tx) {
         if (!db.objectStoreNames.contains('meta')) {
           db.createObjectStore('meta', { keyPath: 'id' });
         }
@@ -417,14 +435,28 @@ async function getDb(): Promise<IDBPDatabase<CasinoIDBSchema>> {
         if (!db.objectStoreNames.contains('quizEvents')) {
           const s = db.createObjectStore('quizEvents', { keyPath: 'id' });
           s.createIndex('by-attemptId', 'attemptId');
-          s.createIndex('by-applicantId', 'applicantId');
-          s.createIndex('by-type', 'type');
+        } else {
+          const s = tx.objectStore('quizEvents');
+          if (s.indexNames.contains('by-applicantId' as never)) {
+            s.deleteIndex('by-applicantId' as never);
+          }
+          if (s.indexNames.contains('by-type' as never)) {
+            s.deleteIndex('by-type' as never);
+          }
         }
         if (!db.objectStoreNames.contains('quizHandoffs')) {
           const s = db.createObjectStore('quizHandoffs', { keyPath: 'id' });
           s.createIndex('by-applicantId', 'applicantId');
           s.createIndex('by-playerId', 'playerId');
         }
+      },
+      blocking(_currentVersion, _blockedVersion, event) {
+        // Immediately release stale v1 connections so v1 -> v2 upgrade in another tab never deadlocks!
+        (event.target as IDBDatabase | null)?.close();
+        dbPromise = null;
+      },
+      terminated() {
+        dbPromise = null;
       },
     });
   }
@@ -571,19 +603,30 @@ async function ensureInitialized(): Promise<DatabaseSnapshot> {
   if (!initInFlight) {
     initInFlight = (async () => {
       try {
-        const existing = await readFullSnapshotFromIDB();
+        const existing = await withTimeout(readFullSnapshotFromIDB(), 3500);
         if (existing) {
           memorySnapshot = existing;
           return existing;
         }
       } catch {
-        // Fall through to clean seed on corrupted store
+        // Fall through to clean seed on timeout, blocked v1->v2 upgrade, or corrupted store
       }
 
       cleanupLegacyLocalStorage();
       const fresh = await createSeedSnapshotAsync();
-      await writeFullSnapshotToIDB(fresh);
+      // Expose memorySnapshot immediately so AuthProvider & first render hydrate in <60ms
+      // instead of waiting for 26,000+ quiz events to flush to IndexedDB on disk.
       memorySnapshot = fresh;
+
+      bgSeedWritePromise = writeFullSnapshotToIDB(fresh)
+        .catch(() => {
+          // Gracefully degrade to in-memory mode (e.g. Safari Private / blocked IDB)
+          idbUnavailable = true;
+        })
+        .finally(() => {
+          bgSeedWritePromise = null;
+        });
+
       return fresh;
     })().finally(() => {
       initInFlight = null;
@@ -591,6 +634,12 @@ async function ensureInitialized(): Promise<DatabaseSnapshot> {
   }
 
   return initInFlight;
+}
+
+async function flushPendingSeedWrite(): Promise<void> {
+  if (bgSeedWritePromise) {
+    await bgSeedWritePromise;
+  }
 }
 
 function shallowCloneSnapshot(snap: DatabaseSnapshot): DatabaseSnapshot {
@@ -635,9 +684,14 @@ export const storage: StorageAdapter = {
   },
 
   async writeSnapshot(snapshot: DatabaseSnapshot): Promise<void> {
+    await flushPendingSeedWrite();
     const copied = shallowCloneSnapshot(snapshot);
     if (hasIndexedDB()) {
-      await writeFullSnapshotToIDB(copied);
+      try {
+        await writeFullSnapshotToIDB(copied);
+      } catch {
+        idbUnavailable = true;
+      }
     }
     memorySnapshot = copied;
     notifyOtherTabsCommitted();
@@ -647,6 +701,7 @@ export const storage: StorageAdapter = {
     delta: StorageDelta,
     nextSnapshotCache?: DatabaseSnapshot
   ): Promise<void> {
+    await flushPendingSeedWrite();
     if (hasIndexedDB()) {
       const storeNames = new Set<(typeof ALL_STORES)[number]>();
       if (delta.settings) storeNames.add('meta');
@@ -677,105 +732,109 @@ export const storage: StorageAdapter = {
       if (delta.putQuizHandoffs?.length) storeNames.add('quizHandoffs');
 
       if (storeNames.size > 0) {
-        const db = await getDb();
-        const tx = db.transaction(Array.from(storeNames), 'readwrite');
+        try {
+          const db = await getDb();
+          const tx = db.transaction(Array.from(storeNames), 'readwrite');
 
-        if (delta.settings) {
-          void tx.objectStore('meta').put({
-            id: 'dbMeta',
-            version: SEED_VERSION,
-            settings: delta.settings,
-            updatedAt: new Date().toISOString(),
-          });
-        }
-        if (delta.putPlayers?.length || delta.deletePlayerIds?.length) {
-          const s = tx.objectStore('players');
-          for (const item of delta.putPlayers ?? []) void s.put(item);
-          for (const id of delta.deletePlayerIds ?? []) void s.delete(id);
-        }
-        if (delta.putUsers?.length || delta.deleteUserIds?.length) {
-          const s = tx.objectStore('users');
-          for (const item of delta.putUsers ?? []) void s.put(item);
-          for (const id of delta.deleteUserIds ?? []) void s.delete(id);
-        }
-        if (delta.putGroups?.length || delta.deleteGroupIds?.length) {
-          const s = tx.objectStore('groups');
-          for (const item of delta.putGroups ?? []) void s.put(item);
-          for (const id of delta.deleteGroupIds ?? []) void s.delete(id);
-        }
-        if (delta.putRounds?.length || delta.deleteRoundIds?.length) {
-          const s = tx.objectStore('rounds');
-          for (const item of delta.putRounds ?? []) void s.put(item);
-          for (const id of delta.deleteRoundIds ?? []) void s.delete(id);
-        }
-        if (delta.putSegments?.length || delta.deleteSegmentIds?.length) {
-          const s = tx.objectStore('segments');
-          for (const item of delta.putSegments ?? []) void s.put(item);
-          for (const id of delta.deleteSegmentIds ?? []) void s.delete(id);
-        }
-        if (delta.putMatches?.length || delta.deleteMatchIds?.length) {
-          const s = tx.objectStore('matches');
-          for (const item of delta.putMatches ?? []) void s.put(item);
-          for (const id of delta.deleteMatchIds ?? []) void s.delete(id);
-        }
-        if (delta.putScoreEvents?.length) {
-          const s = tx.objectStore('scoreEvents');
-          for (const item of delta.putScoreEvents) void s.put(item);
-        }
-        if (delta.putAbsenceEvents?.length) {
-          const s = tx.objectStore('absenceEvents');
-          for (const item of delta.putAbsenceEvents) void s.put(item);
-        }
-        if (delta.putBuzzEvents?.length) {
-          const s = tx.objectStore('buzzEvents');
-          for (const item of delta.putBuzzEvents) void s.put(item);
-        }
-        if (delta.putMatchEvents?.length) {
-          const s = tx.objectStore('matchEvents');
-          for (const item of delta.putMatchEvents) void s.put(item);
-        }
-        if (delta.putCheckInEvents?.length) {
-          const s = tx.objectStore('checkInEvents');
-          for (const item of delta.putCheckInEvents) void s.put(item);
-        }
-        if (delta.putAuditEntries?.length) {
-          const s = tx.objectStore('auditEntries');
-          for (const item of delta.putAuditEntries) void s.put(item);
-        }
-        if (delta.putSponsors?.length || delta.deleteSponsorIds?.length) {
-          const s = tx.objectStore('sponsors');
-          for (const item of delta.putSponsors ?? []) void s.put(item);
-          for (const id of delta.deleteSponsorIds ?? []) void s.delete(id);
-        }
-        if (delta.putContentItems?.length || delta.deleteContentItemIds?.length) {
-          const s = tx.objectStore('contentItems');
-          for (const item of delta.putContentItems ?? []) void s.put(item);
-          for (const id of delta.deleteContentItemIds ?? []) void s.delete(id);
-        }
-        if (delta.putQuizQuestions?.length || delta.deleteQuizQuestionIds?.length) {
-          const s = tx.objectStore('quizQuestions');
-          for (const item of delta.putQuizQuestions ?? []) void s.put(item);
-          for (const id of delta.deleteQuizQuestionIds ?? []) void s.delete(id);
-        }
-        if (delta.putQuizApplicants?.length || delta.deleteQuizApplicantIds?.length) {
-          const s = tx.objectStore('quizApplicants');
-          for (const item of delta.putQuizApplicants ?? []) void s.put(item);
-          for (const id of delta.deleteQuizApplicantIds ?? []) void s.delete(id);
-        }
-        if (delta.putQuizAttempts?.length) {
-          const s = tx.objectStore('quizAttempts');
-          for (const item of delta.putQuizAttempts) void s.put(item);
-        }
-        if (delta.putQuizEvents?.length) {
-          const s = tx.objectStore('quizEvents');
-          for (const item of delta.putQuizEvents) void s.put(item);
-        }
-        if (delta.putQuizHandoffs?.length) {
-          const s = tx.objectStore('quizHandoffs');
-          for (const item of delta.putQuizHandoffs) void s.put(item);
-        }
+          if (delta.settings) {
+            void tx.objectStore('meta').put({
+              id: 'dbMeta',
+              version: SEED_VERSION,
+              settings: delta.settings,
+              updatedAt: new Date().toISOString(),
+            });
+          }
+          if (delta.putPlayers?.length || delta.deletePlayerIds?.length) {
+            const s = tx.objectStore('players');
+            for (const item of delta.putPlayers ?? []) void s.put(item);
+            for (const id of delta.deletePlayerIds ?? []) void s.delete(id);
+          }
+          if (delta.putUsers?.length || delta.deleteUserIds?.length) {
+            const s = tx.objectStore('users');
+            for (const item of delta.putUsers ?? []) void s.put(item);
+            for (const id of delta.deleteUserIds ?? []) void s.delete(id);
+          }
+          if (delta.putGroups?.length || delta.deleteGroupIds?.length) {
+            const s = tx.objectStore('groups');
+            for (const item of delta.putGroups ?? []) void s.put(item);
+            for (const id of delta.deleteGroupIds ?? []) void s.delete(id);
+          }
+          if (delta.putRounds?.length || delta.deleteRoundIds?.length) {
+            const s = tx.objectStore('rounds');
+            for (const item of delta.putRounds ?? []) void s.put(item);
+            for (const id of delta.deleteRoundIds ?? []) void s.delete(id);
+          }
+          if (delta.putSegments?.length || delta.deleteSegmentIds?.length) {
+            const s = tx.objectStore('segments');
+            for (const item of delta.putSegments ?? []) void s.put(item);
+            for (const id of delta.deleteSegmentIds ?? []) void s.delete(id);
+          }
+          if (delta.putMatches?.length || delta.deleteMatchIds?.length) {
+            const s = tx.objectStore('matches');
+            for (const item of delta.putMatches ?? []) void s.put(item);
+            for (const id of delta.deleteMatchIds ?? []) void s.delete(id);
+          }
+          if (delta.putScoreEvents?.length) {
+            const s = tx.objectStore('scoreEvents');
+            for (const item of delta.putScoreEvents) void s.put(item);
+          }
+          if (delta.putAbsenceEvents?.length) {
+            const s = tx.objectStore('absenceEvents');
+            for (const item of delta.putAbsenceEvents) void s.put(item);
+          }
+          if (delta.putBuzzEvents?.length) {
+            const s = tx.objectStore('buzzEvents');
+            for (const item of delta.putBuzzEvents) void s.put(item);
+          }
+          if (delta.putMatchEvents?.length) {
+            const s = tx.objectStore('matchEvents');
+            for (const item of delta.putMatchEvents) void s.put(item);
+          }
+          if (delta.putCheckInEvents?.length) {
+            const s = tx.objectStore('checkInEvents');
+            for (const item of delta.putCheckInEvents) void s.put(item);
+          }
+          if (delta.putAuditEntries?.length) {
+            const s = tx.objectStore('auditEntries');
+            for (const item of delta.putAuditEntries) void s.put(item);
+          }
+          if (delta.putSponsors?.length || delta.deleteSponsorIds?.length) {
+            const s = tx.objectStore('sponsors');
+            for (const item of delta.putSponsors ?? []) void s.put(item);
+            for (const id of delta.deleteSponsorIds ?? []) void s.delete(id);
+          }
+          if (delta.putContentItems?.length || delta.deleteContentItemIds?.length) {
+            const s = tx.objectStore('contentItems');
+            for (const item of delta.putContentItems ?? []) void s.put(item);
+            for (const id of delta.deleteContentItemIds ?? []) void s.delete(id);
+          }
+          if (delta.putQuizQuestions?.length || delta.deleteQuizQuestionIds?.length) {
+            const s = tx.objectStore('quizQuestions');
+            for (const item of delta.putQuizQuestions ?? []) void s.put(item);
+            for (const id of delta.deleteQuizQuestionIds ?? []) void s.delete(id);
+          }
+          if (delta.putQuizApplicants?.length || delta.deleteQuizApplicantIds?.length) {
+            const s = tx.objectStore('quizApplicants');
+            for (const item of delta.putQuizApplicants ?? []) void s.put(item);
+            for (const id of delta.deleteQuizApplicantIds ?? []) void s.delete(id);
+          }
+          if (delta.putQuizAttempts?.length) {
+            const s = tx.objectStore('quizAttempts');
+            for (const item of delta.putQuizAttempts) void s.put(item);
+          }
+          if (delta.putQuizEvents?.length) {
+            const s = tx.objectStore('quizEvents');
+            for (const item of delta.putQuizEvents) void s.put(item);
+          }
+          if (delta.putQuizHandoffs?.length) {
+            const s = tx.objectStore('quizHandoffs');
+            for (const item of delta.putQuizHandoffs) void s.put(item);
+          }
 
-        await tx.done;
+          await tx.done;
+        } catch {
+          idbUnavailable = true;
+        }
       }
     }
 
@@ -788,10 +847,15 @@ export const storage: StorageAdapter = {
   },
 
   async resetToSeed(options?: CreateSeedOptions): Promise<DatabaseSnapshot> {
+    await flushPendingSeedWrite();
     cleanupLegacyLocalStorage();
     const fresh = await createSeedSnapshotAsync(options);
     if (hasIndexedDB()) {
-      await writeFullSnapshotToIDB(fresh);
+      try {
+        await writeFullSnapshotToIDB(fresh);
+      } catch {
+        idbUnavailable = true;
+      }
     }
     memorySnapshot = fresh;
     notifyOtherTabsCommitted();
@@ -799,198 +863,225 @@ export const storage: StorageAdapter = {
   },
 
   async getMatch(matchId: string): Promise<Match | null> {
-    await ensureInitialized();
-    if (!hasIndexedDB()) {
-      const m = memorySnapshot?.matches.find((x) => x.id === matchId);
+    const snap = await ensureInitialized();
+    if (!hasIndexedDB() || bgSeedWritePromise !== null) {
+      const m = snap.matches.find((x) => x.id === matchId);
       return m ? cloneData(m) : null;
     }
-    const db = await getDb();
-    const found = await db.get('matches', matchId);
-    return found ? cloneData(found) : null;
+    try {
+      const db = await getDb();
+      const found = await db.get('matches', matchId);
+      return found ? cloneData(found) : null;
+    } catch {
+      const m = snap.matches.find((x) => x.id === matchId);
+      return m ? cloneData(m) : null;
+    }
   },
 
   async getMatchesByRound(roundId: string): Promise<Match[]> {
-    await ensureInitialized();
-    if (!hasIndexedDB()) {
-      return cloneData(
-        (memorySnapshot?.matches ?? []).filter((m) => m.roundId === roundId)
-      );
+    const snap = await ensureInitialized();
+    if (!hasIndexedDB() || bgSeedWritePromise !== null) {
+      return cloneData(snap.matches.filter((m) => m.roundId === roundId));
     }
-    const db = await getDb();
-    return cloneData(await db.getAllFromIndex('matches', 'by-roundId', roundId));
+    try {
+      const db = await getDb();
+      return cloneData(await db.getAllFromIndex('matches', 'by-roundId', roundId));
+    } catch {
+      return cloneData(snap.matches.filter((m) => m.roundId === roundId));
+    }
   },
 
   async getMatchesByGroup(groupId: string): Promise<Match[]> {
-    await ensureInitialized();
-    if (!hasIndexedDB()) {
-      return cloneData(
-        (memorySnapshot?.matches ?? []).filter((m) => m.groupId === groupId)
-      );
+    const snap = await ensureInitialized();
+    if (!hasIndexedDB() || bgSeedWritePromise !== null) {
+      return cloneData(snap.matches.filter((m) => m.groupId === groupId));
     }
-    const db = await getDb();
-    return cloneData(await db.getAllFromIndex('matches', 'by-groupId', groupId));
+    try {
+      const db = await getDb();
+      return cloneData(await db.getAllFromIndex('matches', 'by-groupId', groupId));
+    } catch {
+      return cloneData(snap.matches.filter((m) => m.groupId === groupId));
+    }
   },
 
   async getMatchesByJudge(judgeUserId: string): Promise<Match[]> {
-    await ensureInitialized();
-    if (!hasIndexedDB()) {
-      return cloneData(
-        (memorySnapshot?.matches ?? []).filter((m) => m.judgeUserId === judgeUserId)
-      );
+    const snap = await ensureInitialized();
+    if (!hasIndexedDB() || bgSeedWritePromise !== null) {
+      return cloneData(snap.matches.filter((m) => m.judgeUserId === judgeUserId));
     }
-    const db = await getDb();
-    return cloneData(
-      await db.getAllFromIndex('matches', 'by-judgeUserId', judgeUserId)
-    );
+    try {
+      const db = await getDb();
+      return cloneData(
+        await db.getAllFromIndex('matches', 'by-judgeUserId', judgeUserId)
+      );
+    } catch {
+      return cloneData(snap.matches.filter((m) => m.judgeUserId === judgeUserId));
+    }
   },
 
   async getScoreEventsByMatch(matchId: string): Promise<ScoreEvent[]> {
-    await ensureInitialized();
-    if (!hasIndexedDB()) {
-      return cloneData(
-        (memorySnapshot?.scoreEvents ?? []).filter((e) => e.matchId === matchId)
-      );
+    const snap = await ensureInitialized();
+    if (!hasIndexedDB() || bgSeedWritePromise !== null) {
+      return cloneData(snap.scoreEvents.filter((e) => e.matchId === matchId));
     }
-    const db = await getDb();
-    return cloneData(
-      await db.getAllFromIndex('scoreEvents', 'by-matchId', matchId)
-    );
+    try {
+      const db = await getDb();
+      return cloneData(
+        await db.getAllFromIndex('scoreEvents', 'by-matchId', matchId)
+      );
+    } catch {
+      return cloneData(snap.scoreEvents.filter((e) => e.matchId === matchId));
+    }
   },
 
   async getScoreEventsByPlayer(playerId: string): Promise<ScoreEvent[]> {
-    await ensureInitialized();
-    if (!hasIndexedDB()) {
-      return cloneData(
-        (memorySnapshot?.scoreEvents ?? []).filter((e) => e.playerId === playerId)
-      );
+    const snap = await ensureInitialized();
+    if (!hasIndexedDB() || bgSeedWritePromise !== null) {
+      return cloneData(snap.scoreEvents.filter((e) => e.playerId === playerId));
     }
-    const db = await getDb();
-    return cloneData(
-      await db.getAllFromIndex('scoreEvents', 'by-playerId', playerId)
-    );
+    try {
+      const db = await getDb();
+      return cloneData(
+        await db.getAllFromIndex('scoreEvents', 'by-playerId', playerId)
+      );
+    } catch {
+      return cloneData(snap.scoreEvents.filter((e) => e.playerId === playerId));
+    }
   },
 
   async getAbsenceEventsByMatch(matchId: string): Promise<AbsenceEvent[]> {
-    await ensureInitialized();
-    if (!hasIndexedDB()) {
-      return cloneData(
-        (memorySnapshot?.absenceEvents ?? []).filter((e) => e.matchId === matchId)
-      );
+    const snap = await ensureInitialized();
+    if (!hasIndexedDB() || bgSeedWritePromise !== null) {
+      return cloneData(snap.absenceEvents.filter((e) => e.matchId === matchId));
     }
-    const db = await getDb();
-    return cloneData(
-      await db.getAllFromIndex('absenceEvents', 'by-matchId', matchId)
-    );
+    try {
+      const db = await getDb();
+      return cloneData(
+        await db.getAllFromIndex('absenceEvents', 'by-matchId', matchId)
+      );
+    } catch {
+      return cloneData(snap.absenceEvents.filter((e) => e.matchId === matchId));
+    }
   },
 
   async getBuzzEventsByMatch(matchId: string): Promise<BuzzEvent[]> {
-    await ensureInitialized();
-    if (!hasIndexedDB()) {
-      return cloneData(
-        (memorySnapshot?.buzzEvents ?? []).filter((e) => e.matchId === matchId)
-      );
+    const snap = await ensureInitialized();
+    if (!hasIndexedDB() || bgSeedWritePromise !== null) {
+      return cloneData(snap.buzzEvents.filter((e) => e.matchId === matchId));
     }
-    const db = await getDb();
-    return cloneData(
-      await db.getAllFromIndex('buzzEvents', 'by-matchId', matchId)
-    );
+    try {
+      const db = await getDb();
+      return cloneData(
+        await db.getAllFromIndex('buzzEvents', 'by-matchId', matchId)
+      );
+    } catch {
+      return cloneData(snap.buzzEvents.filter((e) => e.matchId === matchId));
+    }
   },
 
   async getMatchEventsByMatch(matchId: string): Promise<MatchLifecycleEvent[]> {
-    await ensureInitialized();
-    if (!hasIndexedDB()) {
-      return cloneData(
-        (memorySnapshot?.matchEvents ?? []).filter((e) => e.matchId === matchId)
-      );
+    const snap = await ensureInitialized();
+    if (!hasIndexedDB() || bgSeedWritePromise !== null) {
+      return cloneData(snap.matchEvents.filter((e) => e.matchId === matchId));
     }
-    const db = await getDb();
-    return cloneData(
-      await db.getAllFromIndex('matchEvents', 'by-matchId', matchId)
-    );
+    try {
+      const db = await getDb();
+      return cloneData(
+        await db.getAllFromIndex('matchEvents', 'by-matchId', matchId)
+      );
+    } catch {
+      return cloneData(snap.matchEvents.filter((e) => e.matchId === matchId));
+    }
   },
 
   async getStoreCounts() {
-    await ensureInitialized();
+    const snap = await ensureInitialized();
+    await flushPendingSeedWrite();
+    const fallbackCounts = () => ({
+      players: snap.players.length,
+      groups: snap.groups.length,
+      matches: snap.matches.length,
+      scoreEvents: snap.scoreEvents.length,
+      absenceEvents: snap.absenceEvents.length,
+      buzzEvents: snap.buzzEvents.length,
+      matchEvents: snap.matchEvents.length,
+      auditEntries: snap.auditEntries.length,
+      quizQuestions: snap.quizQuestions.length,
+      quizApplicants: snap.quizApplicants.length,
+      quizAttempts: snap.quizAttempts.length,
+      quizEvents: snap.quizEvents.length,
+      quizHandoffs: snap.quizHandoffs.length,
+    });
     if (!hasIndexedDB()) {
-      return {
-        players: memorySnapshot?.players.length ?? 0,
-        groups: memorySnapshot?.groups.length ?? 0,
-        matches: memorySnapshot?.matches.length ?? 0,
-        scoreEvents: memorySnapshot?.scoreEvents.length ?? 0,
-        absenceEvents: memorySnapshot?.absenceEvents.length ?? 0,
-        buzzEvents: memorySnapshot?.buzzEvents.length ?? 0,
-        matchEvents: memorySnapshot?.matchEvents.length ?? 0,
-        auditEntries: memorySnapshot?.auditEntries.length ?? 0,
-        quizQuestions: memorySnapshot?.quizQuestions.length ?? 0,
-        quizApplicants: memorySnapshot?.quizApplicants.length ?? 0,
-        quizAttempts: memorySnapshot?.quizAttempts.length ?? 0,
-        quizEvents: memorySnapshot?.quizEvents.length ?? 0,
-        quizHandoffs: memorySnapshot?.quizHandoffs.length ?? 0,
-      };
+      return fallbackCounts();
     }
-    const db = await getDb();
-    const tx = db.transaction(
-      [
-        'players',
-        'groups',
-        'matches',
-        'scoreEvents',
-        'absenceEvents',
-        'buzzEvents',
-        'matchEvents',
-        'auditEntries',
-        'quizQuestions',
-        'quizApplicants',
-        'quizAttempts',
-        'quizEvents',
-        'quizHandoffs',
-      ],
-      'readonly'
-    );
-    const [
-      players,
-      groups,
-      matches,
-      scoreEvents,
-      absenceEvents,
-      buzzEvents,
-      matchEvents,
-      auditEntries,
-      quizQuestions,
-      quizApplicants,
-      quizAttempts,
-      quizEvents,
-      quizHandoffs,
-    ] = await Promise.all([
-      tx.objectStore('players').count(),
-      tx.objectStore('groups').count(),
-      tx.objectStore('matches').count(),
-      tx.objectStore('scoreEvents').count(),
-      tx.objectStore('absenceEvents').count(),
-      tx.objectStore('buzzEvents').count(),
-      tx.objectStore('matchEvents').count(),
-      tx.objectStore('auditEntries').count(),
-      tx.objectStore('quizQuestions').count(),
-      tx.objectStore('quizApplicants').count(),
-      tx.objectStore('quizAttempts').count(),
-      tx.objectStore('quizEvents').count(),
-      tx.objectStore('quizHandoffs').count(),
-    ]);
-    await tx.done;
-    return {
-      players,
-      groups,
-      matches,
-      scoreEvents,
-      absenceEvents,
-      buzzEvents,
-      matchEvents,
-      auditEntries,
-      quizQuestions,
-      quizApplicants,
-      quizAttempts,
-      quizEvents,
-      quizHandoffs,
-    };
+    try {
+      const db = await getDb();
+      const tx = db.transaction(
+        [
+          'players',
+          'groups',
+          'matches',
+          'scoreEvents',
+          'absenceEvents',
+          'buzzEvents',
+          'matchEvents',
+          'auditEntries',
+          'quizQuestions',
+          'quizApplicants',
+          'quizAttempts',
+          'quizEvents',
+          'quizHandoffs',
+        ],
+        'readonly'
+      );
+      const [
+        players,
+        groups,
+        matches,
+        scoreEvents,
+        absenceEvents,
+        buzzEvents,
+        matchEvents,
+        auditEntries,
+        quizQuestions,
+        quizApplicants,
+        quizAttempts,
+        quizEvents,
+        quizHandoffs,
+      ] = await Promise.all([
+        tx.objectStore('players').count(),
+        tx.objectStore('groups').count(),
+        tx.objectStore('matches').count(),
+        tx.objectStore('scoreEvents').count(),
+        tx.objectStore('absenceEvents').count(),
+        tx.objectStore('buzzEvents').count(),
+        tx.objectStore('matchEvents').count(),
+        tx.objectStore('auditEntries').count(),
+        tx.objectStore('quizQuestions').count(),
+        tx.objectStore('quizApplicants').count(),
+        tx.objectStore('quizAttempts').count(),
+        tx.objectStore('quizEvents').count(),
+        tx.objectStore('quizHandoffs').count(),
+      ]);
+      await tx.done;
+      return {
+        players,
+        groups,
+        matches,
+        scoreEvents,
+        absenceEvents,
+        buzzEvents,
+        matchEvents,
+        auditEntries,
+        quizQuestions,
+        quizApplicants,
+        quizAttempts,
+        quizEvents,
+        quizHandoffs,
+      };
+    } catch {
+      return fallbackCounts();
+    }
   },
 };

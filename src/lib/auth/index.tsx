@@ -19,6 +19,24 @@ import { realtime } from '@/lib/realtime';
 const AUTH_STORAGE_KEY = 'casino_el_al3ab_auth_user_v1';
 const TAB_ROLE_OVERRIDE_KEY = 'casino_el_al3ab_demo_tab_role_v1';
 
+/**
+ * Immediate default demo session (Super Admin) used during initial render so
+ * first-time visitors on localhost and Vercel immediately land in Admin mode
+ * without flashing "Spectator (Public)" while IndexedDB initializes.
+ */
+const DEFAULT_ADMIN_USER: User = {
+  id: 'user-admin',
+  name: 'Admin',
+  nameAr: 'مدير البطولة',
+  email: 'admin@casinoelal3ab.com',
+  phone: '010-9000-0000',
+  whatsapp: '+201090000000',
+  role: 'superAdmin',
+  language: 'en',
+  titleEn: 'Tournament Director',
+  titleAr: 'مدير البطولة',
+};
+
 interface TabRoleOverride {
   role?: string;
   userId?: string;
@@ -192,50 +210,63 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [demoUsers, setDemoUsers] = useState<User[]>([]);
+  const [user, setUser] = useState<User | null>(DEFAULT_ADMIN_USER);
+  const [demoUsers, setDemoUsers] = useState<User[]>([DEFAULT_ADMIN_USER]);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadUsersAndSession = useCallback(async () => {
-    const allUsers = await userRepo.list();
-    setDemoUsers(allUsers);
-
-    // Demo-only per-tab role override (stored in sessionStorage so multiple tabs in ONE
-    // browser context can simultaneously operate as Admin, Scorer, Player, Big Screen, Fan).
-    const tabOverride = readTabRoleOverride();
-    if (tabOverride) {
-      const { resolved, user: tabUser } = resolveUserFromTabOverride(tabOverride, allUsers);
-      if (resolved) {
-        setUser(tabUser);
-        setIsLoading(false);
-        return;
-      }
-    }
-
-    let savedId: string | null = null;
     try {
-      savedId = window.localStorage.getItem(AUTH_STORAGE_KEY);
-    } catch {
-      savedId = null;
-    }
+      const tabOverride = readTabRoleOverride();
+      let savedId: string | null = null;
+      try {
+        savedId = window.localStorage.getItem(AUTH_STORAGE_KEY);
+      } catch {
+        savedId = null;
+      }
 
-    // Default to Super Admin on first visit so presenter can explore everything immediately,
-    // or restore saved user session
-    const targetId = savedId || 'user-admin';
-    if (targetId === 'visitor') {
-      setUser(null);
-    } else {
-      const matched = allUsers.find((u) => u.id === targetId) ?? allUsers[0] ?? null;
-      setUser(matched);
-      if (matched && savedId && matched.id !== savedId) {
-        try {
-          window.localStorage.setItem(AUTH_STORAGE_KEY, matched.id);
-        } catch {
-          // ignore
+      // If user explicitly chose Exit Role (Spectator), reflect immediately without waiting for IDB
+      if (!tabOverride && savedId === 'visitor') {
+        setUser(null);
+      }
+
+      const allUsers = await userRepo.list();
+      const safeUsers = allUsers.length > 0 ? allUsers : [DEFAULT_ADMIN_USER];
+      setDemoUsers(safeUsers);
+
+      // Demo-only per-tab role override (stored in sessionStorage so multiple tabs in ONE
+      // browser context can simultaneously operate as Admin, Scorer, Player, Big Screen, Fan).
+      if (tabOverride) {
+        const { resolved, user: tabUser } = resolveUserFromTabOverride(tabOverride, safeUsers);
+        if (resolved) {
+          setUser(tabUser);
+          setIsLoading(false);
+          return;
         }
       }
+
+      // Default to Super Admin on first visit so presenter can explore everything immediately,
+      // or restore saved user session
+      const targetId = savedId || 'user-admin';
+      if (targetId === 'visitor') {
+        setUser(null);
+      } else {
+        const matched = safeUsers.find((u) => u.id === targetId) ?? safeUsers[0] ?? DEFAULT_ADMIN_USER;
+        setUser(matched);
+        if (matched && savedId && matched.id !== savedId) {
+          try {
+            window.localStorage.setItem(AUTH_STORAGE_KEY, matched.id);
+          } catch {
+            // ignore
+          }
+        }
+      }
+    } catch {
+      // Never drop back to Spectator if storage init fails in a restricted browser
+      setDemoUsers((prev) => (prev.length > 0 ? prev : [DEFAULT_ADMIN_USER]));
+      setUser((prev) => prev ?? DEFAULT_ADMIN_USER);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, []);
 
   useEffect(() => {
@@ -253,7 +284,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loadUsersAndSession]);
 
   const loginAs = useCallback(async (userId: string): Promise<User | null> => {
-    const matched = await userRepo.get(userId);
+    const optimistic =
+      demoUsers.find((u) => u.id === userId) ??
+      (userId === DEFAULT_ADMIN_USER.id ? DEFAULT_ADMIN_USER : null);
+    if (optimistic) {
+      setUser(optimistic);
+    }
+    let matched: User | null = optimistic;
+    try {
+      const fromRepo = await userRepo.get(userId);
+      if (fromRepo) {
+        matched = fromRepo;
+      } else if (!optimistic) {
+        matched = null;
+      }
+    } catch {
+      matched = optimistic;
+    }
     setUser(matched);
     try {
       const hasTabOverride = Boolean(window.sessionStorage.getItem(TAB_ROLE_OVERRIDE_KEY));
@@ -271,7 +318,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // ignore
     }
     return matched;
-  }, []);
+  }, [demoUsers]);
 
   const logout = useCallback(() => {
     setUser(null);
