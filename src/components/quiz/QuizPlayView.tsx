@@ -59,90 +59,95 @@ export function QuizPlayView() {
 
   const syncSession = useCallback(
     async (applicantId: string, checkRefreshSignal = false) => {
-      const now = Date.now();
-      let sess = await quizRepo.getApplicantSession(applicantId, now);
-      if (!sess || !sess.attempt) {
-        router.replace('/quiz/register');
-        return;
-      }
-
-      if (sess.attempt.status === 'finished') {
-        router.replace('/quiz/result');
-        return;
-      }
-
-      if (sess.attempt.status === 'reset') {
-        router.replace('/quiz/rules');
-        return;
-      }
-
-      const attemptId = sess.attempt.attempt.id;
-      attemptIdRef.current = attemptId;
-      questionIdxRef.current = sess.attempt.currentQuestionIndex;
-
-      // Detect genuine browser refresh mid-attempt (sessionStorage survives F5 in same tab)
-      if (checkRefreshSignal && typeof window !== 'undefined') {
-        const markerKey = `${QUIZ_MOUNT_MARKER_PREFIX}${attemptId}`;
-        if (window.sessionStorage.getItem(markerKey)) {
-          await quizRepo.recordIntegritySignal({
-            attemptId,
-            signalType: 'page_refresh',
-            questionIndex: sess.attempt.currentQuestionIndex,
-          });
-          showIntegrityNotice(
-            lang === 'ar'
-              ? 'تم استكمال السؤال من التوقيت الأصلي (سُجلت إعادة التحميل كإشارة نزاهة).'
-              : 'Resumed from stored deadline (page refresh logged as a client-side signal).'
-          );
-        } else {
-          window.sessionStorage.setItem(markerKey, '1');
+      try {
+        const now = Date.now();
+        let sess = await quizRepo.getApplicantSession(applicantId, now);
+        if (!sess || !sess.attempt) {
+          router.replace('/quiz/register');
+          return;
         }
-      }
 
-      // Ensure question_shown exists (idempotent — NEVER resets stored deadline!)
-      if (!sess.attempt.activeQuestionDeadlineAt) {
-        await quizRepo.ensureQuestionShown({
-          attemptId,
-          questionIndex: sess.attempt.currentQuestionIndex,
-          nowMs: Date.now(),
-        });
-        sess = await quizRepo.getApplicantSession(applicantId, Date.now());
-        if (!sess || !sess.attempt) return;
-      }
-
-      // If stored deadline already expired while away/refreshing, immediately record timeout
-      const dlIso = sess.attempt.activeQuestionDeadlineAt;
-      const dlMs = dlIso ? Date.parse(dlIso) : NaN;
-      if (Number.isFinite(dlMs) && Date.now() >= dlMs) {
-        const updated = await quizRepo.recordTimeout({
-          attemptId,
-          questionIndex: sess.attempt.currentQuestionIndex,
-          nowMs: Date.now(),
-        });
-        if (updated.status === 'finished') {
+        if (sess.attempt.status === 'finished') {
           router.replace('/quiz/result');
           return;
         }
-        const refreshed = await quizRepo.getApplicantSession(applicantId, Date.now());
-        if (refreshed && refreshed.attempt) {
-          sess = refreshed;
-          questionIdxRef.current = refreshed.attempt.currentQuestionIndex;
+
+        if (sess.attempt.status === 'reset') {
+          router.replace('/quiz/rules');
+          return;
         }
+
+        const attemptId = sess.attempt.attempt.id;
+        attemptIdRef.current = attemptId;
+        questionIdxRef.current = sess.attempt.currentQuestionIndex;
+
+        // Detect genuine browser refresh mid-attempt (sessionStorage survives F5 in same tab)
+        if (checkRefreshSignal && typeof window !== 'undefined') {
+          const markerKey = `${QUIZ_MOUNT_MARKER_PREFIX}${attemptId}`;
+          if (window.sessionStorage.getItem(markerKey)) {
+            await quizRepo.recordIntegritySignal({
+              attemptId,
+              signalType: 'page_refresh',
+              questionIndex: sess.attempt.currentQuestionIndex,
+            });
+            showIntegrityNotice(
+              lang === 'ar'
+                ? 'تم استكمال السؤال من التوقيت الأصلي (سُجلت إعادة التحميل كإشارة نزاهة).'
+                : 'Resumed from stored deadline (page refresh logged as a client-side signal).'
+            );
+          } else {
+            window.sessionStorage.setItem(markerKey, '1');
+          }
+        }
+
+        // Ensure question_shown exists (idempotent — NEVER resets stored deadline!)
+        if (!sess.attempt.activeQuestionDeadlineAt) {
+          await quizRepo.ensureQuestionShown({
+            attemptId,
+            questionIndex: sess.attempt.currentQuestionIndex,
+            nowMs: Date.now(),
+          });
+          sess = await quizRepo.getApplicantSession(applicantId, Date.now());
+          if (!sess || !sess.attempt) return;
+        }
+
+        // If stored deadline already expired while away/refreshing, immediately record timeout
+        const dlIso = sess.attempt.activeQuestionDeadlineAt;
+        const dlMs = dlIso ? Date.parse(dlIso) : NaN;
+        if (Number.isFinite(dlMs) && Date.now() >= dlMs) {
+          const updated = await quizRepo.recordTimeout({
+            attemptId,
+            questionIndex: sess.attempt.currentQuestionIndex,
+            nowMs: Date.now(),
+          });
+          if (updated.status === 'finished') {
+            router.replace('/quiz/result');
+            return;
+          }
+          const refreshed = await quizRepo.getApplicantSession(applicantId, Date.now());
+          if (refreshed && refreshed.attempt) {
+            sess = refreshed;
+            questionIdxRef.current = refreshed.attempt.currentQuestionIndex;
+          }
+        }
+
+        const activeAttempt = sess.attempt;
+        if (!activeAttempt) return;
+        const freshDl = activeAttempt.activeQuestionDeadlineAt
+          ? Date.parse(activeAttempt.activeQuestionDeadlineAt)
+          : Date.now() + activeAttempt.attempt.secondsPerQuestion * 1000;
+
+        setRemainingMs(Math.max(0, freshDl - Date.now()));
+        setSelectedSlot(null);
+        setPhase('answering');
+        busyRef.current = false;
+        timeoutHandledForIdxRef.current = -1;
+        setSession(sess);
+      } catch {
+        busyRef.current = false;
+      } finally {
+        setLoading(false);
       }
-
-      const activeAttempt = sess.attempt;
-      if (!activeAttempt) return;
-      const freshDl = activeAttempt.activeQuestionDeadlineAt
-        ? Date.parse(activeAttempt.activeQuestionDeadlineAt)
-        : Date.now() + activeAttempt.attempt.secondsPerQuestion * 1000;
-
-      setRemainingMs(Math.max(0, freshDl - Date.now()));
-      setSelectedSlot(null);
-      setPhase('answering');
-      busyRef.current = false;
-      timeoutHandledForIdxRef.current = -1;
-      setSession(sess);
-      setLoading(false);
     },
     [lang, router, showIntegrityNotice]
   );

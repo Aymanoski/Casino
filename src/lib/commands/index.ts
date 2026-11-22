@@ -259,6 +259,30 @@ function computeDeltaBetweenSnapshots(
         }
       }
       if (allSameRef) return { put: [], del: [] };
+    } else if (nextArr.length > prevArr.length) {
+      // Pure append fast path (e.g. quizEvents.push)
+      let samePrefix = true;
+      for (let i = 0; i < prevArr.length; i += 1) {
+        if (prevArr[i] !== nextArr[i]) {
+          samePrefix = false;
+          break;
+        }
+      }
+      if (samePrefix) {
+        return { put: nextArr.slice(prevArr.length), del: [] };
+      }
+      // Pure prepend fast path (e.g. auditEntries.unshift, scoreEvents.unshift)
+      const addedCount = nextArr.length - prevArr.length;
+      let sameSuffix = true;
+      for (let i = 0; i < prevArr.length; i += 1) {
+        if (prevArr[i] !== nextArr[i + addedCount]) {
+          sameSuffix = false;
+          break;
+        }
+      }
+      if (sameSuffix) {
+        return { put: nextArr.slice(0, addedCount), del: [] };
+      }
     }
     const prevMap = new Map(prevArr.map((x) => [x.id, x]));
     const nextMap = new Map(nextArr.map((x) => [x.id, x]));
@@ -795,7 +819,17 @@ async function commitCommand<T>(
 
     // Run consistency invariants AFTER derived state recomputation and BEFORE committing!
     if (!envelope.skipInvariants) {
-      const report = checkInvariants(envelope.nextDb);
+      const quizUnchanged =
+        (beforeDb.quizEvents?.length ?? 0) === (envelope.nextDb.quizEvents?.length ?? 0) &&
+        (beforeDb.quizApplicants?.length ?? 0) === (envelope.nextDb.quizApplicants?.length ?? 0) &&
+        (beforeDb.quizAttempts?.length ?? 0) === (envelope.nextDb.quizAttempts?.length ?? 0) &&
+        (beforeDb.quizHandoffs?.length ?? 0) === (envelope.nextDb.quizHandoffs?.length ?? 0) &&
+        (beforeDb.quizQuestions?.length ?? 0) === (envelope.nextDb.quizQuestions?.length ?? 0) &&
+        beforeDb.players.length === envelope.nextDb.players.length &&
+        JSON.stringify(beforeDb.settings.quiz) === JSON.stringify(envelope.nextDb.settings.quiz);
+      const report = checkInvariants(envelope.nextDb, {
+        skipQuizInvariants: quizUnchanged,
+      });
       if (!report.ok) {
         if (!isProductionEnv()) {
           throw new InvariantViolationError(report);

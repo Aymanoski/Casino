@@ -957,7 +957,7 @@ export const storage: StorageAdapter = {
     }
     try {
       const db = await getDb();
-      const found = await db.get('matches', matchId);
+      const found = await withTimeout(db.get('matches', matchId), 2500);
       return found ? cloneData(found) : null;
     } catch {
       const m = snap.matches.find((x) => x.id === matchId);
@@ -972,7 +972,9 @@ export const storage: StorageAdapter = {
     }
     try {
       const db = await getDb();
-      return cloneData(await db.getAllFromIndex('matches', 'by-roundId', roundId));
+      return cloneData(
+        await withTimeout(db.getAllFromIndex('matches', 'by-roundId', roundId), 2500)
+      );
     } catch {
       return cloneData(snap.matches.filter((m) => m.roundId === roundId));
     }
@@ -985,7 +987,9 @@ export const storage: StorageAdapter = {
     }
     try {
       const db = await getDb();
-      return cloneData(await db.getAllFromIndex('matches', 'by-groupId', groupId));
+      return cloneData(
+        await withTimeout(db.getAllFromIndex('matches', 'by-groupId', groupId), 2500)
+      );
     } catch {
       return cloneData(snap.matches.filter((m) => m.groupId === groupId));
     }
@@ -999,7 +1003,10 @@ export const storage: StorageAdapter = {
     try {
       const db = await getDb();
       return cloneData(
-        await db.getAllFromIndex('matches', 'by-judgeUserId', judgeUserId)
+        await withTimeout(
+          db.getAllFromIndex('matches', 'by-judgeUserId', judgeUserId),
+          2500
+        )
       );
     } catch {
       return cloneData(snap.matches.filter((m) => m.judgeUserId === judgeUserId));
@@ -1014,7 +1021,10 @@ export const storage: StorageAdapter = {
     try {
       const db = await getDb();
       return cloneData(
-        await db.getAllFromIndex('scoreEvents', 'by-matchId', matchId)
+        await withTimeout(
+          db.getAllFromIndex('scoreEvents', 'by-matchId', matchId),
+          2500
+        )
       );
     } catch {
       return cloneData(snap.scoreEvents.filter((e) => e.matchId === matchId));
@@ -1029,7 +1039,10 @@ export const storage: StorageAdapter = {
     try {
       const db = await getDb();
       return cloneData(
-        await db.getAllFromIndex('scoreEvents', 'by-playerId', playerId)
+        await withTimeout(
+          db.getAllFromIndex('scoreEvents', 'by-playerId', playerId),
+          2500
+        )
       );
     } catch {
       return cloneData(snap.scoreEvents.filter((e) => e.playerId === playerId));
@@ -1044,7 +1057,10 @@ export const storage: StorageAdapter = {
     try {
       const db = await getDb();
       return cloneData(
-        await db.getAllFromIndex('absenceEvents', 'by-matchId', matchId)
+        await withTimeout(
+          db.getAllFromIndex('absenceEvents', 'by-matchId', matchId),
+          2500
+        )
       );
     } catch {
       return cloneData(snap.absenceEvents.filter((e) => e.matchId === matchId));
@@ -1059,7 +1075,10 @@ export const storage: StorageAdapter = {
     try {
       const db = await getDb();
       return cloneData(
-        await db.getAllFromIndex('buzzEvents', 'by-matchId', matchId)
+        await withTimeout(
+          db.getAllFromIndex('buzzEvents', 'by-matchId', matchId),
+          2500
+        )
       );
     } catch {
       return cloneData(snap.buzzEvents.filter((e) => e.matchId === matchId));
@@ -1074,7 +1093,10 @@ export const storage: StorageAdapter = {
     try {
       const db = await getDb();
       return cloneData(
-        await db.getAllFromIndex('matchEvents', 'by-matchId', matchId)
+        await withTimeout(
+          db.getAllFromIndex('matchEvents', 'by-matchId', matchId),
+          2500
+        )
       );
     } catch {
       return cloneData(snap.matchEvents.filter((e) => e.matchId === matchId));
@@ -1103,71 +1125,74 @@ export const storage: StorageAdapter = {
       return fallbackCounts();
     }
     try {
-      const db = await getDb();
-      const tx = db.transaction(
-        [
-          'players',
-          'groups',
-          'matches',
-          'scoreEvents',
-          'absenceEvents',
-          'buzzEvents',
-          'matchEvents',
-          'auditEntries',
-          'quizQuestions',
-          'quizApplicants',
-          'quizAttempts',
-          'quizEvents',
-          'quizHandoffs',
-        ],
-        'readonly'
-      );
-      const [
-        players,
-        groups,
-        matches,
-        scoreEvents,
-        absenceEvents,
-        buzzEvents,
-        matchEvents,
-        auditEntries,
-        quizQuestions,
-        quizApplicants,
-        quizAttempts,
-        quizEventChunks,
-        quizHandoffs,
-      ] = await Promise.all([
-        tx.objectStore('players').count(),
-        tx.objectStore('groups').count(),
-        tx.objectStore('matches').count(),
-        tx.objectStore('scoreEvents').count(),
-        tx.objectStore('absenceEvents').count(),
-        tx.objectStore('buzzEvents').count(),
-        tx.objectStore('matchEvents').count(),
-        tx.objectStore('auditEntries').count(),
-        tx.objectStore('quizQuestions').count(),
-        tx.objectStore('quizApplicants').count(),
-        tx.objectStore('quizAttempts').count(),
-        tx.objectStore('quizEvents').getAll(),
-        tx.objectStore('quizHandoffs').count(),
-      ]);
-      await tx.done;
-      const quizEvents = unpackQuizEventChunks(quizEventChunks).length;
-      return {
-        players,
-        groups,
-        matches,
-        scoreEvents,
-        absenceEvents,
-        buzzEvents,
-        matchEvents,
-        auditEntries,
-        quizQuestions,
-        quizApplicants,
-        quizAttempts,
-        quizEvents,
-        quizHandoffs,
+      const readCounts = async () => {
+        const db = await getDb();
+        const tx = db.transaction(
+          [
+            'players',
+            'groups',
+            'matches',
+            'scoreEvents',
+            'absenceEvents',
+            'buzzEvents',
+            'matchEvents',
+            'auditEntries',
+            'quizQuestions',
+            'quizApplicants',
+            'quizAttempts',
+            'quizEvents',
+            'quizHandoffs',
+          ],
+          'readonly'
+        );
+        const [
+          players,
+          groups,
+          matches,
+          scoreEvents,
+          absenceEvents,
+          buzzEvents,
+          matchEvents,
+          auditEntries,
+          quizQuestions,
+          quizApplicants,
+          quizAttempts,
+          quizEventChunks,
+          quizHandoffs,
+        ] = await Promise.all([
+          tx.objectStore('players').count(),
+          tx.objectStore('groups').count(),
+          tx.objectStore('matches').count(),
+          tx.objectStore('scoreEvents').count(),
+          tx.objectStore('absenceEvents').count(),
+          tx.objectStore('buzzEvents').count(),
+          tx.objectStore('matchEvents').count(),
+          tx.objectStore('auditEntries').count(),
+          tx.objectStore('quizQuestions').count(),
+          tx.objectStore('quizApplicants').count(),
+          tx.objectStore('quizAttempts').count(),
+          tx.objectStore('quizEvents').getAll(),
+          tx.objectStore('quizHandoffs').count(),
+        ]);
+        await tx.done;
+        const quizEvents = unpackQuizEventChunks(quizEventChunks).length;
+        return {
+          players,
+          groups,
+          matches,
+          scoreEvents,
+          absenceEvents,
+          buzzEvents,
+          matchEvents,
+          auditEntries,
+          quizQuestions,
+          quizApplicants,
+          quizAttempts,
+          quizEvents,
+          quizHandoffs,
+        };
       };
+      return await withTimeout(readCounts(), 2500);
     } catch {
       return fallbackCounts();
     }

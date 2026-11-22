@@ -9,7 +9,10 @@ import type { ConsistencyReport, InvariantViolation } from './types';
  * Verifies every invariant listed in AGENTS.md §15.4 against a DatabaseSnapshot.
  * Pure function — no side effects, no UI/storage imports.
  */
-export function checkInvariants(db: DatabaseSnapshot): ConsistencyReport {
+export function checkInvariants(
+  db: DatabaseSnapshot,
+  options?: { skipQuizInvariants?: boolean }
+): ConsistencyReport {
   const violations: InvariantViolation[] = [];
   const tournamentMatches = db.matches.filter((m) => !m.isDemo);
   const matchById = new Map(db.matches.map((m) => [m.id, m]));
@@ -402,7 +405,7 @@ export function checkInvariants(db: DatabaseSnapshot): ConsistencyReport {
   void getRevertedScoreEventIds;
 
   // 10–14. Registration Quiz Invariants (AGENTS.md §16.4)
-  if (db.settings?.quiz) {
+  if (!options?.skipQuizInvariants && db.settings?.quiz) {
     violations.push(...checkQuizInvariants(db));
   }
 

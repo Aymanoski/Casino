@@ -39,14 +39,18 @@ export function QuizResultView() {
   const [loading, setLoading] = useState(true);
 
   const loadSession = async () => {
-    const stored = readStoredApplicantSession();
-    if (!stored) {
+    try {
+      const stored = readStoredApplicantSession();
+      if (!stored) {
+        return;
+      }
+      const sess = await quizRepo.getApplicantSession(stored.applicantId);
+      setSession(sess);
+    } catch {
+      setSession(null);
+    } finally {
       setLoading(false);
-      return;
     }
-    const sess = await quizRepo.getApplicantSession(stored.applicantId);
-    setSession(sess);
-    setLoading(false);
   };
 
   useEffect(() => {

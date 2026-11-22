@@ -40,26 +40,33 @@ export function QuizRulesView() {
       router.replace('/quiz/register');
       return;
     }
-    quizRepo.getApplicantSession(stored.applicantId).then((sess) => {
-      if (!sess) {
+    quizRepo
+      .getApplicantSession(stored.applicantId)
+      .then((sess) => {
+        if (!sess) {
+          router.replace('/quiz/register');
+          return;
+        }
+        if (!sess.applicant.verifiedAt) {
+          router.replace('/quiz/register');
+          return;
+        }
+        if (sess.attempt?.status === 'finished') {
+          router.replace('/quiz/result');
+          return;
+        }
+        if (sess.attempt && sess.attempt.status !== 'reset') {
+          router.replace('/quiz/play');
+          return;
+        }
+        setSession(sess);
+      })
+      .catch(() => {
         router.replace('/quiz/register');
-        return;
-      }
-      if (!sess.applicant.verifiedAt) {
-        router.replace('/quiz/register');
-        return;
-      }
-      if (sess.attempt?.status === 'finished') {
-        router.replace('/quiz/result');
-        return;
-      }
-      if (sess.attempt && sess.attempt.status !== 'reset') {
-        router.replace('/quiz/play');
-        return;
-      }
-      setSession(sess);
-      setLoading(false);
-    });
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, [router]);
 
   useEffect(() => {

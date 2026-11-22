@@ -46,19 +46,24 @@ export function QuizLandingView() {
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
-    const now = Date.now();
-    const ov = await quizRepo.getPublicOverview(now);
-    const stored = readStoredApplicantSession();
-    const sess = stored
-      ? await quizRepo.getApplicantSession(stored.applicantId, now)
-      : null;
-    if (stored && !sess) {
-      clearStoredApplicantSession();
+    try {
+      const now = Date.now();
+      const ov = await quizRepo.getPublicOverview(now);
+      const stored = readStoredApplicantSession();
+      const sess = stored
+        ? await quizRepo.getApplicantSession(stored.applicantId, now)
+        : null;
+      if (stored && !sess) {
+        clearStoredApplicantSession();
+      }
+      setOverview(ov);
+      setSession(sess);
+      setNowMs(now);
+    } catch {
+      // Keep UI responsive rather than stuck on skeletons
+    } finally {
+      setLoading(false);
     }
-    setOverview(ov);
-    setSession(sess);
-    setNowMs(now);
-    setLoading(false);
   };
 
   useEffect(() => {
