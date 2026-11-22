@@ -1,4 +1,14 @@
 import { z } from 'zod';
+import {
+  QuizApplicantSchema,
+  QuizAttemptEventSchema,
+  QuizAttemptSchema,
+  QuizHandoffEventSchema,
+  QuizQuestionSchema,
+  QuizSettingsSchema,
+} from './quiz';
+
+export * from './quiz';
 
 export const LanguageSchema = z.enum(['en', 'ar']);
 export type Language = z.infer<typeof LanguageSchema>;
@@ -414,6 +424,11 @@ export const AuditEntityTypeSchema = z.enum([
   'content',
   'settings',
   'system',
+  'quiz_question',
+  'quiz_applicant',
+  'quiz_attempt',
+  'quiz_settings',
+  'quiz_handoff',
 ]);
 export type AuditEntityType = z.infer<typeof AuditEntityTypeSchema>;
 
@@ -520,13 +535,14 @@ export const SettingsSchema = z.object({
   delightersEnabled: z.boolean().default(false),
   soundEnabled: z.boolean().default(false),
   tournament: TournamentSettingsSchema,
+  quiz: QuizSettingsSchema,
   /** Compatibility view derived from tournament settings */
   bracketConfig: BracketConfigSchema,
   updatedAt: z.string(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
-// Full Database Snapshot Schema (v3 — CR1 Event-Sourced Architecture)
+// Full Database Snapshot Schema (v4 — Event-Sourced Tournament + Registration Quiz Demo)
 export const DatabaseSnapshotSchema = z.object({
   version: z.number(),
   players: z.array(PlayerSchema),
@@ -543,6 +559,11 @@ export const DatabaseSnapshotSchema = z.object({
   auditEntries: z.array(AuditEntrySchema),
   sponsors: z.array(SponsorSchema),
   contentItems: z.array(ContentItemSchema),
+  quizQuestions: z.array(QuizQuestionSchema).default([]),
+  quizApplicants: z.array(QuizApplicantSchema).default([]),
+  quizAttempts: z.array(QuizAttemptSchema).default([]),
+  quizEvents: z.array(QuizAttemptEventSchema).default([]),
+  quizHandoffs: z.array(QuizHandoffEventSchema).default([]),
   settings: SettingsSchema,
 });
 export type DatabaseSnapshot = z.infer<typeof DatabaseSnapshotSchema>;

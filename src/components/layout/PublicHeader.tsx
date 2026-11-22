@@ -104,6 +104,7 @@ export function PublicHeader() {
 
   const navItems = [
     { href: '/', label: t.nav.pitch },
+    { href: '/quiz', label: t.nav.quiz },
     { href: '/final', label: t.nav.finalNight },
     { href: '/groups', label: t.nav.groups },
     { href: '/bracket', label: t.nav.bracket },

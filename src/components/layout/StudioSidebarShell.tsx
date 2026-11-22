@@ -6,13 +6,16 @@ import { usePathname } from 'next/navigation';
 import {
   Activity,
   Award,
+  BookOpen,
   Calendar,
   CheckSquare,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   FileText,
   GitBranch,
   Globe,
+  HelpCircle,
   Home,
   LayoutDashboard,
   Layers,
@@ -21,6 +24,7 @@ import {
   RotateCcw,
   Settings,
   Shield,
+  Sliders,
   Sparkles,
   Tablet,
   Users,
@@ -168,6 +172,10 @@ export function StudioSidebarShell({
     { href: '/admin/managers', label: t.adminNav.managers, shortLabel: lang === 'ar' ? 'المديرون' : 'Managers', icon: Users },
     { href: '/admin/content', label: t.adminNav.content, shortLabel: lang === 'ar' ? 'المحتوى' : 'Content', icon: FileText },
     { href: '/admin/sponsors', label: t.adminNav.sponsors, shortLabel: lang === 'ar' ? 'الرعاة' : 'Sponsors', icon: Award },
+    { href: '/admin/quiz', label: t.adminNav.quizOverview, shortLabel: lang === 'ar' ? 'الاختبار' : 'Quiz', icon: ClipboardList },
+    { href: '/admin/quiz/questions', label: t.adminNav.quizQuestions, shortLabel: lang === 'ar' ? 'الأسئلة' : 'Bank', icon: BookOpen },
+    { href: '/admin/quiz/results', label: t.adminNav.quizResults, shortLabel: lang === 'ar' ? 'المتقدمون' : 'Applicants', icon: HelpCircle },
+    { href: '/admin/quiz/settings', label: t.adminNav.quizSettings, shortLabel: lang === 'ar' ? 'ضبط الاختبار' : 'Quiz Cfg', icon: Sliders },
     { href: '/admin/settings', label: t.adminNav.settings, shortLabel: lang === 'ar' ? 'الإعدادات' : 'Settings', icon: Settings },
   ];
 
@@ -226,7 +234,7 @@ export function StudioSidebarShell({
   };
 
   const isLinkActive = (href: string) =>
-    href === '/admin' || href === '/scorer'
+    href === '/admin' || href === '/scorer' || href === '/admin/quiz'
       ? pathname === href
       : pathname.startsWith(href);
 

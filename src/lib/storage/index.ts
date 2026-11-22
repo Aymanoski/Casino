@@ -25,6 +25,11 @@ import type {
   Match,
   MatchLifecycleEvent,
   Player,
+  QuizApplicant,
+  QuizAttempt,
+  QuizAttemptEvent,
+  QuizHandoffEvent,
+  QuizQuestion,
   Round,
   ScoreEvent,
   Segment,
@@ -40,7 +45,7 @@ import {
 } from '@/lib/seed';
 
 const DB_NAME = 'casino_el_al3ab_idb_v1';
-const DB_SCHEMA_VERSION = 1;
+const DB_SCHEMA_VERSION = 2;
 const LEGACY_LOCALSTORAGE_KEY = 'casino_el_al3ab_db_v1';
 const IDB_SYNC_CHANNEL = 'casino_el_al3ab_idb_sync_v1';
 const IDB_SYNC_STORAGE_KEY = 'casino_el_al3ab_idb_ping_v1';
@@ -137,6 +142,31 @@ interface CasinoIDBSchema extends DBSchema {
     value: ContentItem;
     indexes: { 'by-category': string };
   };
+  quizQuestions: {
+    key: string;
+    value: QuizQuestion;
+    indexes: { 'by-category': string; 'by-reviewStatus': string };
+  };
+  quizApplicants: {
+    key: string;
+    value: QuizApplicant;
+    indexes: { 'by-phone': string; 'by-email': string };
+  };
+  quizAttempts: {
+    key: string;
+    value: QuizAttempt;
+    indexes: { 'by-applicantId': string };
+  };
+  quizEvents: {
+    key: string;
+    value: QuizAttemptEvent;
+    indexes: { 'by-attemptId': string; 'by-applicantId': string; 'by-type': string };
+  };
+  quizHandoffs: {
+    key: string;
+    value: QuizHandoffEvent;
+    indexes: { 'by-applicantId': string; 'by-playerId': string };
+  };
 }
 
 const ALL_STORES = [
@@ -155,6 +185,11 @@ const ALL_STORES = [
   'auditEntries',
   'sponsors',
   'contentItems',
+  'quizQuestions',
+  'quizApplicants',
+  'quizAttempts',
+  'quizEvents',
+  'quizHandoffs',
 ] as const;
 
 export interface StorageDelta {
@@ -180,6 +215,13 @@ export interface StorageDelta {
   deleteSponsorIds?: string[];
   putContentItems?: ContentItem[];
   deleteContentItemIds?: string[];
+  putQuizQuestions?: QuizQuestion[];
+  deleteQuizQuestionIds?: string[];
+  putQuizApplicants?: QuizApplicant[];
+  deleteQuizApplicantIds?: string[];
+  putQuizAttempts?: QuizAttempt[];
+  putQuizEvents?: QuizAttemptEvent[];
+  putQuizHandoffs?: QuizHandoffEvent[];
   settings?: Settings;
 }
 
@@ -208,6 +250,11 @@ export interface StorageAdapter {
     buzzEvents: number;
     matchEvents: number;
     auditEntries: number;
+    quizQuestions: number;
+    quizApplicants: number;
+    quizAttempts: number;
+    quizEvents: number;
+    quizHandoffs: number;
   }>;
 }
 
@@ -353,6 +400,31 @@ async function getDb(): Promise<IDBPDatabase<CasinoIDBSchema>> {
           const s = db.createObjectStore('contentItems', { keyPath: 'id' });
           s.createIndex('by-category', 'category');
         }
+        if (!db.objectStoreNames.contains('quizQuestions')) {
+          const s = db.createObjectStore('quizQuestions', { keyPath: 'id' });
+          s.createIndex('by-category', 'category');
+          s.createIndex('by-reviewStatus', 'reviewStatus');
+        }
+        if (!db.objectStoreNames.contains('quizApplicants')) {
+          const s = db.createObjectStore('quizApplicants', { keyPath: 'id' });
+          s.createIndex('by-phone', 'normalizedPhone');
+          s.createIndex('by-email', 'normalizedEmail');
+        }
+        if (!db.objectStoreNames.contains('quizAttempts')) {
+          const s = db.createObjectStore('quizAttempts', { keyPath: 'id' });
+          s.createIndex('by-applicantId', 'applicantId');
+        }
+        if (!db.objectStoreNames.contains('quizEvents')) {
+          const s = db.createObjectStore('quizEvents', { keyPath: 'id' });
+          s.createIndex('by-attemptId', 'attemptId');
+          s.createIndex('by-applicantId', 'applicantId');
+          s.createIndex('by-type', 'type');
+        }
+        if (!db.objectStoreNames.contains('quizHandoffs')) {
+          const s = db.createObjectStore('quizHandoffs', { keyPath: 'id' });
+          s.createIndex('by-applicantId', 'applicantId');
+          s.createIndex('by-playerId', 'playerId');
+        }
       },
     });
   }
@@ -397,6 +469,11 @@ async function writeFullSnapshotToIDB(snapshot: DatabaseSnapshot): Promise<void>
   putAll('auditEntries', snapshot.auditEntries);
   putAll('sponsors', snapshot.sponsors);
   putAll('contentItems', snapshot.contentItems);
+  putAll('quizQuestions', snapshot.quizQuestions ?? []);
+  putAll('quizApplicants', snapshot.quizApplicants ?? []);
+  putAll('quizAttempts', snapshot.quizAttempts ?? []);
+  putAll('quizEvents', snapshot.quizEvents ?? []);
+  putAll('quizHandoffs', snapshot.quizHandoffs ?? []);
 
   await tx.done;
 }
@@ -424,6 +501,11 @@ async function readFullSnapshotFromIDB(): Promise<DatabaseSnapshot | null> {
     auditEntries,
     sponsors,
     contentItems,
+    quizQuestions,
+    quizApplicants,
+    quizAttempts,
+    quizEvents,
+    quizHandoffs,
   ] = await Promise.all([
     tx.objectStore('players').getAll(),
     tx.objectStore('users').getAll(),
@@ -439,6 +521,11 @@ async function readFullSnapshotFromIDB(): Promise<DatabaseSnapshot | null> {
     tx.objectStore('auditEntries').getAll(),
     tx.objectStore('sponsors').getAll(),
     tx.objectStore('contentItems').getAll(),
+    tx.objectStore('quizQuestions').getAll(),
+    tx.objectStore('quizApplicants').getAll(),
+    tx.objectStore('quizAttempts').getAll(),
+    tx.objectStore('quizEvents').getAll(),
+    tx.objectStore('quizHandoffs').getAll(),
   ]);
   await tx.done;
 
@@ -458,6 +545,11 @@ async function readFullSnapshotFromIDB(): Promise<DatabaseSnapshot | null> {
     auditEntries,
     sponsors,
     contentItems,
+    quizQuestions,
+    quizApplicants,
+    quizAttempts,
+    quizEvents,
+    quizHandoffs,
     settings: meta.settings,
   };
 }
@@ -518,9 +610,15 @@ function shallowCloneSnapshot(snap: DatabaseSnapshot): DatabaseSnapshot {
     auditEntries: [...snap.auditEntries],
     sponsors: [...snap.sponsors],
     contentItems: [...snap.contentItems],
+    quizQuestions: [...(snap.quizQuestions ?? [])],
+    quizApplicants: [...(snap.quizApplicants ?? [])],
+    quizAttempts: [...(snap.quizAttempts ?? [])],
+    quizEvents: [...(snap.quizEvents ?? [])],
+    quizHandoffs: [...(snap.quizHandoffs ?? [])],
     settings: {
       ...snap.settings,
       tournament: { ...snap.settings.tournament },
+      quiz: { ...snap.settings.quiz },
       bracketConfig: { ...snap.settings.bracketConfig },
     },
   };
@@ -568,6 +666,15 @@ export const storage: StorageAdapter = {
       if (delta.putContentItems?.length || delta.deleteContentItemIds?.length) {
         storeNames.add('contentItems');
       }
+      if (delta.putQuizQuestions?.length || delta.deleteQuizQuestionIds?.length) {
+        storeNames.add('quizQuestions');
+      }
+      if (delta.putQuizApplicants?.length || delta.deleteQuizApplicantIds?.length) {
+        storeNames.add('quizApplicants');
+      }
+      if (delta.putQuizAttempts?.length) storeNames.add('quizAttempts');
+      if (delta.putQuizEvents?.length) storeNames.add('quizEvents');
+      if (delta.putQuizHandoffs?.length) storeNames.add('quizHandoffs');
 
       if (storeNames.size > 0) {
         const db = await getDb();
@@ -644,6 +751,28 @@ export const storage: StorageAdapter = {
           const s = tx.objectStore('contentItems');
           for (const item of delta.putContentItems ?? []) void s.put(item);
           for (const id of delta.deleteContentItemIds ?? []) void s.delete(id);
+        }
+        if (delta.putQuizQuestions?.length || delta.deleteQuizQuestionIds?.length) {
+          const s = tx.objectStore('quizQuestions');
+          for (const item of delta.putQuizQuestions ?? []) void s.put(item);
+          for (const id of delta.deleteQuizQuestionIds ?? []) void s.delete(id);
+        }
+        if (delta.putQuizApplicants?.length || delta.deleteQuizApplicantIds?.length) {
+          const s = tx.objectStore('quizApplicants');
+          for (const item of delta.putQuizApplicants ?? []) void s.put(item);
+          for (const id of delta.deleteQuizApplicantIds ?? []) void s.delete(id);
+        }
+        if (delta.putQuizAttempts?.length) {
+          const s = tx.objectStore('quizAttempts');
+          for (const item of delta.putQuizAttempts) void s.put(item);
+        }
+        if (delta.putQuizEvents?.length) {
+          const s = tx.objectStore('quizEvents');
+          for (const item of delta.putQuizEvents) void s.put(item);
+        }
+        if (delta.putQuizHandoffs?.length) {
+          const s = tx.objectStore('quizHandoffs');
+          for (const item of delta.putQuizHandoffs) void s.put(item);
         }
 
         await tx.done;
@@ -792,6 +921,11 @@ export const storage: StorageAdapter = {
         buzzEvents: memorySnapshot?.buzzEvents.length ?? 0,
         matchEvents: memorySnapshot?.matchEvents.length ?? 0,
         auditEntries: memorySnapshot?.auditEntries.length ?? 0,
+        quizQuestions: memorySnapshot?.quizQuestions.length ?? 0,
+        quizApplicants: memorySnapshot?.quizApplicants.length ?? 0,
+        quizAttempts: memorySnapshot?.quizAttempts.length ?? 0,
+        quizEvents: memorySnapshot?.quizEvents.length ?? 0,
+        quizHandoffs: memorySnapshot?.quizHandoffs.length ?? 0,
       };
     }
     const db = await getDb();
@@ -805,6 +939,11 @@ export const storage: StorageAdapter = {
         'buzzEvents',
         'matchEvents',
         'auditEntries',
+        'quizQuestions',
+        'quizApplicants',
+        'quizAttempts',
+        'quizEvents',
+        'quizHandoffs',
       ],
       'readonly'
     );
@@ -817,6 +956,11 @@ export const storage: StorageAdapter = {
       buzzEvents,
       matchEvents,
       auditEntries,
+      quizQuestions,
+      quizApplicants,
+      quizAttempts,
+      quizEvents,
+      quizHandoffs,
     ] = await Promise.all([
       tx.objectStore('players').count(),
       tx.objectStore('groups').count(),
@@ -826,6 +970,11 @@ export const storage: StorageAdapter = {
       tx.objectStore('buzzEvents').count(),
       tx.objectStore('matchEvents').count(),
       tx.objectStore('auditEntries').count(),
+      tx.objectStore('quizQuestions').count(),
+      tx.objectStore('quizApplicants').count(),
+      tx.objectStore('quizAttempts').count(),
+      tx.objectStore('quizEvents').count(),
+      tx.objectStore('quizHandoffs').count(),
     ]);
     await tx.done;
     return {
@@ -837,6 +986,11 @@ export const storage: StorageAdapter = {
       buzzEvents,
       matchEvents,
       auditEntries,
+      quizQuestions,
+      quizApplicants,
+      quizAttempts,
+      quizEvents,
+      quizHandoffs,
     };
   },
 };

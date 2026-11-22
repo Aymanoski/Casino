@@ -5,6 +5,7 @@ export * from './groupRepo';
 export * from './matchRepo';
 export * from './permissions';
 export * from './playerRepo';
+export * from './quizRepo';
 export * from './roundRepo';
 export * from './scoreRepo';
 export * from './segmentRepo';

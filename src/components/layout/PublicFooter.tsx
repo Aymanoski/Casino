@@ -124,6 +124,12 @@ export function PublicFooter() {
                 {t.nav.pitch}
               </Link>
               <Link
+                href="/quiz"
+                className="inline-flex min-h-[44px] items-center rounded-button px-1 text-gold-200 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+              >
+                {t.nav.quiz}
+              </Link>
+              <Link
                 href="/final"
                 className="inline-flex min-h-[44px] items-center rounded-button px-1 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >

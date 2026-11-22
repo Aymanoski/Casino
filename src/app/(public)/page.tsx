@@ -6,6 +6,7 @@ import { playerRepo, settingsRepo } from '@/lib/repos';
 import { realtime } from '@/lib/realtime';
 import type { Player, Settings } from '@/lib/schemas';
 import { HeroFinalSection } from '@/components/landing/HeroFinalSection';
+import { QuizCalloutBanner } from '@/components/landing/QuizCalloutBanner';
 import { HowItWorksSection } from '@/components/landing/HowItWorksSection';
 import { SegmentsSection } from '@/components/landing/SegmentsSection';
 import { FeaturesSection } from '@/components/landing/FeaturesSection';
@@ -75,6 +76,9 @@ export default function HomePage() {
 
       {/* 3. How the Tournament Works + Live Bracket Preview (Stage) */}
       <HowItWorksSection settings={settings} />
+
+      {/* 3b. Registration Quiz Qualification Callout (Paper) */}
+      <QuizCalloutBanner settings={settings} />
 
       {/* 4. The 16 Original Show Segments Grid (Paper) */}
       <SegmentsSection settings={settings} />

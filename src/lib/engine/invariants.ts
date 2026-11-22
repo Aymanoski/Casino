@@ -2,6 +2,7 @@ import type { DatabaseSnapshot } from '@/lib/schemas';
 import { computeQualifiers } from './groups';
 import { computeMatchResult, computeMatchScores, getRevertedScoreEventIds } from './match';
 import { propagateWinners } from './cascade';
+import { checkQuizInvariants } from './quiz';
 import type { ConsistencyReport, InvariantViolation } from './types';
 
 /**
@@ -400,13 +401,18 @@ export function checkInvariants(db: DatabaseSnapshot): ConsistencyReport {
   // Ensure reverted event markers stay synced
   void getRevertedScoreEventIds;
 
+  // 10–14. Registration Quiz Invariants (AGENTS.md §16.4)
+  if (db.settings?.quiz) {
+    violations.push(...checkQuizInvariants(db));
+  }
+
   const errorCount = violations.filter((v) => v.severity === 'error').length;
   const warningCount = violations.filter((v) => v.severity === 'warning').length;
 
   return {
     ok: errorCount === 0,
     checkedAt: new Date().toISOString(),
-    totalChecks: 9,
+    totalChecks: 14,
     violations,
     summary: {
       matchesChecked: tournamentMatches.length,
@@ -417,7 +423,9 @@ export function checkInvariants(db: DatabaseSnapshot): ConsistencyReport {
         db.absenceEvents.length +
         db.buzzEvents.length +
         db.matchEvents.length +
-        db.checkInEvents.length,
+        db.checkInEvents.length +
+        (db.quizEvents?.length ?? 0) +
+        (db.quizHandoffs?.length ?? 0),
       errorCount,
       warningCount,
     },

@@ -19,6 +19,7 @@ const dictionary = {
     brandSubtitle: 'Ramadan Tournament',
     nav: {
       pitch: 'Pitch & Overview',
+      quiz: 'Quiz Demo',
       finalNight: 'Final Night',
       groups: 'Groups',
       bracket: 'Bracket',
@@ -57,6 +58,10 @@ const dictionary = {
       checkIn: 'Gate Check-In',
       content: 'Content & Rules',
       sponsors: 'Sponsor Tiers',
+      quizOverview: 'Quiz Dashboard',
+      quizQuestions: 'Quiz Questions',
+      quizSettings: 'Quiz Settings',
+      quizResults: 'Quiz Results',
       settings: 'Settings & Reset',
     },
     scorerNav: {
@@ -86,6 +91,7 @@ const dictionary = {
     brandSubtitle: 'بطولة رمضان الكبرى',
     nav: {
       pitch: 'العرض الرئيسي',
+      quiz: 'اختبار التسجيل',
       finalNight: 'ليلة النهائي',
       groups: 'المجموعات',
       bracket: 'شجرة البطولة',
@@ -124,6 +130,10 @@ const dictionary = {
       checkIn: 'بوابة حضور اللاعبين',
       content: 'المحتوى والقوانين',
       sponsors: 'فئات الرعاة',
+      quizOverview: 'لوحة الاختبار',
+      quizQuestions: 'بنك أسئلة الاختبار',
+      quizSettings: 'إعدادات الاختبار',
+      quizResults: 'نتائج المتقدمين',
       settings: 'الإعدادات وإعادة الضبط',
     },
     scorerNav: {

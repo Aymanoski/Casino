@@ -39,7 +39,13 @@ export type RepoAction =
   | 'consistency.check'
   | 'consistency.repair'
   | 'contact.viewPlayer'
-  | 'contact.viewJudge';
+  | 'contact.viewJudge'
+  | 'quiz.manageQuestions'
+  | 'quiz.manageSettings'
+  | 'quiz.readResults'
+  | 'quiz.readApplicantContacts'
+  | 'quiz.resetAttempt'
+  | 'quiz.handoff';
 
 export class PermissionDeniedError extends Error {
   readonly code = 'PERMISSION_DENIED';
@@ -175,23 +181,31 @@ export const MANAGER_ROLE_SPECS: RoleCapabilitySpec[] = [
       'Create, edit, reorder, and delete announcements, rules, and schedule blurbs',
       'Manage sponsor tiers, blurbs, logo text lockups, and benefits',
       'Edit EN/AR titles and descriptions of tournament segments',
+      'Create, edit, delete, CSV-import, and review the Quiz Question Bank (/admin/quiz/questions)',
     ],
     canDoAr: [
       'إضافة وتعديل وترتيب وحذف الإعلانات والقوانين وملاحظات الجدول',
       'إدارة فئات الرعاة والوصف والمميزات (نصوص مبدئية)',
       'تحرير أسماء وأوصاف الفقرات باللغتين العربية والإنجليزية',
+      'إدارة ومراجعة بنك أسئلة اختبار التسجيل (/admin/quiz/questions)',
     ],
     cannotDoEn: [
       'Change segment timers, categories, or delete/reorder segments',
       'Change scores, bracket, matches, players, managers, or settings',
-      'View player contacts, Gate Check-In, Results Feed, Consistency check, or Audit Log',
+      'View player or quiz applicant contacts, quiz results/settings/resets/handoff, Check-In, Results Feed, Consistency check, or Audit Log',
     ],
     cannotDoAr: [
       'تعديل مؤقتات الفقرات أو فئاتها أو حذفها أو تغيير ترتيبها',
       'تعديل النقاط أو شجرة البطولة أو اللاعبين أو المديرين أو الإعدادات',
-      'عرض بيانات التواصل أو بوابة الحضور أو سجل النتائج أو المراجعة',
+      'عرض بيانات تواصل اللاعبين أو المتقدمين، أو نتائج/إعدادات/إعادة محاولات الاختبار، أو الحضور أو سجل المراجعة',
     ],
-    routes: ['/admin', '/admin/content', '/admin/sponsors', '/admin/segments'],
+    routes: [
+      '/admin',
+      '/admin/content',
+      '/admin/sponsors',
+      '/admin/segments',
+      '/admin/quiz/questions',
+    ],
   },
 ];
 
@@ -222,6 +236,7 @@ export function canRolePerformAction(
     case 'segment.editCopy':
     case 'content.manage':
     case 'sponsor.manage':
+    case 'quiz.manageQuestions':
       return role === 'content';
     case 'game.operate':
     case 'match.operate':
@@ -244,6 +259,11 @@ export function canRolePerformAction(
     case 'results.read':
     case 'consistency.check':
     case 'consistency.repair':
+    case 'quiz.manageSettings':
+    case 'quiz.readResults':
+    case 'quiz.readApplicantContacts':
+    case 'quiz.resetAttempt':
+    case 'quiz.handoff':
       return false;
     default:
       return false;

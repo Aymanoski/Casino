@@ -17,3 +17,4 @@ export * from './players';
 export * from './scheduler';
 export * from './cascade';
 export * from './invariants';
+export * from './quiz';

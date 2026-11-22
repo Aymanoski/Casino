@@ -17,7 +17,11 @@ export type FeedbackSoundName =
   | 'timer.urgent'
   | 'game.winner'
   | 'card.flip'
-  | 'chip.clink';
+  | 'chip.clink'
+  | 'quiz.started'
+  | 'quiz.answered'
+  | 'quiz.timedOut'
+  | 'quiz.finished';
 
 export type FeedbackHapticName =
   | 'light'

@@ -272,3 +272,41 @@ To upgrade from same-browser multi-window sync (`BrowserRealtimeTransport` via `
 
 
 
+
+
+---
+
+## 11. Registration Quiz Module (`v0.1.2-quiz-demo`) — Frontend Demo to Production Backend Swap Checklist
+
+All applicant screens (`/quiz`, `/quiz/register`, `/quiz/rules`, `/quiz/play`, `/quiz/result`, `/quiz/how-it-works`) and admin screens (`/admin/quiz`, `/admin/quiz/questions`, `/admin/quiz/settings`, `/admin/quiz/results`) already read through async `src/lib/repos/quizRepo.ts`, execute mutations through `src/lib/commands/quiz.ts`, and derive all scores, response times, rankings, cutoff qualification, histograms, and integrity signals purely in `src/lib/engine/quiz.ts`. **Zero screen rewrites are needed when replacing the mock layer below:**
+
+### Required Backend Replacements (Replacing `DEMO MODE` Browser Mocks)
+- [ ] **Server-side deadlines & clock authority (`src/lib/commands/quiz.ts` → Server Actions / API):**
+  - Replace client `Date.now()` timestamps in `startQuizAttempt`, `ensureQuizQuestionShown`, `submitQuizAnswer`, and `recordQuizTimeout` with authoritative UTC server timestamps stored in PostgreSQL (`quiz_attempt_events`).
+  - Reject any answer submitted past `deadline_at + network_grace_ms` (e.g. `250ms`) on the server and automatically materialize a `timed_out` event (`response_time_ms = seconds_per_question * 1000`).
+- [ ] **Real OTP verification (`verifyQuizApplicant` + `registerQuizApplicant`):**
+  - Remove the visible `demoVerificationCode` (`123456`) notice and mock verification check.
+  - Integrate WhatsApp Business Cloud API, Twilio SMS, or transactional Email OTP with hashed short-lived codes (5-minute TTL, max 5 attempts per code) and signed HttpOnly applicant session cookies (`quiz_session`) replacing `localStorage` (`casino_quiz_applicant_session_v1`).
+- [ ] **Strict server-side one-attempt enforcement:**
+  - Add PostgreSQL partial unique indexes on `quiz_attempts` (excluding reset attempts) and `quiz_applicants(normalized_phone)` / `quiz_applicants(normalized_email)` so concurrent requests from multiple devices can never create two active attempts for the same verified person.
+  - Keep Super Admin-only audited attempt resets (`resetQuizAttempt`) gated by server JWT/session RBAC (`role === 'superAdmin'`).
+- [ ] **Secure one-question-at-a-time delivery (zero answer key in browser):**
+  - Replace local IndexedDB reads of `quizQuestions` with an authenticated `GET /api/quiz/attempts/:id/current` endpoint that returns ONLY the current `PublicQuizQuestionPayload` (`shuffledOptions` with opaque token IDs, NEVER `correctOptionIndex`, NEVER future questions, and NEVER `explanation`).
+  - Grade answers strictly on the server inside `POST /api/quiz/attempts/:id/answer`.
+- [ ] **Admin RBAC & applicant contact PII isolation:**
+  - Enforce `quiz.readResults` & `quiz.readApplicantContacts` strictly for `superAdmin` on server endpoints; restrict `content` manager strictly to `quiz.manageQuestions` (`/admin/quiz/questions`); encrypt or restrict applicant phone/email PII at rest and audit bulk CSV exports.
+- [ ] **Anti-cheat / integrity signal hardening:**
+  - Keep browser `visibilitychange` / `page_refresh` / `copy` listeners labeled as auxiliary client-side signals, and augment server-side with IP velocity, User-Agent/session binding, and impossible response-time anomaly detection.
+- [ ] **Rate limiting & burst load handling (launch-minute traffic spike):**
+  - Add Redis/Upstash sliding-window rate limiting on `/api/quiz/register`, `/api/quiz/verify` (OTP abuse protection), and `/api/quiz/attempts/*`.
+  - Serve static question text from edge/Redis cache and batch/stream high-volume `quiz_attempt_events` inserts so 10,000+ simultaneous Ramadan launch applicants experience <100ms answer latency.
+- [ ] **Human content review gate before launch:**
+  - Remove Demo Mode `draft` question fallback (`selectEligibleQuestionPool`) in production so attempts draw **exclusively** from human-reviewed `reviewStatus === 'approved'` questions (all 64 seeded questions intentionally start as `draft`).
+- [ ] **Tournament Handoff (`handoffQualifiedToTournament`):**
+  - Run `previewQuizHandoff` + `handoffQualifiedToTournament` inside a single PostgreSQL `SERIALIZABLE` transaction with a unique constraint on `quiz_handoff_events(applicant_id)` and `quiz_handoff_events(player_id)` to preserve guaranteed idempotency across retries.
+
+### Completed Demo Verification (`v0.1.2-quiz-demo`)
+- [x] Schemas (`src/lib/schemas/quiz.ts`), IndexedDB v2 (`20` indexed stores), 64 original Arabic-first bilingual `draft` questions, and 1,200 procedural applicants (`010-0000-1001..2200` + 5 overlap contacts).
+- [x] Pure engine (`src/lib/engine/quiz.ts`), atomic commands (`src/lib/commands/quiz.ts`), privacy-enforced async `quizRepo`, 5 new Consistency invariants (`14` total in `/admin/consistency`), and AST derived-write guard extension.
+- [x] All 6 applicant screens (`/quiz*`, Arabic-first RTL default, persistent `DEMO MODE` pill) + all 4 Admin Quiz Studio screens (`/admin/quiz*`, Content Manager bank-only RBAC, virtualized 1,200+ results with visible Cutoff Line + Jump to Cutoff, Impact Preview Idempotent Handoff).
+- [x] Vitest suite (`src/lib/__tests__/quiz-module.test.ts` + full 9-file suite), live Playwright E2E across 320px–1920px in AR RTL & EN LTR, and Impeccable audit fixes (`icon-tile-stack`, `nested-cards`, 16px mobile inputs, instant cutoff scroll, Arabic BiDi score fraction, compact mobile DEMO pill).

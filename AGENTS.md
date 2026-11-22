@@ -1,7 +1,7 @@
  # AGENTS.md — Project Context (READ THIS FIRST, EVERY SESSION)
 
 > Also read `DESIGN.md` before building any UI.
-> **Section 15 (Change Request 1, from client feedback after Phase 9) OVERRIDES any earlier section it conflicts with** (sections 3, 4, 6, 8 and 9 especially).
+> **Section 15 (Change Request 1, from client feedback after Phase 9) and Section 16 (Quiz Module Demo) OVERRIDE any earlier section they conflict with** (sections 2, 3, 4, 6, 8, 9, 11 and 12 especially).
 > If your tool prefers `GEMINI.md` or a rules folder, copy this file there too.
 
 ## 1. What we are building
@@ -45,7 +45,7 @@ Interpretation:
 | Session | A "Game" = one 3-player session with a scorer, made of ordered segments |
 | Profile | Player profile with stats and history; manager profile |
 
-A separate **registration quiz** (20 questions, 10 seconds each, randomized) was mentioned. **It is OUT OF SCOPE for now.** Do not build it. Do not leave dead links for it. A later project will handle it.
+A **registration quiz** (20 questions, 10 seconds each, randomized) was originally deferred, and is now in scope as a **frontend-only demo module** (see **Section 16**).
 
 ## 3. Current direction (aligned with Section 15 / Change Request 1)
 
@@ -69,10 +69,10 @@ A separate **registration quiz** (20 questions, 10 seconds each, randomized) was
 
 | Role | Can do | Cannot do |
 |---|---|---|
-| Super admin | Everything: players, avatars, groups/draw, knockouts, managers, segments, settings, overrides, absence reversal, Impact Preview cascades, Consistency check & Repair by recomputation, audit log, results feed, all contacts | n/a |
-| Judge / Scorer | See assigned matches, run a match, tap buzz, apply +1/−1 points and Yellow/Red cards, undo own last action, mark player absent, move segments, view contact info ONLY for players in assigned matches (audited) | Edit bracket, players, settings, other judges' matches, reverse absences, override results, view unassigned player contacts |
-| Check-in staff | See today's matches and players, view player contacts for check-in, record arrival check-in (`registered`, `checkedIn`, `absent`) | Change scores, cards, bracket, settings, or derived tournament status |
-| Content manager | Edit schedule blurbs, announcements, sponsors, rules text, segment descriptions | Change scores, bracket, players, or view contacts |
+| Super admin | Everything: players, avatars, groups/draw, knockouts, managers, segments, settings, overrides, absence reversal, Impact Preview cascades, Consistency check & Repair by recomputation, audit log, results feed, all contacts, **full Quiz admin (dashboard, question bank, settings, results, attempt resets, tournament handoff)** | n/a |
+| Judge / Scorer | See assigned matches, run a match, tap buzz, apply +1/−1 points and Yellow/Red cards, undo own last action, mark player absent, move segments, view contact info ONLY for players in assigned matches (audited) | Edit bracket, players, settings, other judges' matches, reverse absences, override results, view unassigned player contacts, access Quiz admin |
+| Check-in staff | See today's matches and players, view player contacts for check-in, record arrival check-in (`registered`, `checkedIn`, `absent`) | Change scores, cards, bracket, settings, derived tournament status, or access Quiz admin |
+| Content manager | Edit schedule blurbs, announcements, sponsors, rules text, segment descriptions, **and edit the Quiz question bank (`/admin/quiz/questions` only)** | Change scores, bracket, players, view contacts, or view Quiz results/settings/resets/handoff |
 
 Players (login) see only their profile, avatar editor, post-match history, and upcoming match details (including their assigned judge's contact card, with NO upcoming/live segment details). Visitors see only public pages (general "how it works", no upcoming match segments).
 Auth is **mocked** for the prototype: a login screen with demo accounts per role. Structure it so real auth drops in later.
@@ -172,6 +172,9 @@ Descriptions: short and original (write them yourself). **Do not copy text from 
 **Public**
 `/` pitch and landing · `/final` final night showcase · `/groups` · `/bracket` · `/leaderboard` · `/schedule` · `/rules` · `/segments` · `/sponsors`
 
+**Registration Quiz (public applicant flow, demo mode, Arabic-first RTL default with EN toggle)**
+`/quiz` · `/quiz/register` · `/quiz/rules` · `/quiz/play` · `/quiz/result` · `/quiz/how-it-works`
+
 **Auth (mock)**
 `/login` with demo account picker per role
 
@@ -185,7 +188,7 @@ Descriptions: short and original (write them yourself). **Do not copy text from 
 `/screen/[gameId]` (live game for venue/stream) · `/screen/leaderboard`
 
 **Admin**
-`/admin` dashboard · `/admin/players` · `/admin/managers` · `/admin/groups` (Group draw, manual moves, standings) · `/admin/bracket` · `/admin/matches` (redirect from `/admin/games`) · `/admin/segments` · `/admin/results` (results feed) · `/admin/audit` · `/admin/consistency` (Consistency check & Repair by recomputation) · `/admin/check-in` · `/admin/content` · `/admin/sponsors` · `/admin/settings`
+`/admin` dashboard · `/admin/players` · `/admin/managers` · `/admin/groups` (Group draw, manual moves, standings) · `/admin/bracket` · `/admin/matches` (redirect from `/admin/games`) · `/admin/segments` · `/admin/results` (results feed) · `/admin/audit` · `/admin/consistency` (Consistency check & Repair by recomputation) · `/admin/check-in` · `/admin/content` · `/admin/sponsors` · `/admin/settings` · **`/admin/quiz` (dashboard) · `/admin/quiz/questions` · `/admin/quiz/settings` · `/admin/quiz/results`**
 
 ### Scorer console requirements (the heart of the product — aligned with §15.2)
 - Adapts to **2 players** (all group & knockout 1v1 matches) or **3 participants** (the Final with two finalists + Marwan Serry).
@@ -235,7 +238,7 @@ Chronological (newest first, toggle oldest first) list of every finished match a
 6. **Verify with the browser.** After each screen: run the dev server, open it, screenshot, compare to `DESIGN.md`, fix the 3 biggest gaps. Check both **English (LTR)** and **Arabic (RTL)**, and a phone-width viewport.
 7. **Definition of done for any screen:** no console errors, no lint or type errors, keyboard accessible, readable contrast, works in EN and AR, works across the full device matrix in section 13 (320px phones up to 2560px monitors), empty and loading states handled.
 8. **Never invent real data** about real people or real prices. Placeholders must look like placeholders where it matters.
-9. Do not build the registration quiz.
+9. Keep the registration quiz strictly within its documented frontend-only demo scope (Section 16) with clear DEMO MODE honesty pills and backend handoff notes in `TODO.md`.
 10. Ask the product owner a question only when a decision would be expensive to undo. Otherwise decide, document, continue.
 
 ## 12. Creative latitude and evolving scope (important)
@@ -245,7 +248,7 @@ Chronological (newest first, toggle oldest first) list of every finished match a
 - **Prepare hook points now so Delighters can be added later without rewrites:** wrap animatable UI in small reusable components (e.g. `AnimatedNumber`, `ChipBadge`, `PlayerPanel`), emit named events for key moments (`score.changed`, `buzz.recorded`, `segment.changed`, `game.finished`, `final.revealed`) through the realtime layer, add a no-op `feedback` service (`/lib/feedback`) with `play(name)` and `haptic(name)` stubs, and add a `delighters` setting (on/off) that defaults to **off** in Phases 1 to 9.
 - **The scope will grow.** Expect new features, screens, roles, game formats and visual changes during the project. Design the code so additions are easy: modular components, repo layer, configurable bracket and segments.
 - **Challenge and improve.** If you see a better approach than what is written here (UX, structure, naming, game flow), say so briefly and propose it. The product owner decides.
-- **Everything marked "out of scope" or "decided" can be reopened** when the product owner asks. Until then, do not build the registration quiz.
+- **Everything marked "out of scope" or "decided" can be reopened** when the product owner asks (as done for the Registration Quiz demo in Section 16).
 - **Change protocol:** when scope changes, (1) update `AGENTS.md` sections affected, (2) note it in `ASSUMPTIONS.md` with the date, (3) check that existing screens, seed data and repos still work, (4) continue.
 - The legal and brand-safety rules in section 10 stay, because they protect the product owner. Everything else is flexible.
 
@@ -349,3 +352,68 @@ All numbers are **adjustable in admin settings** (defaults in brackets):
 ### 15.6 Phase order
 
 Change Request 1 is built before the Delighters (Phase 10). The Delighters work must then use the new 2-player and 3-player match model.
+
+---
+
+## 16. Quiz Module (Demo) — Registration Qualification Filter (Nov 22, 2026)
+
+A **frontend-only demo** of the registration quiz module that screens applicants before the tournament begins. It runs in the browser on IndexedDB behind the existing repository, pure engine, command pipeline, realtime, feedback, and audit log architecture so a real backend can drop in later with **zero screen rewrites**.
+
+### 16.1 Rules & adjustable settings (stored in `Settings.quiz`)
+
+All parameters are editable in `/admin/quiz/settings` with these defaults:
+- `questionsPerAttempt`: **20** (drawn randomly without replacement from the bank).
+- `secondsPerQuestion`: **10** seconds per question.
+- `syncCutoffWithTournament`: **true** — effective top-N cutoff follows `Settings.tournament.totalPlayers` (**720**), with an option to disable sync and set a custom `customCutoffN`.
+- `verificationChannel`: `'whatsapp_or_sms'` (wording shows WhatsApp / SMS verification code; configurable to `'whatsapp'`, `'sms'`, or `'email'`; demo mode displays visible test code `123456`).
+- `showRankImmediately`: **false** — applicants see their score and total response time right away, and official rank/qualification is announced once the quiz window closes (when the window is closed or the admin enables instant rank preview, `/quiz/result` reveals rank and cutoff status).
+- `windowStartsAt` / `windowEndsAt`: open right now by default (opened **48 hours ago**, closes **5 days from now**), with quick admin presets to switch between *Open*, *Upcoming*, and *Closed* during a pitch.
+- `retakePolicy`: `'single_attempt'` — strictly **one attempt per verified person** (normalized phone or email). Only the **Super Admin** can reset an attempt (requires a reason, appends a `reset` event without deleting prior events, and writes an `AuditEntry`).
+- **Deterministic seeded randomization:** Each attempt stores a `shuffleSeed`. Pure engine functions shuffle both the 20 selected questions and each question's 4 answer options deterministically from `(attemptId, shuffleSeed)` so resuming or inspecting an attempt always reproduces the exact same order.
+- **Strict play flow:** No going back, no pause. Selecting an answer moves on immediately without revealing whether it was right or wrong. A timeout counts as a wrong answer and records the full `secondsPerQuestion` (10,000 ms) response time. Refreshing mid-attempt resumes using stored per-question deadline timestamps (never restarting the clock).
+- **Scoring & ranking:**
+  - `score` = count of correct answers (`0..questionsPerAttempt`).
+  - Ranking order: (1) `score` descending, (2) `totalResponseTimeMs` ascending, (3) earlier `submittedAt` timestamp ascending, (4) deterministic `attemptId` tie-breaker.
+  - Cutoff line: top `N` finished attempts qualify (`qualified`); remaining finished attempts are `waitlisted`; unsubmitted attempts are `in_progress` or `abandoned`; reset attempts are superseded (`reset`) so a fresh attempt can start.
+- **Arabic-first applicant experience:** Question bank is authored Arabic-first with English translations (`questionAr`/`questionEn`, `optionsAr`/`optionsEn`). Entering `/quiz*` defaults the quiz experience to **Arabic RTL** (while keeping the `EN | عربي` toggle always reachable, and locking language switch or clearly confirming mid-attempt so reading time isn't disrupted).
+- **Draft vs. approved questions in Demo Mode:** All 60+ seeded original questions start with `reviewStatus: 'draft'` so a human must review factual accuracy and Arabic phrasing before production. In Demo Mode, `/quiz/play` draws from `approved` questions when at least `questionsPerAttempt` are approved, and falls back to `draft` questions with a clear Demo Mode notice in `/admin/quiz/questions`.
+
+### 16.2 Screens & navigation
+
+**Applicant side (phone-first, no login, Stage theme for play/hero + Paper for details, EN & AR RTL, persistent `DEMO MODE` pill):**
+- `/quiz` — Landing: what the quiz is, 3-step overview, live time window status/countdown, link to `/quiz/how-it-works`, and Start CTA (plus link from Public Header, Footer, and a compact callout card on `/` without displacing Marwan Serry's Hero).
+- `/quiz/register` — Full name, phone, email, mock verification step (visible demo notice with test code `123456`), consent checkbox, and duplicate-attempt guard.
+- `/quiz/rules` — Plain-language rules summary + 3-2-1 get-ready countdown before starting the clock.
+- `/quiz/play` — Stage theme, huge circular gold-on-crimson 10-second countdown (crisp whole seconds `10 → 0`, high-urgency pulse + white flash border in final 3 seconds, `prefers-reduced-motion` safe), progress through 20, four large thumb-friendly answer buttons (desktop keyboard `1`–`4`), instant neutral confirmation without revealing correct answers, automatic advance, clear timeout state, and refresh-safe deadline resumption.
+- `/quiz/result` — Score, total response time, rank/qualification message per `showRankImmediately` & window status, and link to tournament overview.
+- `/quiz/how-it-works` — Plain-language pitch explainer contrasting this browser Demo Mode with the production server architecture (server-side deadlines, per-applicant randomization, verified one-attempt enforcement, secure answer secrecy, ranking/cutoff, and tournament handoff).
+
+**Admin side (Paper theme, persistent `DEMO MODE` pill):**
+- `/admin/quiz` — Dashboard (Super Admin): applicants, attempts, completion rate, average score, score histogram with cutoff line, window status, and quick handoff CTA.
+- `/admin/quiz/questions` — Question bank (Super Admin + **Content Manager**): CRUD, CSV import with row validation & preview, 4 categories (`general`, `egyptian_cinema`, `music`, `wordplay_logic`), difficulty (`easy | medium | hard`), `reviewStatus` (`draft | approved`), Arabic & English fields, shuffled applicant-view preview, and `"Needs human review"` filter.
+- `/admin/quiz/settings` — Settings (Super Admin): `questionsPerAttempt`, `secondsPerQuestion`, top-N cutoff (synced with `Settings.tournament.totalPlayers` or custom), time window + quick status presets, verification channel wording, rank reveal toggle, and retake policy.
+- `/admin/quiz/results` — Virtualized results table for 1,200+ applicants (Super Admin): rank, score, total time, status, client-side integrity signals, visible cutoff line, search & filters, CSV export, per-question timeline drawer, audited Super Admin attempt reset, and **"Send qualified applicants to the tournament"** handoff button.
+
+### 16.3 Connection to the tournament (handoff & sync)
+
+1. **Cutoff sync:** When `Settings.quiz.syncCutoffWithTournament` is enabled, changing `Settings.tournament.totalPlayers` automatically updates the derived quiz cutoff line without mutating quiz events.
+2. **Idempotent handoff command (`handoffQualifiedToTournament`):**
+   - Super Admin previews exact impact via pure `previewQuizHandoff()`: qualified count, new `Player` records to create, already handed-off applicants skipped, existing tournament phone/email matches/conflicts.
+   - Upon explicit Super Admin confirmation, creates `Player` records through the existing command pipeline (carrying `contact: { phone, whatsapp, email }` and deterministic 3D `avatar` keys via `deterministicAvatarKey`), records immutable `QuizHandoffEvent` links (`applicantId <-> playerId`), logs `AuditEntry` records, and runs `checkInvariants()`.
+   - Safely repeatable: re-running creates **zero duplicate players** (verified by engine invariants and Vitest tests).
+3. **Contact privacy:** Applicant phone/email details are strictly admin-only (`superAdmin`) and never exposed on public routes, `/quiz/*` after submission, or Content Manager views.
+
+### 16.4 Event-sourced data architecture, integrity signals & invariants (extends §15.4)
+
+- **Append-only source of truth:** `QuizAttemptEvent` (`started`, `question_shown`, `answered`, `timed_out`, `finished`, `reset`, `integrity_signal`) + `QuizHandoffEvent` stored in dedicated IndexedDB object stores behind async `quizRepo`.
+- **Pure engine (`/lib/engine/quiz.ts`):** Deterministically derives `shuffledQuestionIds`, `shuffledOptionOrder`, per-question deadlines, `score`, `totalResponseTimeMs`, `status`, `rank`, `cutoffRank`, `qualified`, `histogram`, `integrityFlags`, `previewQuizHandoff`, and quiz invariants. Zero UI/storage/realtime imports; zero stored derived fields outside engine/commands.
+- **Consistency check invariants (added to `checkInvariants()` & `/admin/consistency`):**
+  - At most one active/non-reset attempt per verified applicant (normalized phone/email).
+  - Derived ranks are strictly consistent with `(score DESC, totalResponseTimeMs ASC, submittedAt ASC)`.
+  - Qualified count matches top-N finished attempts within cutoff.
+  - Every `QuizHandoffEvent` references a valid existing `Player` and no duplicate tournament players exist for the same handed-off applicant.
+  - No orphan `QuizAttemptEvent` records.
+- **Honest client-side integrity signals:** Real browser listeners record `visibility_hidden` (`visibilitychange` / tab switch), `page_refresh` (session resume reload), and `copy_attempt` (`copy` / `contextmenu`) events. Surfaced in `/admin/quiz/results` explicitly labeled as **"Client-side signals (demo)"**.
+- **Delighter hooks (no Delighters built yet):** Emit `quiz.started`, `quiz.answered`, `quiz.timedOut`, `quiz.finished` through `/lib/realtime` and `/lib/feedback` stubs (`delightersEnabled` stays `false`).
+- **Seed data:** 1,200 procedural applicants with realistic Egyptian EN/AR names, `010-0000-xxxx` phone numbers, realistic score distribution, response times, ~40 incomplete attempts, ~50 client-side flagged attempts, plus 64 original bilingual questions (16 per category, all `reviewStatus: 'draft'`).
+- **Demo honesty:** Persistent `"DEMO MODE"` pill on all applicant and admin quiz routes clearly noting that timer, verification, and anti-cheat signals run in-browser here and are server-enforced in production. Every production replacement point is itemized in `TODO.md`.

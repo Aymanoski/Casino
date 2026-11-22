@@ -84,6 +84,7 @@ import {
   InvariantViolationError,
   VersionConflictError,
 } from './errors';
+import { createQuizCommands } from './quiz';
 
 // Ensure cross-tab realtime messages always invalidate local IndexedDB cache
 registerCrossTabCacheInvalidator(() => storage.invalidateCache());
@@ -319,6 +320,23 @@ function computeDeltaBetweenSnapshots(
 
   const auDiff = diffById(before.auditEntries, after.auditEntries);
   if (auDiff.put.length) delta.putAuditEntries = auDiff.put;
+
+  const qqDiff = diffById(before.quizQuestions ?? [], after.quizQuestions ?? []);
+  if (qqDiff.put.length) delta.putQuizQuestions = qqDiff.put;
+  if (qqDiff.del.length) delta.deleteQuizQuestionIds = qqDiff.del;
+
+  const qaDiff = diffById(before.quizApplicants ?? [], after.quizApplicants ?? []);
+  if (qaDiff.put.length) delta.putQuizApplicants = qaDiff.put;
+  if (qaDiff.del.length) delta.deleteQuizApplicantIds = qaDiff.del;
+
+  const qattDiff = diffById(before.quizAttempts ?? [], after.quizAttempts ?? []);
+  if (qattDiff.put.length) delta.putQuizAttempts = qattDiff.put;
+
+  const qevDiff = diffById(before.quizEvents ?? [], after.quizEvents ?? []);
+  if (qevDiff.put.length) delta.putQuizEvents = qevDiff.put;
+
+  const qhDiff = diffById(before.quizHandoffs ?? [], after.quizHandoffs ?? []);
+  if (qhDiff.put.length) delta.putQuizHandoffs = qhDiff.put;
 
   if (JSON.stringify(before.settings) !== JSON.stringify(after.settings)) {
     delta.settings = after.settings;
@@ -750,9 +768,15 @@ async function commitCommand<T>(
       auditEntries: [...beforeDb.auditEntries],
       sponsors: [...beforeDb.sponsors],
       contentItems: [...beforeDb.contentItems],
+      quizQuestions: [...(beforeDb.quizQuestions ?? [])],
+      quizApplicants: [...(beforeDb.quizApplicants ?? [])],
+      quizAttempts: [...(beforeDb.quizAttempts ?? [])],
+      quizEvents: [...(beforeDb.quizEvents ?? [])],
+      quizHandoffs: [...(beforeDb.quizHandoffs ?? [])],
       settings: {
         ...beforeDb.settings,
         tournament: { ...beforeDb.settings.tournament },
+        quiz: { ...beforeDb.settings.quiz },
         bracketConfig: { ...beforeDb.settings.bracketConfig },
       },
     };
@@ -5376,6 +5400,14 @@ export const commands = {
       };
     });
   },
+
+  ...createQuizCommands({
+    commitCommand,
+    createAuditRecord,
+    nextId,
+    nextIsoTimestamp,
+  }),
 };
 
 export * from './errors';
+export * from './quiz';

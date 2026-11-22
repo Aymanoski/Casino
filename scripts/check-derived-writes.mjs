@@ -22,6 +22,9 @@ const FORBIDDEN_DERIVED_WRITE_PROPS = new Set([
   'winnerId',
   'advancingPlayerIds',
   'stats',
+  'qualified',
+  'qualificationStatus',
+  'totalResponseTimeMs',
 ]);
 
 // Matches object keys written in repo/UI mutation payloads (e.g. update(..., { status: ... }))
@@ -29,6 +32,9 @@ const FORBIDDEN_MUTATION_OBJECT_KEYS = new Set([
   'winnerPlayerId',
   'winnerId',
   'advancingPlayerIds',
+  'qualified',
+  'qualificationStatus',
+  'totalResponseTimeMs',
 ]);
 
 const ENGINE_FORBIDDEN_IMPORTS = [
@@ -148,7 +154,7 @@ for (const filePath of walkTsFiles(SRC_DIR)) {
       if (ts.isCallExpression(node)) {
         const calleeText = node.expression.getText(sf);
         const isRepoWriteCall =
-          /\b(matchRepo|gameRepo|playerRepo|roundRepo|scoreRepo)\.(create|update|bulkCreate)\b/.test(
+          /\b(matchRepo|gameRepo|playerRepo|roundRepo|scoreRepo|quizRepo)\.(create|update|bulkCreate)\b/.test(
             calleeText
           );
         if (isRepoWriteCall) {

@@ -83,8 +83,11 @@ function VirtualListInner<T>(
         if (!el || items.length === 0) return;
         const clamped = Math.max(0, Math.min(items.length - 1, index));
         const targetRow = Math.floor(clamped / safeCols);
-        const top = Math.max(0, targetRow * stride - stride * 0.5);
+        const top = Math.max(0, targetRow * stride - stride * 1.5);
         el.scrollTo({ top, behavior });
+        if (behavior === 'auto' || behavior === 'instant') {
+          setScrollTop(top);
+        }
       },
       scrollToTop() {
         containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });

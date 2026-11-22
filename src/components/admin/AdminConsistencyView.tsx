@@ -35,6 +35,11 @@ interface StorageCounts {
   buzzEvents: number;
   matchEvents: number;
   auditEntries: number;
+  quizQuestions?: number;
+  quizApplicants?: number;
+  quizAttempts?: number;
+  quizEvents?: number;
+  quizHandoffs?: number;
 }
 
 const INVARIANT_CATALOG: Array<{
@@ -106,6 +111,41 @@ const INVARIANT_CATALOG: Array<{
     titleAr: 'عزل الضيف مروان سري عن المجموعات والترتيب',
     descEn: 'Marwan Serry appears only in the Grand Final and never in groups, standings, or player rankings.',
     descAr: 'يشارك مروان سري في النهائي فقط ولا يدخل في المجموعات أو الترتيب العام.',
+  },
+  {
+    code: 'QUIZ_ONE_ACTIVE_ATTEMPT_PER_APPLICANT',
+    titleEn: 'Quiz: Single Active Attempt per Verified Person',
+    titleAr: 'الاختبار: محاولة نشطة واحدة لكل متقدم موثّق',
+    descEn: 'Every verified phone/email has at most one active (non-reset) quiz attempt.',
+    descAr: 'كل رقم هاتف أو بريد موثّق يمتلك محاولة نشطة واحدة فقط بحد أقصى.',
+  },
+  {
+    code: 'QUIZ_RANKING_ORDER_CONSISTENT',
+    titleEn: 'Quiz: Rankings Strictly Match Score & Time',
+    titleAr: 'الاختبار: الترتيب يطابق الدرجة والزمن تماماً',
+    descEn: 'Derived applicant ranks follow score DESC, total response time ASC, and submission time ASC.',
+    descAr: 'ترتيب المتقدمين يتبع أعلى درجة ثم أقل زمن إجمالي ثم الأسبقية في التسليم.',
+  },
+  {
+    code: 'QUIZ_CUTOFF_CONSISTENT',
+    titleEn: 'Quiz: Cutoff Qualification Matches Top N',
+    titleAr: 'الاختبار: حد التأهل يطابق أعلى N متقدم',
+    descEn: 'Qualified count equals min(finished attempts, effective cutoff N synced with tournament settings).',
+    descAr: 'عدد المتأهلين يطابق تماماً الحد الأعلى للتأهل المرتبط بإعدادات البطولة.',
+  },
+  {
+    code: 'QUIZ_HANDOFF_NO_DUPLICATE_PLAYERS',
+    titleEn: 'Quiz: Handoff Never Creates Duplicate Players',
+    titleAr: 'الاختبار: الترحيل لا يُنشئ لاعبين مكررين أبداً',
+    descEn: 'Every handoff record points to a valid unique tournament player with zero duplicate handoffs.',
+    descAr: 'كل سجل ترحيل يرتبط بلاعب صالح وفريد في البطولة دون أي تكرار.',
+  },
+  {
+    code: 'QUIZ_NO_ORPHAN_EVENTS',
+    titleEn: 'Quiz: Zero Orphan Attempts or Events',
+    titleAr: 'الاختبار: لا توجد محاولات أو أحداث يتيمة',
+    descEn: 'Every quiz attempt and event references valid existing applicant and attempt records.',
+    descAr: 'جميع محاولات وأحداث الاختبار مرتبطة بسجلات صالحة وموجودة.',
   },
 ];
 

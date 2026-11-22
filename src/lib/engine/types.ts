@@ -201,12 +201,26 @@ export type InvariantCode =
   | 'PLAYER_AT_MOST_ONE_LIVE_MATCH'
   | 'STORED_STATS_MATCH_RECOMPUTED'
   | 'NO_ORPHAN_EVENTS'
-  | 'MARWAN_EXCLUDED_FROM_STANDINGS';
+  | 'MARWAN_EXCLUDED_FROM_STANDINGS'
+  | 'QUIZ_ONE_ACTIVE_ATTEMPT_PER_APPLICANT'
+  | 'QUIZ_RANKING_ORDER_CONSISTENT'
+  | 'QUIZ_CUTOFF_CONSISTENT'
+  | 'QUIZ_HANDOFF_NO_DUPLICATE_PLAYERS'
+  | 'QUIZ_NO_ORPHAN_EVENTS';
 
 export interface InvariantViolation {
   code: InvariantCode;
   severity: 'error' | 'warning';
-  entityType: 'match' | 'group' | 'player' | 'event' | 'round';
+  entityType:
+    | 'match'
+    | 'group'
+    | 'player'
+    | 'event'
+    | 'round'
+    | 'quiz_applicant'
+    | 'quiz_attempt'
+    | 'quiz_event'
+    | 'quiz_handoff';
   entityId: string;
   messageEn: string;
   messageAr: string;

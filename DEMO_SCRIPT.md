@@ -1,6 +1,6 @@
 # 6-Minute Pitch & Operations Walkthrough — Casino El Al3ab Ramadan Tournament (`DEMO_SCRIPT.md`)
 
-> **Version:** `v0.1.1-client-feedback-1` (Change Request 1 complete — 720-player scale, Groups + 1v1 Knockouts + 1v1v1 Marwan Final, Scorer Console v2, Player Privacy & Avatars, Event-Sourced Engine & Consistency Check)
+> **Version:** `v0.1.2-quiz-demo` (Registration Quiz Demo Module + Change Request 1 720-player scale, Groups + 1v1 Knockouts + 1v1v1 Marwan Final, Scorer Console v2, Player Privacy & Avatars, Event-Sourced Engine & 14-Invariant Consistency Check)
 > **Audience:** Marwan Serry & tournament operations team
 > **Goal:** Prove in 6 minutes that the platform combines **broadcast-grade TV energy** with **bulletproof 720-player operations**, zero-mistake live judging (`+1`/`−1`/Yellow/Red/Walkover/Contact), strict player segment secrecy, automatic data consistency, and a show-stopping **Grand Final seat waiting for Marwan Serry**.
 
@@ -92,6 +92,23 @@ Complete these steps **before** walking into the room:
   3. Switch to **`/sponsors`**: Show the 4 editable placeholder sponsor tiers (**Presenting**, **Final Night**, **Segment**, **Community**) + deliverables comparison matrix (`"Contact us"`, zero hardcoded prices).
 - **Closing line:**
   > *"Everything you just saw runs end-to-end at 720-player scale with zero manual spreadsheet math, zero leaked segments, full Arabic RTL, and 9 automated data-integrity checks on every single tap. All that's left is plugging in our production database, confirming the Ramadan 2027 dates and sponsor tiers, and putting you in that Golden Seat on Final Night."*
+
+---
+
+## Bonus Module Demo (2:00) · Registration Qualification Quiz (`/quiz` → `/admin/quiz*`)
+
+Use this flow when showing the client how **1,200+ public applicants** are screened fairly into the **720-player Ramadan tournament** (note the persistent **`DEMO MODE`** honesty pill on every quiz screen):
+
+1. **Applicant Sprint (Phone-First, Arabic-First RTL — `/quiz` → `/quiz/play`):**
+   - Open **`/quiz`** (defaults to **Arabic RTL**, with `EN | عربي` toggle in the header). Point out the live time window countdown, `20 Questions × 10s`, `Top 720 Qualify`, and the **`DEMO MODE`** pill.
+   - Click **"ابدأ الاختبار الآن" / "Start Qualification Quiz"** → register a test applicant → point out the WhatsApp/SMS verification wording and visible Demo OTP **`123456`** (1-tap **Fill Code**) → review the plain rules → trigger the **3-2-1 countdown**.
+   - On **`/quiz/play`**: show the huge circular **10-second Stage countdown** (shifts to white flash pulse in final 3 seconds), 4 large thumb-friendly answer buttons (or desktop keys `1`–`4`), neutral **"Answer recorded"** feedback (never reveals right/wrong), and **hit F5 refresh** mid-question to prove the clock resumes from the stored deadline without restarting to 10s!
+   - Point to **`/quiz/how-it-works`** as a 1-page pitch explainer contrasting Browser Demo Mode vs. Production Server Architecture.
+2. **Admin Quiz Studio & Idempotent Handoff (`/admin/quiz` → `/admin/quiz/questions` → `/admin/quiz/results`):**
+   - Open **`/admin/quiz`**: Show **1,200 seeded applicants**, completion rate, average score, and the **Score Distribution Histogram** with the dashed **Cutoff #720** line.
+   - Open **`/admin/quiz/questions`**: Show all **64 original bilingual questions** marked **`Draft · Needs Human Review`** (also accessible to the **Content Manager** role, who is blocked from seeing applicant contacts/results), click **Preview** to demonstrate deterministic option shuffling, and click **Import CSV → Load Sample CSV** to show row-by-row validation.
+   - Open **`/admin/quiz/results`**: Click **"Jump to Cutoff (#720)"** to snap straight to the visible cutoff divider inside the 1,200-row virtualized table; click **Timeline** on a flagged applicant to show honest **"Client-side signals (demo)"** counts, the 20-question event timeline, and the audited Super Admin **Reset Attempt** action.
+   - Click **"Send Qualified to Tournament"**: Show the **Impact Preview** (`715 new players`, `5 existing roster duplicates skipped`, `0 conflicts`), confirm handoff, then click it a **second time** to prove **0 new players / 720 already handed off** (100% idempotent) and check **`/admin/consistency`** (`ALL 14 INVARIANTS PASS · 0 Violations`).
 
 ---
 

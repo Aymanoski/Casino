@@ -129,7 +129,8 @@ export function canAccessPath(role: UserRole | null, pathname: string): boolean 
         pathname === '/admin' ||
         pathname.startsWith('/admin/content') ||
         pathname.startsWith('/admin/sponsors') ||
-        pathname.startsWith('/admin/segments')
+        pathname.startsWith('/admin/segments') ||
+        pathname.startsWith('/admin/quiz/questions')
       );
     }
     return false;

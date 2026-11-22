@@ -26,8 +26,14 @@ import {
   generateKnockout,
   propagateWinners,
 } from '@/lib/engine';
+import {
+  createDefaultQuizSettings,
+  createSeededQuizBundle,
+  createSeededQuizQuestions,
+  DEFAULT_QUIZ_APPLICANT_COUNT,
+} from './quizSeed';
 
-export const SEED_VERSION = 3;
+export const SEED_VERSION = 4;
 
 export type SeedPresetSize = 12 | 48 | 720;
 
@@ -74,6 +80,8 @@ export interface CreateSeedOptions {
   includeFinalWithMarwan?: boolean;
   /** When false, creates a clean all-scheduled tournament with zero simulated matches */
   includeDemoProgress?: boolean;
+  /** Number of seeded fake quiz applicants (default 1,200; tests may pass a smaller number) */
+  quizApplicantCount?: number;
 }
 
 // First 27 curated entries from AGENTS.md §9 (seed pool prefix)
@@ -1342,6 +1350,10 @@ export function createSeedSnapshot(options: CreateSeedOptions = {}): DatabaseSna
     });
   }
 
+  const quizBundle = createSeededQuizBundle({
+    applicantCount: options.quizApplicantCount ?? DEFAULT_QUIZ_APPLICANT_COUNT,
+  });
+
   const settings: Settings = {
     id: 'global-settings',
     eventName: 'Casino El Al3ab — Ramadan Tournament',
@@ -1359,6 +1371,7 @@ export function createSeedSnapshot(options: CreateSeedOptions = {}): DatabaseSna
     delightersEnabled: false,
     soundEnabled: false,
     tournament,
+    quiz: quizBundle.quizSettings,
     bracketConfig: buildBracketConfigCompat(tournament),
     updatedAt: '2027-02-28T18:00:00.000Z',
   };
@@ -1394,9 +1407,21 @@ export function createSeedSnapshot(options: CreateSeedOptions = {}): DatabaseSna
     auditEntries: auditEntries.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
     sponsors,
     contentItems,
+    quizQuestions: quizBundle.quizQuestions,
+    quizApplicants: quizBundle.quizApplicants,
+    quizAttempts: quizBundle.quizAttempts,
+    quizEvents: quizBundle.quizEvents,
+    quizHandoffs: quizBundle.quizHandoffs,
     settings,
   };
 }
+
+export {
+  createDefaultQuizSettings,
+  createSeededQuizBundle,
+  createSeededQuizQuestions,
+  DEFAULT_QUIZ_APPLICANT_COUNT,
+};
 
 /**
  * Non-blocking async wrapper for seed generation so preset switches (12 / 48 / 720)

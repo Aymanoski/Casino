@@ -23,8 +23,10 @@ import {
 import {
   buildBracketConfigCompat,
   createContentItemsSeed,
+  createDefaultQuizSettings,
   createDefaultUsers,
   createDemoSeedState,
+  createSeededQuizQuestions,
   createSegmentsSeed,
   createSponsorsSeed,
   generateProceduralPlayers,
@@ -477,6 +479,7 @@ export function createVideoDemoSnapshot(
     delightersEnabled: false,
     soundEnabled: false,
     tournament,
+    quiz: createDefaultQuizSettings(),
     bracketConfig: buildBracketConfigCompat(tournament),
     updatedAt: '2027-02-28T18:00:00.000Z',
   };
@@ -642,6 +645,11 @@ export function createVideoDemoSnapshot(
     ),
     sponsors,
     contentItems,
+    quizQuestions: createSeededQuizQuestions(),
+    quizApplicants: [],
+    quizAttempts: [],
+    quizEvents: [],
+    quizHandoffs: [],
     settings,
   };
 }

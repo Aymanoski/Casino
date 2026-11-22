@@ -31,7 +31,15 @@ export type RealtimeEventName =
   | 'tournament.generated'
   | 'consistency.repaired'
   | 'settings.updated'
-  | 'data.reset';
+  | 'data.reset'
+  | 'quiz.started'
+  | 'quiz.answered'
+  | 'quiz.timedOut'
+  | 'quiz.finished'
+  | 'quiz.reset'
+  | 'quiz.questionUpdated'
+  | 'quiz.settingsUpdated'
+  | 'quiz.handoffCompleted';
 
 export interface RealtimeEventPayloadMap {
   'score.changed': {
@@ -139,6 +147,40 @@ export interface RealtimeEventPayloadMap {
   };
   'data.reset': {
     reason?: string;
+  };
+  'quiz.started': {
+    applicantId: string;
+    attemptId: string;
+  };
+  'quiz.answered': {
+    applicantId: string;
+    attemptId: string;
+    questionIndex: number;
+  };
+  'quiz.timedOut': {
+    applicantId: string;
+    attemptId: string;
+    questionIndex: number;
+  };
+  'quiz.finished': {
+    applicantId: string;
+    attemptId: string;
+    score?: number;
+    totalResponseTimeMs?: number;
+  };
+  'quiz.reset': {
+    applicantId: string;
+    attemptId: string;
+  };
+  'quiz.questionUpdated': {
+    questionId?: string;
+  };
+  'quiz.settingsUpdated': {
+    keys?: string[];
+  };
+  'quiz.handoffCompleted': {
+    createdCount: number;
+    linkedCount: number;
   };
 }
 
