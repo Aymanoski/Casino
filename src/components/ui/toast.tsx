@@ -121,12 +121,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      {/* Toast Viewport — clears mobile bottom bar & safe-area inset */}
+      {/* Toast Viewport — docked below header on phones (never covers Scorer Sticky Thumb Dock) and bottom-end on sm+ */}
       <div
         role="region"
         aria-label={lang === 'ar' ? 'الإشعارات' : 'Notifications'}
         aria-live="polite"
-        className="pointer-events-none fixed inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-[60] flex w-auto flex-col gap-2.5 sm:inset-x-auto sm:bottom-4 sm:end-4 sm:w-full sm:max-w-sm"
+        className="pointer-events-none fixed inset-x-3 top-[calc(4.5rem+env(safe-area-inset-top))] bottom-auto z-[60] flex w-auto flex-col gap-2.5 sm:inset-x-auto sm:top-auto sm:bottom-4 sm:end-4 sm:w-full sm:max-w-sm"
       >
         {toasts.map((item) => {
           const v = VARIANT_STYLES[item.variant ?? 'gold'];

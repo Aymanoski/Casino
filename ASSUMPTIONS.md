@@ -351,6 +351,37 @@
 ### 49. Bonus Idea Built in CR1 Step 4
 - **Interactive Pan/Zoom Square Framing Studio with Live Compressed KB Meter & 720-Player Searchable Preview Bar:** Upgraded `AvatarEditorDialog` with a tactile drag-to-frame square viewport and live compressed byte-size badge (`e.g. Compressed: 24 KB (<= 300 KB limit)`), and upgraded `PlayerPortalChrome` with the 720-player searchable `PlayerCombobox` (with live 3D avatars) + dynamic 1-click presets (`Upcoming Knockout`, `LIVE Now`, `Group 7 Winner`, `Upcoming Group`).
 
+---
+
+## Change Request 1 — Step 5 of 5: End-to-End Integration, 720-Player Performance, Impeccable Audit & Release (`v0.1.1-client-feedback-1`, 2026-11-22)
+
+### 50. Decisions & Bonus Ideas Built in CR1 Step 5
+1. **Admin `keepAsIs` Feeder Pinning (`commands.resolveNeedsReview`):** When a Super Admin reviews a `needsReview` downstream knockout match and chooses **Keep As-Is**, the command now pins the played participants' feeders to `{ kind: 'fixed', playerId }` alongside appending the `reviewResolved` event and propagating with `markNeedsReview` downstream. This preserves the played match and its audit trail while keeping all 9 engine invariants (including `KNOCKOUT_PARTICIPANTS_MATCH_FEEDERS`) at 0 violations on future recomputations.
+2. **O(1) Live-Scoring Fast Path with Full Dev/Test Invariant Parity (`src/lib/commands/index.ts`):** During an actively `live` match, `+1`, `−1`, Yellow card (`−1`), Red card (`−2`), live Undo, and Buzz cannot change any finished match outcome, group standing, qualifier, or bracket slot. Updating the single match/player delta in O(1) while keeping full `checkInvariants()` on in dev/test and on every structural/finish/post-finish/cascade command cut 4× CPU mid-range phone tap-to-paint latency **5.5×** (`2,638ms → 482ms` avg).
+3. **Top-Docked Mobile Toasts (`src/components/ui/toast.tsx`):** Moved `< sm` phone toast notifications to `top-[calc(4.5rem+env(safe-area-inset-top))]` (keeping bottom-end on `sm+`) so rapid feedback toasts on mobile never cover the Scorer Console's sticky bottom thumb dock.
+4. **Bonus Idea Built in CR1 Step 5 — Viewport-Culled 256-Slot Knockout Canvas (`KnockoutCanvas.tsx`):** Added `ResizeObserver`-backed bounding-box culling (420px overscan) whenever a bracket view exceeds 48 nodes, dropping the rendered DOM button count in `Full (256-Slot)` mode from 255 cards down to ~20 visible cards so panning/zooming stays 60 FPS even on mid-range phones.
+
+---
+
+## To Confirm With Client
+
+> Consolidated list of every remaining product, rules, or branding ambiguity from Phases 1–9 and Change Request 1 (`v0.1.1-client-feedback-1`). Every item below currently runs with a clean, documented, editable default — confirm each with the client before locking production launch rules.
+
+| # | Area | Current Default in Prototype | Question to Confirm With Client |
+|---|---|---|---|
+| 1 | **Group Tie-Break Rule 3 (Diff vs. Gross)** | Net match-point difference (`pointsFor − pointsAgainst`), then Rule 4 (fewer Red cards, then fewer Yellow cards). | Should Rule 3 be strictly **net points difference**, or should **gross points scored** also break ties before disciplinary cards? |
+| 2 | **Automatic Deadlock Group Tie-Break Match** | When all regular group matches finish level across rules 1–4 (e.g., exact 3-way 3-3-3 symmetric cycle), the engine auto-spawns a conflict-free `isGroupTieBreak: true` sudden-death match for tied cutoff players. | Should deadlocked groups play an automated sudden-death tie-break match, or use an alternative rule (e.g., coin toss / seed / admin pick)? |
+| 3 | **BYE Timing While Group Stage Is Incomplete** | When qualifiers aren't a power of two (e.g., 240 → 256 = 16 BYEs), BYE slots show `Best Group Winner #N (TBD) vs BYE` until all groups finish, then lock deterministically. | Confirm BYEs wait for all groups to finish (preventing premature provisional knockouts), or should earlier groups advance provisionally? |
+| 4 | **Non-Divisible `totalPlayers % groupSize` Remainder** | A remainder of `1` merges into the last group (`groupSize + 1`); remainders `>= 2` form a smaller last group. | If actual check-in/registration count isn't divisible by `groupSize`, prefer merging a 1-player remainder into the last group or adding a BYE placeholder? |
+| 5 | **Walkover Match-Point Differential & Final Absence** | 1v1 group walkovers award `pointsPerGroupWin` (`3`) group points and `0` match-point differential; both absent → `void` (Super Admin decides); Grand Final absence does NOT auto-end (prompts Super Admin). | Should a 1v1 walkover award a fixed default score (e.g., `3–0`) toward net point difference, or keep `0` diff? Confirm Super Admin manual ruling for Final night absences. |
+| 6 | **Marwan Serry Guest Isolation (Grand Final)** | Marwan Serry (`isGuest: true`) is seated exclusively in the 1v1v1 Grand Final and excluded from groups, rankings, and stats — even if he wins the Final match. | If Marwan scores highest in the Grand Final, is he crowned Exhibition Winner while the top finalist wins the contestant prize, or how should Final Winner copy read? |
+| 7 | **Downstream Cascade Policy (`keepAsIs` vs. `invalidateForReplay`)** | When an upstream score is reverted after a downstream knockout match started, Impact Preview defaults to `invalidateForReplay` (increments `replayEpoch`, preserves old events) or `markNeedsReview` (admin can later `keepAsIs`, pinning those participants as fixed feeders). | Confirm both policies (`invalidateForReplay` and `keepAsIs` feeder-pinning) match tournament referee regulations. |
+| 8 | **Judge Phone/WhatsApp Visibility to Players** | The Contestant Portal's **"Need help finding your table?"** card displays the assigned judge's name, `tel:` call button, and WhatsApp button (each access logged as `contact.viewed`). | Confirm judges' operational event phone numbers (dedicated staff SIMs / helpdesk numbers) should be exposed directly to contestants in their assigned matches. |
+| 9 | **Player Profile Photo Moderation & 3D Avatar Pack** | Players can upload a square-cropped photo (`<= 300KB`) or pick from 24 original 3D SVG game-show/Ramadan avatars; Super Admin can replace/remove any photo. | Do uploaded contestant photos go live immediately (with Super Admin removal), or require pre-approval moderation before appearing on the Venue Big Screen? |
+| 10 | **Editable Event Placeholders & Official Branding** | Event dates (`Ramadan 2027`), venue, prizes, sponsor tiers (`"Contact us"` instead of prices), 16 original draft segments, and original game-show SVG artwork are placeholders. | Confirm final Ramadan dates, venue, prize copy, approved 16-segment list, sponsor packages, and whether official show logo/artwork will be supplied with Marwan Serry's written permission. |
+| 11 | **Registration Quiz & Phase 10 Delighters** | Registration quiz (20 questions × 10s) is out of scope (separate future project); Phase 10 Delighters (confetti, sound effects, haptics, 3D flips) remain `OFF` (`delightersEnabled: false`). | Confirm timing for activating Phase 10 Delighters and integrating the separate registration quiz project. |
+
+
 
 
 

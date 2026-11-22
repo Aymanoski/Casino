@@ -1,6 +1,6 @@
 # TODO.md — Production Readiness & Database / Auth Swap Checklist
 
-> This document tracks every mock adapter, repository module, and UI consumer that will be swapped when moving from the `localStorage` pitch prototype to a production backend, database, and realtime infrastructure.
+> This document tracks every mock adapter, IndexedDB storage store, command handler, repository module, and UI consumer that will be swapped when moving from the offline browser prototype (`v0.1.1-client-feedback-1`, IndexedDB `idb` + `BroadcastChannel`) to a production PostgreSQL/ORM backend, server auth, and hosted multi-device WebSockets.
 
 ---
 
@@ -53,6 +53,23 @@ All UI components and pages read through `src/lib/repos/*` and execute all mutat
 - [x] Replaced generated avatars everywhere with one shared `PlayerAvatar` / `Avatar` component (`src/components/brand/PlayerAvatar.tsx`) wired with `avatar={player.avatar}` across scoreboards, bracket, groups, big screen, admin, scorer, schedule, landing demo, and player portal.
 - [x] Wired Super Admin photo replacement/removal & 3D avatar picker in `/admin/players` (Table Actions + Profile Drawer) and `/player` preview, while restricting `player` accounts strictly to their own profile (`PermissionDeniedError` on other players).
 - [x] Added Vitest suite (`src/lib/__tests__/player-privacy-avatars-cr4.test.ts`) proving repo-level segment redaction on direct `matchRepo` & `scoreRepo` player calls, judge contact RBAC, 24-avatar determinism, photo MIME/size/Marwan validation, and self-only vs admin avatar editing.
+
+### Change Request 1 — Step 5 Completion Checklist (`v0.1.1-client-feedback-1`)
+- [x] **Full End-to-End Scenarios Across 12, 48 & 720 Presets (`src/lib/__tests__/e2e-cr1-scenarios.test.ts`, 46/46 Vitest tests passing):** Verified normal matches, walkovers, both-absent `void` + Super Admin override, tie-breaks (`needsTieBreak` / Segment #16), full group completion, automatic knockout seeding & 16 BYE resolution, knockouts through Semi-Finals, 1v1v1 Grand Final with Marwan Serry (excluded from standings/stats), client revert bug (winner tag, rank, group standing, qualifier & bracket slot move automatically), and downstream Impact Preview + `needsReview` (`keepAsIs` & `invalidateForReplay`).
+- [x] **3 Command/Engine Bugs Found & Fixed with Dedicated Regression Tests:**
+  - `commands.resolveNeedsReview({ action: 'keepAsIs' })`: pinned played match participants to `{ kind: 'fixed', playerId }` and switched downstream cascade policy to `markNeedsReview` so keeping a reviewed result preserves the match and passes all 9 invariants instead of resetting it to `scheduled`.
+  - `commands.reopenMatch`: added non-downstream sibling live-match guard throwing friendly `CommandValidationError` instead of crashing with `InvariantViolationError: PLAYER_AT_MOST_ONE_LIVE_MATCH`.
+  - `commands.finishMatch`: computed `advancedTo[].playerId` from actual before→expected participant slot diff instead of unconditionally substituting the final group match's winner.
+- [x] **Zero Consistency Violations Verified After Every Scenario:** Verified both programmatically (`commands.runConsistencyCheck('user-admin')` after every step in `e2e-cr1-scenarios.test.ts`) and live in Chromium via `/admin/consistency` across 720P initial seed, 720P post-live-scoring, Preset 12, Preset 48, and Preset 720 (**5/5 PASS, 0 violations**).
+- [x] **720-Player Mid-Range Phone Performance (390×844, 4× CPU Throttle, Chromium Production Build):**
+  - Eliminated O(N) per-tap propagation overhead on live `+1`/`−1`/Card/Buzz/Undo via O(1) fast-path + explicit IndexedDB deltas (keeping full `checkInvariants()` on in dev/test and on all finish/revert/cascade commands) and moved mobile toasts (`src/components/ui/toast.tsx`) below the header so they never cover the Scorer Console sticky thumb dock → Scorer `+1` tap-to-paint latency improved **5.5×** from `2,638ms` to **`482ms` avg (`401–575ms`)** under 4× CPU throttle!
+  - Added pagination/search/deferred filtering to `AdminCheckInView`, `ScorerDashboardView`, and `DataTable`, scoped `AdminResultsView` filter dropdowns + `PlayerCombobox`, added viewport culling (`20` DOM nodes in Full 256 view) + `touch-none` + pointer-capture cleanup to `KnockoutCanvas`, capped `BigScreenLeaderboardView` page indicator (`Page X / 90`), cached static data & fetched only 2–3 seated players in `ScorerConsoleView` and `BigScreenGameView`, and lazy-loaded `AvatarEditorDialog`, `KnockoutCanvas`, `GroupsStandingsView`, and `PlayerContactDialog` via `next/dynamic`.
+  - Measured 4× CPU mid-range phone scroll performance at 720 players: **55–60 FPS** across `/admin/players`, `/admin/matches`, `/admin/groups`, `/admin/check-in`, `/admin/results`, `/admin/consistency`, `/bracket`, `/groups`, `/leaderboard`, `/scorer`, `/scorer/[matchId]`, and `/screen/leaderboard` (`48 FPS` on `/schedule`, `36 FPS` on `/admin/bracket`).
+- [x] **Impeccable Audit + Full 14-Viewport Device Matrix & Arabic RTL (`200/200` checks):**
+  - `impeccable detect --json` returned `[]` (0 violations) across all 19 changed CR1 views.
+  - Fixed `/screen/leaderboard` round filter pills (previously showing duplicate `Semi` labels across 8 rounds → now `Groups`, `R256..R8`, `SF` / `المجموعات`, `د256..د8`, `نصف`), raised `AdminGroupsView` card buttons to `>= 44px`, raised `PublicFooter` `mailto:` link to `>= 44px`, locked mobile landscape input font sizes to `>= 16px` (`text-base lg:text-sm`), and padded the mobile header role `<select>` away from its chevron (`pe-8 truncate`).
+  - Verified **0 horizontal overflows**, **0 RTL `dir` mismatches**, **0 external/real-person images**, **0 small mobile touch targets across 14/14 phone routes**, **0 console errors**, and **0 page errors** across `320px–2560px` in EN (LTR) & AR (RTL), with visual screenshot inspection.
+- [x] **Updated Documentation & Release Tag:** Updated `README.md`, `DEMO_SCRIPT.md`, `TODO.md`, and `ASSUMPTIONS.md` (with consolidated **To Confirm With Client** section); tagged `v0.1.1-client-feedback-1`.
 
 ---
 

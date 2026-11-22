@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -46,13 +47,35 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AnimatedNumber } from '@/components/brand/AnimatedNumber';
 import { BracketNode, type BracketPlayerSlot } from '@/components/brand/BracketNode';
-import { KnockoutCanvas } from '@/components/brand/KnockoutCanvas';
 import { LiveBadge } from '@/components/brand/LiveBadge';
 import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
 import { formatPublicDateTime } from './publicFormatters';
 import { PublicErrorBanner } from './PublicErrorBanner';
 import { PublicPageHero } from './PublicPageHero';
-import { GroupsStandingsView } from './GroupsStandingsView';
+
+const KnockoutCanvas = dynamic(
+  () =>
+    import('@/components/brand/KnockoutCanvas').then((m) => ({
+      default: m.KnockoutCanvas,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <Skeleton shape="card" className="h-[min(70dvh,760px)] w-full rounded-card" />
+    ),
+  }
+);
+
+const GroupsStandingsView = dynamic(
+  () =>
+    import('./GroupsStandingsView').then((m) => ({
+      default: m.GroupsStandingsView,
+    })),
+  {
+    ssr: false,
+    loading: () => <Skeleton shape="card" className="h-96 w-full rounded-card" />,
+  }
+);
 
 interface BracketDataset {
   rounds: Round[];
@@ -424,7 +447,7 @@ export function BracketInteractiveView() {
                       onChange={(e) => setJumpSlotInput(e.target.value)}
                       placeholder={lang === 'ar' ? 'رقم المباراة...' : 'Match / Slot #'}
                       aria-label={lang === 'ar' ? 'انتقال إلى مباراة' : 'Jump to match number'}
-                      className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-paper ps-8 pe-3 text-base sm:text-sm font-bold tabular-nums text-ink focus:border-blue-500 focus:outline-none"
+                      className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-paper ps-8 pe-3 text-base lg:text-sm font-bold tabular-nums text-ink focus:border-blue-500 focus:outline-none"
                     />
                   </div>
                   <Button type="submit" variant="red" size="sm">

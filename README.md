@@ -1,10 +1,10 @@
-# Casino El Al3ab — Ramadan Tournament Platform (`v0.1-pitch`)
+# Casino El Al3ab — Ramadan Tournament Platform (`v0.1.1-client-feedback-1`)
 
-A full-featured, bilingual (**English LTR** & **Arabic RTL**) tournament operations platform and sponsor pitch prototype for a **Ramadan trivia & skill game-show tournament** inspired by **"Casino El Al3ab"**, culminating in a 3-seat **Grand Final where the last 2 finalists compete against Marwan Serry**.
+A full-featured, bilingual (**English LTR** & **Arabic RTL**) tournament operations platform and sponsor pitch prototype for a **Ramadan trivia & skill game-show tournament** inspired by **"Casino El Al3ab"**, running at **720-player scale** across **Groups (1v1 Round-Robin) → Single-Elimination Knockouts (with automatic BYEs) → a 1v1v1 Grand Final where the last 2 finalists compete against Marwan Serry**.
 
-Built with **Next.js 15 (App Router)**, **TypeScript**, **Tailwind CSS**, **Radix UI**, **Framer Motion**, and **Zod** — structured behind a clean async repository layer and swappable realtime broker so a production database, authentication provider, and multi-device WebSockets drop in later with **zero UI rewrites**.
+Built with **Next.js 15 (App Router)**, **TypeScript**, **Tailwind CSS**, **Radix UI**, **Framer Motion**, **Zod**, and **IndexedDB (`idb`)** — powered by a pure event-sourced tournament engine (`/lib/engine`) and atomic command pipeline (`/lib/commands`) behind swappable async repositories (`/lib/repos`) and realtime transport (`/lib/realtime`), so a production PostgreSQL/Supabase backend, auth provider, and multi-device WebSockets drop in later with **zero UI rewrites**.
 
-> **Pitch Prototype Note:** No backend or database is connected yet. All data is seeded into `localStorage` via `/lib/repos` and `/lib/storage`, and live updates synchronize instantaneously across browser tabs/windows via `BroadcastChannel` (+ `storage` fallback). Dates (`Ramadan 2027`), venue, prizes, player counts, and sponsor packages are editable placeholders.
+> **Pitch Prototype Note:** No backend or database is connected yet. All data is stored locally in **IndexedDB** (`casino_el_al3ab_idb_v1`, 15 indexed object stores handling 1,000+ matches and 100,000+ events smoothly), and live updates synchronize instantaneously across browser tabs/windows via `BroadcastChannel` (+ `storage` fallback) strictly **after** commit. Dates (`Ramadan 2027`), venue, prizes, player counts, and sponsor packages are editable placeholders.
 
 ---
 
@@ -12,23 +12,37 @@ Built with **Next.js 15 (App Router)**, **TypeScript**, **Tailwind CSS**, **Radi
 
 1. [Key Capabilities](#1-key-capabilities)
 2. [How to Run Locally](#2-how-to-run-locally)
-3. [Demo Accounts & Resetting Data](#3-demo-accounts--resetting-data)
+3. [Demo Accounts, Presets & Resetting Data](#3-demo-accounts-presets--resetting-data)
 4. [Project Structure & Routes](#4-project-structure--routes)
-5. [Swapping Repositories for a Real Database](#5-swapping-repositories-for-a-real-database)
-6. [Upgrading Realtime to Multi-Device Venue Sync](#6-upgrading-realtime-to-multi-device-venue-sync)
-7. [Deployment (Vercel & Netlify)](#7-deployment-vercel--netlify)
-8. [Brand Safety & Scope Guardrails](#8-brand-safety--scope-guardrails)
+5. [Event-Sourced Architecture & Data Integrity](#5-event-sourced-architecture--data-integrity)
+6. [Swapping Storage & Commands for a Real Database](#6-swapping-storage--commands-for-a-real-database)
+7. [Upgrading Realtime to Multi-Device Venue Sync](#7-upgrading-realtime-to-multi-device-venue-sync)
+8. [Deployment (Vercel & Netlify)](#8-deployment-vercel--netlify)
+9. [Brand Safety & Scope Guardrails](#9-brand-safety--scope-guardrails)
 
 ---
 
 ## 1. Key Capabilities
 
-- **Sponsor Pitch Landing (`/`) & Final Night Showcase (`/final`)**: Crimson sunburst Stage & warm Paper visual system, live countdown, Marwan Serry's **Golden Seat** (name only, zero real-person photos), an **embedded interactive Live Demo** (real repos + `BroadcastChannel` on an isolated `game-demo` table), bracket preview, 16 original segments, and editable placeholder sponsor tiers.
-- **Zero-Mistake Live Scorer Console (`/scorer`, `/scorer/[matchId]`)**: Designed for tablets in landscape and one-handed phone operation (`56px+` touch targets). Adapts to 2 players (all group/knockout 1v1 matches) or 3 participants (Grand Final vs. Marwan Serry). Supports manual **"Buzzed First"**, exact **`+1`**, **`−1`**, **Yellow card (`−1`)**, and **Red card (`−2`)** controls with optional note, card-shaped SVG counters, **Mark Absent** (immediate 1v1 walkover, both-absent `void`, Final admin prompt) with Super Admin reversal & Impact Preview, role-gated **Contact** dialog (`contact.viewed` audited), compensating **Undo**, segment countdown timer with final-5-second warning, keyboard shortcuts (`1`/`2`/`3`, `B`, `+`/`-`, `Y`, `R`, `Space`, `Ctrl+Z`), and automatic **Sudden-Death Tie-Breaker (#16)** on ties.
-- **Venue Big Screen (`/screen/[gameId]`, `/screen/leaderboard`)**: Full-bleed 10-meter-legible broadcast frame (up to 4K) with chasing perimeter marquee bulbs, dual EN+AR segment titles, real-time buzz highlights, animated score counters + floating deltas, **Grand Final Boss symmetry** (Marwan Serry dead-center), **Victory Stage** winner celebration, **Presenter Mode (`F`)** with auto-hiding controls, and an auto-cycling 27-player broadcast leaderboard.
-- **Admin Studio (`/admin/*`) & Dual-Layer RBAC**: Complete tournament management across 12 studio screens — Players (CRUD + RFC-4180 CSV bulk import with row validation + Profile Drawer), Flexible Bracket Builder (configurable player count, table size, advancement rules, drag/tap seeding), Games & Scorers, 16-Segment Library, Gate Check-In, Chronological Results Feed (newest/oldest + filters + CSV export), Super Admin Audit Log (before/after diffs + CSV export), Managers & Role Matrix, Content/Rules, Sponsors, and editable Settings + **Reset Demo Data**.
-- **Public Spectator Suite & Contestant Portal**: Interactive `/bracket` (with Highlight Player Path & segment breakdown modal), live `/leaderboard`, `/schedule`, `/segments` inspector, `/rules`, `/sponsors` deliverables matrix, and `/player` + `/player/history`.
-- **First-Class Bilingual EN (LTR) / AR (RTL)**: Instant language toggle in every header/sidebar/Big Screen pill plus `?lang=ar` / `?lang=en` deep-link support, mirrored layouts & sticker shadows, and Western digits by default (with an optional Arabic-Indic numeral setting).
+- **720-Player Group Stage + Single-Elimination Knockouts + 1v1v1 Marwan Final**:
+  - Configurable in `/admin/settings` (`totalPlayers: 720`, `groupSize: 3`, `advancePerGroup: 1`, `pointsPerGroupWin: 3`, `tablesCount: 12`, `slotMinutes: 30`, `includeFinalWithMarwan: true`) with one-click **12**, **48**, and **720** demo presets.
+  - **Groups (`/groups`, `/admin/groups`)**: 240 virtualized groups of 3 playing 1v1 round-robin (`n(n-1)/2` matches/group), 3 group points per win, draws forbidden (`needsTieBreak`), full tie-break hierarchy (group points → head-to-head → net match-point diff → fewer red/yellow cards → auto-spawned deadlock tie-break match).
+  - **Knockouts (`/bracket`, `/admin/bracket`)**: 256-slot single-elimination bracket with 16 visible **BYE** nodes awarded to the best group winners, interactive pan/zoom `KnockoutCanvas` with **Region Focus** (`Final 16 → Marwan`, `Quarter 1–4`, `Full`), clickable corner **Minimap**, viewport culling, searchable 720-player path trace, and Jump-to-Match `#`.
+  - **Conflict-Free Auto-Scheduler (`/admin/matches`)**: Assigns table numbers (`1..12`), time slots, and judges with zero player/table/judge collisions, live Conflict Health Banner, manual overrides, and 1-click **Find Next Free Slot**.
+- **Zero-Mistake Live Scorer Console v2 (`/scorer`, `/scorer/[matchId]`)**:
+  - Adapts to **2 players** (all group & knockout 1v1 matches) or **3 participants** (the Grand Final with two finalists + Marwan Serry). Hybrid desktop/tablet direct buttons + one-handed phone Sticky Thumb Dock (`>= 56px` primary touch targets).
+  - Exact 4 scoring controls per player: **`+1`**, **`−1`**, **Yellow card (`−1`)**, and **Red card (`−2`)** with optional note, original SVG card counters, manual **"Buzzed First"**, segment countdown timer, compensating **Undo**, and automatic **Tie-Breaker #16** on ties.
+  - **Mark Absent**: Immediate 1v1 **Walkover** with automatic standings/bracket propagation, **`void`** + inline Super Admin decision panel if both absent, non-auto-ending Final absence prompt for Super Admin, and **Reverse Absence** with **Cascade Impact Preview**.
+  - **Role-Gated Contact Dialog**: Tap the Contact icon beside any seated player (available to assigned judge, check-in staff, and Super Admin) to call (`tel:`), WhatsApp, or copy contact details — every view logged as `contact.viewed` in the audit log.
+- **Contestant Portal, Segment Privacy & Shared Avatars (`/player`, `/player/history`)**:
+  - **Strict segment secrecy**: Players and public visitors never see segment names, counts, order, or match-specific rules for upcoming or live matches (enforced in `matchRepo` & `scoreRepo` at the repository/permission layer).
+  - **Upcoming Match Spotlight**: Shows opponent card, date & call time, round/group, prominent **Table Number (`TABLE #N`)**, and the **"Need help finding your table?" Judge Help Sticker Card** (judge name + 1-tap Call / WhatsApp, audited).
+  - **24 Original 3D Avatars + Photo Crop Studio**: Deterministic 24-option 3D-lit SVG avatar library (`avatar-01`..`avatar-24`) plus interactive camera/gallery upload, drag/zoom square crop, and auto-compression (`<= 300KB`) rendered uniformly via one shared `PlayerAvatar` across the entire platform.
+- **Venue Big Screen (`/screen/[gameId]`, `/screen/leaderboard`)**:
+  - Full-bleed 10-meter-legible broadcast frame (up to 4K) with chasing perimeter marquee bulbs, dual EN+AR segment titles, real-time buzz highlights, animated scores + SVG card badges, **Grand Final Boss symmetry** (Marwan Serry dead-center, name only), **Victory Stage**, **Presenter Mode (`F`)**, and scalable auto-cycling broadcast leaderboard (`Page X / N` at 720-player scale).
+- **Admin Studio (`/admin/*`) & Consistency Check**:
+  - Complete operations suite across 14 routes: Overview, Players (720-row virtualized DataTable, CSV bulk import, Admin Avatar Studio, Profile Drawer), Gate Check-In (paginated Tables & Roster + Contact dialogs), Groups Draw & Standings, Knockout Bracket Canvas, Matches & Scheduler, 16-Segment Library, **Consistency Check (`/admin/consistency`)** verifying all 9 engine invariants with 1-click **Repair by recomputation**, Chronological Results Feed (+ CSV export), Super Admin Audit Log (including automatic cascade entries + before/after diffs + CSV export), Managers & Role Matrix, Content/Rules, Sponsors, and Settings.
+- **First-Class Bilingual EN (LTR) / AR (RTL)**: Instant language toggle everywhere + `?lang=ar` / `?lang=en` deep links, full RTL mirroring, and optional Arabic-Indic numeral setting.
 
 ---
 
@@ -48,42 +62,43 @@ npm install
 # 2. Start the development server (http://localhost:3000)
 npm run dev
 
-# 3. Type-check the entire project (strict TypeScript)
-npm run typecheck
+# 3. Run TypeScript type-check + AST derived-write & architecture guard
+npm run lint
 
-# 4. Create an optimized production build
+# 4. Run full Vitest engine, command, cascade, privacy & 12/48/720 E2E test suite
+npm test
+
+# 5. Create an optimized production build
 npm run build
 
-# 5. Run the production build locally (also recommended for offline pitch backup)
+# 6. Run the production build locally (also works 100% offline for pitch backup)
 npm run start
 ```
 
-> **Windows / OneDrive tip:** If running inside a OneDrive-synced folder while `npm run dev` is already open, delete `.next` before running `npm run build` (or run `NEXT_DIST_DIR=.next-prod npm run build` for an isolated build) to avoid OneDrive `readlink` cache locks.
+> **Windows / OneDrive tip:** If running inside a OneDrive-synced folder while `npm run dev` is already open, stop `npm run dev` and delete `.next` before running `npm run build` (or run `NEXT_DIST_DIR=.next-prod npm run build`) to avoid OneDrive `readlink` cache locks.
 
 ---
 
-## 3. Demo Accounts & Resetting Data
+## 3. Demo Accounts, Presets & Resetting Data
 
-Mock auth is pre-seeded in `src/lib/seed/index.ts` and defaults to **Super Admin** on first visit so presenters can explore immediately. Switch roles anytime from **`/login`**, the top-right **Role Switcher** menu on public pages, or the role dropdown inside Admin/Scorer headers.
+Mock auth is pre-seeded in `src/lib/seed/index.ts` and defaults to **Super Admin** on first visit so presenters can explore immediately. Switch roles anytime from **`/login`** or the top-right **Role Switcher** menu.
 
 | Role | Demo Account(s) | Email | Primary Workspace |
 |---|---|---|---|
-| **Super Admin** | `Admin` | `admin@casinoelal3ab.com` | `/admin`, `/scorer`, `/screen/*`, `/player` (preview mode) |
-| **Table Scorer** | `Scorer 1` – `Scorer 4` | `scorer1@casinoelal3ab.com` … `scorer4@…` | `/scorer` (strictly scoped to assigned tables) |
-| **Check-In Staff** | `Gate Staff` | `checkin@casinoelal3ab.com` | `/admin/check-in` (attendance statuses only) |
+| **Super Admin** | `Admin` | `admin@casinoelal3ab.com` | `/admin`, `/admin/consistency`, `/scorer`, `/screen/*`, `/player` (preview mode) |
+| **Judge / Scorer** | `Scorer 1` – `Scorer 4` | `scorer1@casinoelal3ab.com` … `scorer4@…` | `/scorer` (assigned tables + assigned player contacts only) |
+| **Check-In Staff** | `Gate Staff` | `checkin@casinoelal3ab.com` | `/admin/check-in` (gate check-in + player contacts) |
 | **Content Manager** | `Content Editor` | `content@casinoelal3ab.com` | `/admin/content`, `/admin/sponsors`, `/admin/segments` (copy-only) |
-| **Contestant** | `Omar Hassan`, `Karim Nabil`, `Salma Reda` | `omar.hassan@players.casino`, etc. | `/player`, `/player/history` (own profile only) |
+| **Contestant** | `Omar Hassan`, `Karim Nabil`, `Salma Reda` | `omar.hassan@players.casino`, etc. | `/player`, `/player/history` (own profile, avatar, table # & judge help card only) |
 | **Public Visitor** | Sign out via Role Switcher | — | Public spectator pages & `/screen/*` only |
 
-### Resetting to the Polished Demo State
+### Demo Presets & Resetting to Factory State
 
-Click **Reset Demo Data** in **`/admin/settings`** (or the bottom of the Admin sidebar) and confirm. This wipes all mutations and restores the curated Ramadan 2027 demo story:
+Open **`/admin/settings`** (or **`/admin/bracket`**) to load any procedural preset or reset demo data:
 
-- **27 seeded players** + **Marwan Serry** (`player-marwan`, host seat)
-- **Round 1**: Tables 1–8 finished with realistic score history, Table 9 scheduled
-- **Round 2**: Quarter-Final A finished, **Quarter-Final B (`game-11`) LIVE** at Segment 4/6 with active buzz & live scores, Quarter-Final C scheduled
-- **Semi-Final (`game-13`)** & **Grand Final vs. Marwan Serry (`game-14`)** scheduled
-- **Exhibition Demo Table (`game-demo`)** live and isolated for the `/` landing page
+- **720 Players (Default):** 240 groups of 3, 720 1v1 group matches + 256-slot knockout bracket (16 BYE nodes) + 1v1v1 Grand Final vs. Marwan Serry (`975` tournament matches + `game-demo`), conflict-free scheduled across 12 tables, first 12 groups completed (including a 3-way cycle and a walkover), 3 group matches currently **LIVE**, all verified at **0 invariant violations**.
+- **48 Players:** 16 groups of 3 (`advancePerGroup: 2` → 32-slot knockout → Grand Final vs. Marwan).
+- **12 Players:** 4 groups of 3 (`advancePerGroup: 1` → Semi-Finals → Grand Final vs. Marwan) — ideal for rapid full-tournament demonstrations.
 
 ---
 
@@ -93,64 +108,53 @@ Click **Reset Demo Data** in **`/admin/settings`** (or the bottom of the Admin s
 src/
 ├── app/
 │   ├── (public)/               # Public spectator & pitch routes
-│   │   ├── page.tsx            # /           Pitch & landing page + embedded live demo
-│   │   ├── final/              # /final      Final Night showcase vs. Marwan Serry
-│   │   ├── bracket/            # /bracket    Interactive 27-player bracket & match modal
-│   │   ├── leaderboard/        # /leaderboard Live animated tournament standings
-│   │   ├── schedule/           # /schedule   Matches grouped by night or round
-│   │   ├── segments/           # /segments   16-segment library & detail inspector
-│   │   ├── rules/              # /rules      Official format, scoring & tie-breaker rules
-│   │   ├── sponsors/           # /sponsors   Editable placeholder sponsor deck & matrix
-│   │   └── styleguide/         # /styleguide Interactive Stage & Paper design system gallery
-│   ├── login/                  # /login      Mock auth role picker
-│   ├── player/                 # /player & /player/history   Contestant portal
-│   ├── scorer/                 # /scorer & /scorer/[matchId]  Scorer dashboard & live console
+│   │   ├── page.tsx            # /            Pitch landing + embedded live demo
+│   │   ├── final/              # /final       Final Night showcase vs. Marwan Serry
+│   │   ├── groups/             # /groups      240-group standings & 1v1 fixtures
+│   │   ├── bracket/            # /bracket     Interactive 256-slot KnockoutCanvas + Group Stage tab
+│   │   ├── leaderboard/        # /leaderboard Live virtualized 720-player standings (Marwan excluded)
+│   │   ├── schedule/           # /schedule    Table-numbered fixtures (no upcoming segments leaked)
+│   │   ├── segments/           # /segments    16-segment library (finished-match stats only)
+│   │   ├── rules/              # /rules       Official Groups/Knockout/Final & card scoring rules
+│   │   ├── sponsors/           # /sponsors    Editable placeholder sponsor tiers & deliverables matrix
+│   │   └── styleguide/         # /styleguide  Interactive Stage & Paper design system gallery
+│   ├── login/                  # /login       Mock auth role picker
+│   ├── player/                 # /player & /player/history   Contestant portal + Avatar Studio
+│   ├── scorer/                 # /scorer & /scorer/[matchId] Scorer dashboard & live console v2
 │   ├── screen/                 # /screen/[gameId] & /screen/leaderboard  Venue Big Screens
-│   ├── admin/                  # /admin/*    Admin Studio
-│   │   ├── page.tsx            # Overview dashboard
-│   │   ├── players/            # Roster CRUD, CSV bulk import & profile drawer
-│   │   ├── check-in/           # Venue arrival gate check-in & player contacts
-│   │   ├── groups/             # Group draw, swaps & standings (720-player scale)
-│   │   ├── bracket/            # Knockout bracket canvas & BYE allocation
-│   │   ├── matches/            # Tables, judges, conflict-free auto-schedule & Final
-│   │   ├── segments/           # Segment library, optional timers & reorder
-│   │   ├── consistency/        # 9-invariant engine verifier & repair by recomputation
-│   │   ├── results/            # Chronological Results Feed + CSV export
-│   │   ├── audit/              # Super Admin Audit Log (before/after diffs) + CSV
-│   │   ├── managers/           # Staff manager CRUD & capability matrix
-│   │   ├── content/            # Announcements, rules & schedule blurbs
-│   │   ├── sponsors/           # Placeholder sponsor tiers CRUD
-│   │   └── settings/           # Editable event placeholders & Reset Demo Data
-│   ├── error.tsx & not-found.tsx
-│   ├── globals.css             # DESIGN.md Stage & Paper CSS tokens & utilities
-│   └── layout.tsx              # Fonts (Lilita One, Bebas Neue, Inter, Lalezar, Cairo)
+│   └── admin/                  # /admin/*     Admin Studio (14 routes)
+│       ├── page.tsx            # Overview dashboard
+│       ├── players/            # 720-player DataTable, CSV bulk import, Admin Avatar Studio & Drawer
+│       ├── check-in/           # Paginated Gate Check-In Tables & Roster + Contact dialogs
+│       ├── groups/             # Group draw, swaps/moves & standings inspector
+│       ├── bracket/            # Knockout generator, BYE allocation & KnockoutCanvas
+│       ├── matches/            # Conflict-free auto-scheduler & match editor (/admin/games redirects here)
+│       ├── segments/           # 16-segment library & optional timers
+│       ├── consistency/        # 9-invariant Consistency Check & Repair by recomputation
+│       ├── results/            # Chronological Results Feed (+ cards/walkovers) + CSV export
+│       ├── audit/              # Super Admin Audit Log (incl. automatic cascades) + diffs + CSV
+│       ├── managers/           # Staff manager CRUD & role capability matrix
+│       ├── content/            # Announcements, rules & schedule blurbs
+│       ├── sponsors/           # Placeholder sponsor tiers CRUD
+│       └── settings/           # Tournament parameters, presets & Reset Demo Data
 ├── components/
-│   ├── ui/                     # Restyled Radix/shadcn primitives (Button, Dialog, Table, Toast…)
-│   ├── brand/                  # Game-show motifs (SunburstStage, MarqueeBulbs, PlayerPanel, ScoreChip, TimerRing, BracketNode…)
+│   ├── ui/                     # Restyled Radix/shadcn primitives (DataTable, VirtualList, PlayerCombobox…)
+│   ├── brand/                  # Game-show motifs, KnockoutCanvas, AvatarLibrary3D (24 SVGs), DisciplinaryCards, PlayerContactDialog…
 │   ├── layout/                 # PublicHeader, PublicFooter, StudioSidebarShell, RoleGuard
-│   ├── landing/                # 7 modular landing page sections
+│   ├── landing/                # 7 modular pitch landing sections
 │   ├── public/                 # Spectator views
 │   ├── scorer/                 # ScorerDashboardView, ScorerConsoleView, SessionHistoryDrawer
 │   ├── screen/                 # BroadcastFrame, BigScreenGameView, BigScreenLeaderboardView, PresenterControlPill
-│   ├── admin/                  # All 12 Admin Studio views + GameEditorDialog + CSV utils
-│   └── player/                 # Contestant portal views
+│   ├── admin/                  # All Admin Studio views + ImpactPreviewDialog + MatchEditorDialog
+│   └── player/                 # PlayerProfileView, PlayerHistoryView, AvatarEditorDialog
 └── lib/
     ├── schemas/index.ts        # Zod schemas & inferred TS types (single source of truth)
-    ├── repos/                  # Async repositories (ONLY data boundary used by UI)
-    │   ├── playerRepo.ts
-    │   ├── userRepo.ts
-    │   ├── roundRepo.ts
-    │   ├── segmentRepo.ts
-    │   ├── gameRepo.ts         # Bracket generation, start, timer, tie-breaker, finish + auto-advance, reopen
-    │   ├── scoreRepo.ts        # Immutable ScoreEvent ledger, derived leaderboard, buzz, undo/edit/delete
-    │   ├── auditRepo.ts        # Tamper-evident AuditEntry log
-    │   ├── sponsorRepo.ts
-    │   ├── contentRepo.ts
-    │   ├── settingsRepo.ts
-    │   └── permissions.ts      # Dual-layer RBAC assertions & capability catalog
-    ├── storage/index.ts        # Versioned localStorage adapter with raw-string memo cache
-    ├── seed/index.ts           # Deterministic 27-player + Marwan Serry demo seed
-    ├── realtime/index.ts       # Pluggable RealtimeTransport broker (BroadcastChannel default)
+    ├── engine/                 # Pure deterministic tournament engine (ZERO UI/storage/realtime imports)
+    ├── commands/index.ts       # Atomic command pipeline (auth → validate → version → events → engine → invariants → commit → broadcast)
+    ├── repos/                  # Thin read & command-delegating repositories + role-based segment redaction
+    ├── storage/index.ts        # IndexedDB adapter (`idb`, 15 indexed stores + atomic delta commits)
+    ├── seed/index.ts           # Deterministic procedural seed generator (12 / 48 / 720 presets)
+    ├── realtime/index.ts       # Post-commit BroadcastChannel + storage fallback transport
     ├── auth/index.tsx          # Mock AuthProvider + route/action guards
     ├── i18n/index.tsx          # EN/AR dictionary provider with RTL dir management
     └── feedback/index.ts       # Phase 10 sound & haptics no-op hook stubs
@@ -158,95 +162,53 @@ src/
 
 ---
 
-## 5. Swapping Repositories for a Real Database
+## 5. Event-Sourced Architecture & Data Integrity
 
-**Golden architectural rule:** Zero UI pages or components import mock seed data or touch `localStorage` directly. Every read and write flows through async functions in `src/lib/repos/*` typed by `src/lib/schemas/index.ts`.
+1. **Append-Only Event Log (Single Source of Truth):** Scores (`ScoreEvent`), absences (`AbsenceEvent`), buzzes (`BuzzEvent`), match transitions (`MatchLifecycleEvent`), and arrivals (`CheckInEvent`) are append-only. Reverts and admin edits append compensating events (`kind: 'undo'`, `action: 'reversed'`, `replayEpoch` increments) and **never delete past history**.
+2. **Zero Direct Derived Writes (AST-Guarded):** Nothing outside `src/lib/engine` and `src/lib/commands` may write derived fields (`winnerPlayerId`, `winnerId`, `advancingPlayerIds`, `result`, `stats`, entity `status`/`rank`). Enforced on every check by `scripts/check-derived-writes.mjs` in `npm run lint`.
+3. **Automatic Cascades & Impact Preview:** Reverting or editing a finished match recomputes the winner, rank, group standings, qualifiers, BYEs, and downstream slots automatically. If a downstream match has already started (`live`/`finished`), the pipeline throws `CascadeConfirmationRequiredError` and renders `ImpactPreviewDialog` so the Super Admin chooses **`invalidateForReplay`** or **`markNeedsReview`** explicitly.
+4. **9 Engine Invariants & Consistency Check (`/admin/consistency`):** Every command verifies all 9 invariants (`FINISHED_MATCH_SINGLE_VALID_WINNER`, `NO_FINISHED_MATCH_TIED`, `FINISHED_GROUP_COMPLETE_STANDINGS`, `QUALIFIERS_MATCH_TOP_N`, `KNOCKOUT_PARTICIPANTS_MATCH_FEEDERS`, `PLAYER_AT_MOST_ONE_LIVE_MATCH`, `STORED_STATS_MATCH_RECOMPUTED`, `NO_ORPHAN_EVENTS`, `MARWAN_EXCLUDED_FROM_STANDINGS`). Admins can inspect status anytime at `/admin/consistency` and run **Repair by recomputation**.
+5. **Optimistic Concurrency:** Every match carries `version: number`; stale writes reject with `VersionConflictError`.
 
-### Recommended Production Stack
+---
 
-PostgreSQL via **Supabase** or **Prisma / Drizzle ORM**, paired with Next.js **Route Handlers** (`/app/api/*`) or **Server Actions** and **Auth.js / Supabase Auth**.
+## 6. Swapping Storage & Commands for a Real Database
+
+**Golden architectural rule:** Zero UI pages or components import seed data or touch IndexedDB directly. Every read passes through `src/lib/repos/*` and every mutation flows through `src/lib/commands/index.ts`.
 
 ### Step-by-Step Swap Checklist
 
-1. **Provision database tables** matching `src/lib/schemas/index.ts`:
-   - `players`, `users`, `rounds`, `segments`, `games`, `score_events` (append-only ledger; leaderboard & `player.stats` derive from this table), `buzz_events`, `audit_entries`, `sponsors`, `content_items`, and `settings`.
-   - Keep `player-marwan` (`is_host = true`) protected from deletion and excluded from standard contestant queries unless `includeHost: true`.
-2. **Swap `src/lib/repos/*` implementations** (keep the exact exported method signatures and return types so zero UI components change):
-   - Either call thin `/api/...` route handlers from the client repo modules, or convert repo writes into Next.js Server Actions validated with the existing Zod schemas in `src/lib/schemas/index.ts`.
-   - Wrap multi-step domain operations in SQL transactions:
-     - `scoreRepo.applyScore` / `undoScoreEventById` / `editScoreEvent` / `deleteScoreEvent` → mutate `score_events` + insert `audit_entries` + publish realtime event.
-     - `gameRepo.finishGame` → compute totals, check qualifying tie across `round.advancePerGame`, auto-append `seg-16` or finalize winner + advance into next-round scheduled game + sync `rounds.status` + update `players.status` + insert `audit_entries`.
-     - `gameRepo.generateBracket` → replace non-demo rounds/games + sync `settings.bracketConfig` + insert `audit_entries`.
-3. **Move RBAC & Auth to the server**:
-   - Replace `src/lib/auth/index.tsx` mock `localStorage` session with **Auth.js / NextAuth** or **Supabase Auth**.
-   - Enforce `canAccessPath` in Next.js `middleware.ts` and mirror `assertRepoPermission` (`src/lib/repos/permissions.ts`) inside every API handler / Server Action + PostgreSQL Row-Level Security (RLS) policies.
-   - Disable or guard `settingsRepo.resetDemoData()` behind a non-production flag.
-4. **Remove `src/lib/storage/index.ts` and `src/lib/seed/index.ts`** from runtime paths (repurpose `createSeedSnapshot()` as a one-time DB seed script).
+1. **Provision PostgreSQL tables** (Supabase / Prisma / Drizzle) matching `src/lib/schemas/index.ts`:
+   - Entity tables: `players`, `users`, `groups`, `rounds`, `segments`, `matches` (with `version` optimistic-lock column & `replay_epoch`), `sponsors`, `content_items`, `settings`.
+   - Append-only event tables (`INSERT`-only): `score_events`, `absence_events`, `buzz_events`, `match_lifecycle_events`, `check_in_events`, `audit_entries`.
+2. **Keep `src/lib/engine/*` untouched (0 changes!):** Because `/lib/engine` is 100% pure TypeScript with zero browser/storage imports, run the exact same `propagateWinners()`, `previewCascadeImpact()`, `autoScheduleMatches()`, and `checkInvariants()` inside your server-side command handlers!
+3. **Move `src/lib/commands/index.ts` to Server Actions / API Route Handlers** wrapped in SQL `BEGIN ... COMMIT` transactions using optimistic locking (`WHERE id = $1 AND version = $expectedVersion`), and swap `src/lib/storage/index.ts` from IndexedDB to your ORM/DB pool.
+4. **Enforce server-side Auth, RBAC & Redaction:** Replace `src/lib/auth/index.tsx` with Auth.js / Supabase Auth, enforce `canAccessPath` in `middleware.ts`, and mirror `assertRepoPermission`, `redactMatchForRole`, and contact visibility in server handlers + PostgreSQL RLS. Store uploaded player avatar photos (`<= 300KB`) in S3 / R2 / Supabase Storage.
 
-See [`TODO.md`](./TODO.md) for the complete method-by-method SQL mapping across all 11 repository files.
+See [`TODO.md`](./TODO.md) for the full production swap checklist.
 
 ---
 
-## 6. Upgrading Realtime to Multi-Device Venue Sync
+## 7. Upgrading Realtime to Multi-Device Venue Sync
 
-During the single-browser pitch, `src/lib/realtime/index.ts` uses `BrowserRealtimeTransport` (`BroadcastChannel` + strictly ordered `window.storage` fallback with message-ID deduplication) so actions in a Scorer Console tab immediately animate on an open Big Screen or Leaderboard tab.
+During the single-browser pitch, `src/lib/realtime/index.ts` uses `BrowserRealtimeTransport` (`BroadcastChannel` + `storage` fallback with message-ID deduplication), publishing **strictly after IndexedDB commit resolves**.
 
-For a **live multi-device venue** (e.g., 4 Scorer iPads → Main Stage LED Wall PC → Spectator mobile phones), every screen and repository already talks exclusively to the `realtime` singleton (`RealtimeBroker`) implementing the `RealtimeTransport` interface:
-
-```ts
-export interface RealtimeTransport {
-  readonly name: string;
-  connect: () => Promise<void> | void;
-  disconnect: () => Promise<void> | void;
-  getStatus: () => RealtimeConnectionStatus;
-  onStatusChange: (listener: RealtimeStatusListener) => () => void;
-  publish: <T = Record<string, unknown>>(event: RealtimeEventName, payload: T) => void;
-  subscribe: (event: RealtimeEventName | '*', listener: RealtimeListener) => () => void;
-}
-```
-
-### Upgrade Steps (Zero UI Component Edits)
-
-1. **Create a hosted driver** in `src/lib/realtime/` (for example `SupabaseRealtimeTransport`, `AblyRealtimeTransport`, `PusherRealtimeTransport`, or a custom `WebSocketRealtimeTransport`) implementing `RealtimeTransport`:
-   - Map `publish(event, payload)` to channel broadcast (or let server-side DB writes emit broadcasts directly on commit).
-   - Map incoming socket messages to local listeners registered via `subscribe(event | '*', listener)`.
-   - Forward connection lifecycle states (`connecting` → `connected` → `reconnecting` → `disconnected`) to `onStatusChange` so the Big Screen's `SYNC` status dot reflects live network health automatically.
-2. **Register the driver** inside `createRealtimeTransport(config)` in `src/lib/realtime/index.ts` (selecting via `process.env.NEXT_PUBLIC_REALTIME_DRIVER`), or hot-swap at runtime via `setRealtimeTransport(adapter)` — `RealtimeBroker` automatically migrates all active UI subscriptions.
-3. **Named Events Already Emitted**:
-   - `score.changed`, `buzz.recorded`, `buzz.cleared`, `segment.changed`, `timer.updated`, `game.started`, `game.finished`, `final.revealed`, `player.updated`, `user.updated`, `segment.updated`, `content.updated`, `sponsor.updated`, `bracket.updated`, `settings.updated`, `data.reset`.
+For a **live multi-device venue** (table iPads → Main Stage LED Wall PC → spectator phones), implement one class satisfying `RealtimeTransport` (`SupabaseRealtimeTransport`, `AblyRealtimeTransport`, `PusherRealtimeTransport`, or `WebSocketRealtimeTransport`) and register it in `createRealtimeTransport()` via `NEXT_PUBLIC_REALTIME_DRIVER` — zero UI edits required.
 
 ---
 
-## 7. Deployment (Vercel & Netlify)
+## 8. Deployment (Vercel & Netlify)
 
-This release (`v0.1-pitch`) is **zero-config ready** for both **Vercel** and **Netlify** — no environment variables or external services are required to deploy the pitch prototype.
+This release (`v0.1.1-client-feedback-1`) is **zero-config ready** for both **Vercel** (`vercel.json`) and **Netlify** (`netlify.toml`) — no environment variables or external services are required for prototype mode.
 
-### Deploy to Vercel (Recommended)
-
-1. Push this repository to GitHub / GitLab / Bitbucket.
-2. Import the repository in [Vercel](https://vercel.com/new):
-   - **Framework Preset:** `Next.js` (auto-detected via `vercel.json`)
-   - **Build Command:** `npm run build`
-   - **Output Directory:** `.next` (default)
-   - **Environment Variables:** None required for prototype mode (see [`.env.example`](./.env.example) for future production vars).
-3. Click **Deploy**. Every route (28 static + 2 dynamic App Router routes) builds cleanly with security headers configured in [`vercel.json`](./vercel.json).
-
-### Deploy to Netlify
-
-1. Push the repository and select **Add new site → Import an existing project** in [Netlify](https://app.netlify.com/).
-2. Netlify reads [`netlify.toml`](./netlify.toml) automatically (`npm run build`, `.next`, `@netlify/plugin-nextjs`, and security headers).
-3. **Environment Variables:** None required for prototype mode. Click **Deploy site**.
-
-### Environment Notes
-
-- Prototype data is stored **per browser** in `localStorage` (`casino_el_al3ab_db_v1`). Each visitor or demo laptop starts fresh from the curated 27-player Ramadan 2027 seed and can reset anytime via **Admin → Settings → Reset Demo Data**.
-- **Google Fonts** (`Lilita One`, `Bebas Neue`, `Inter`, `Lalezar`, `Cairo`) are optimized at build time by `next/font/google` and self-hosted in the Next.js bundle — meaning fonts render reliably even if the client blocks external font CDNs during a pitch.
+- Prototype data persists **per browser** in IndexedDB (`casino_el_al3ab_idb_v1`). Every visitor starts cleanly on the 720-player Ramadan 2027 seed and can switch presets or reset anytime via **Admin → Settings**.
+- **Google Fonts** (`Lilita One`, `Bebas Neue`, `Inter`, `Lalezar`, `Cairo`) are self-hosted by `next/font/google` at build time so the production build works **100% offline**.
 
 ---
 
-## 8. Brand Safety & Scope Guardrails
+## 9. Brand Safety & Scope Guardrails
 
-- **No photos of real people:** Marwan Serry appears by **name only** (`Marwan Serry` / `مروان سري`) with a generated geometric crown emblem — zero photos or copyrighted show logos/artwork.
-- **Skill & trivia positioning:** Zero real-money gambling terminology, slot-machine imagery, or pricing claims (sponsor tiers display editable placeholder benefits and `"Contact us"` links).
-- **Registration quiz:** Intentionally out of scope for this phase (no dead links or placeholders).
-- **Phase 10 Delighters:** Kept off (`delightersEnabled: false`) for this client base-review milestone, with hook points (`AnimatedNumber`, `ChipBadge`, `PlayerPanel`, `/lib/feedback`, and named realtime events) pre-wired for activation in Phase 10.
+- **No photos of real people in seed/host:** Marwan Serry appears by **name only** (`Marwan Serry` / `مروان سري`) with a generated golden crown emblem — zero photos or copyrighted show logos/artwork. Contestant photos are optional self/admin uploads (`<= 300KB` cropped square) backed by 24 original in-house 3D SVG avatars (`CC0/MIT`).
+- **Skill & trivia positioning:** Zero real-money gambling terminology or fixed sponsor prices (`"Contact us"` placeholders).
+- **Registration quiz:** Intentionally out of scope (handled by a separate later project; zero dead links).
+- **Phase 10 Delighters:** Kept off (`delightersEnabled: false`) for this client milestone, with reusable hook points (`AnimatedNumber`, `ChipBadge`, `PlayerPanel`, `/lib/feedback`, named realtime events) ready for activation.

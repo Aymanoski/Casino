@@ -165,70 +165,102 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
     []
   );
 
-  const loadScreenState = useCallback(async () => {
-    const seq = ++loadSeqRef.current;
-    try {
-      const [
-        loadedGame,
-        loadedGames,
-        loadedPlayers,
-        loadedSegments,
-        loadedSettings,
-        scoreSummary,
-        loadedAbsences,
-      ] = await Promise.all([
-        gameRepo.get(gameId),
-        gameRepo.list({ includeDemo: true }),
-        playerRepo.list({ includeHost: true }),
-        segmentRepo.list(),
-        settingsRepo.get(),
-        scoreRepo.getMatchScoreSummary(gameId),
-        scoreRepo.listAbsencesByMatch(gameId),
-      ]);
+  const staticLoadedRef = useRef(false);
+  const roundCacheRef = useRef<Map<string, Round>>(new Map());
 
-      let loadedRound: Round | null = null;
-      if (loadedGame) {
-        loadedRound = await roundRepo.get(loadedGame.roundId);
+  const loadScreenState = useCallback(
+    async (options?: { refreshStatic?: boolean }) => {
+      const seq = ++loadSeqRef.current;
+      const needStatic = Boolean(options?.refreshStatic || !staticLoadedRef.current);
+      try {
+        const [
+          loadedGame,
+          scoreSummary,
+          loadedAbsences,
+          staticBundle,
+        ] = await Promise.all([
+          gameRepo.get(gameId),
+          scoreRepo.getMatchScoreSummary(gameId),
+          scoreRepo.listAbsencesByMatch(gameId),
+          needStatic
+            ? Promise.all([
+                gameRepo.list({ includeDemo: true }),
+                segmentRepo.list(),
+                settingsRepo.get(),
+              ])
+            : Promise.resolve(null),
+        ]);
+
+        const seatedIds = new Set<string>();
+        if (loadedGame) {
+          for (const p of loadedGame.participants) {
+            if (p.playerId) seatedIds.add(p.playerId);
+          }
+          for (const pid of loadedGame.playerIds) {
+            if (pid && !pid.startsWith('tbd-') && !pid.startsWith('bye-')) {
+              seatedIds.add(pid);
+            }
+          }
+        }
+
+        const [seatedPlayers, loadedRound] = await Promise.all([
+          Promise.all(Array.from(seatedIds).map((pid) => playerRepo.get(pid))),
+          loadedGame
+            ? roundCacheRef.current.has(loadedGame.roundId) && !needStatic
+              ? Promise.resolve(roundCacheRef.current.get(loadedGame.roundId) ?? null)
+              : roundRepo.get(loadedGame.roundId)
+            : Promise.resolve(null),
+        ]);
+
+        if (!mountedRef.current || seq !== loadSeqRef.current) return;
+
+        const pMap: Record<string, Player> = { ...playersRef.current };
+        seatedPlayers.forEach((p) => {
+          if (p) pMap[p.id] = p;
+        });
+        playersRef.current = pMap;
+        setPlayersMap(pMap);
+
+        let sMap = segmentsRef.current;
+        if (staticBundle) {
+          const [loadedGames, loadedSegments, loadedSettings] = staticBundle;
+          sMap = {};
+          loadedSegments.forEach((s) => {
+            sMap[s.id] = s;
+          });
+          segmentsRef.current = sMap;
+          staticLoadedRef.current = true;
+          setAllGames(loadedGames);
+          setSegmentsMap(sMap);
+          setSettings(loadedSettings);
+        }
+
+        if (loadedGame && loadedRound) {
+          roundCacheRef.current.set(loadedGame.roundId, loadedRound);
+        }
+
+        setGame(loadedGame);
+        setRound(loadedRound);
+        setTotals(scoreSummary.totals);
+        setYellowByPlayer(scoreSummary.yellowCardsByPlayer);
+        setRedByPlayer(scoreSummary.redCardsByPlayer);
+        setAbsenceEvents(loadedAbsences);
+
+        if (loadedGame) {
+          syncTimerDisplayFromGame(loadedGame, sMap);
+        }
+      } finally {
+        if (mountedRef.current && seq === loadSeqRef.current) {
+          setLoading(false);
+        }
       }
-
-      if (!mountedRef.current || seq !== loadSeqRef.current) return;
-
-      const pMap: Record<string, Player> = {};
-      loadedPlayers.forEach((p) => {
-        pMap[p.id] = p;
-      });
-      const sMap: Record<string, Segment> = {};
-      loadedSegments.forEach((s) => {
-        sMap[s.id] = s;
-      });
-
-      playersRef.current = pMap;
-      segmentsRef.current = sMap;
-
-      setGame(loadedGame);
-      setAllGames(loadedGames);
-      setRound(loadedRound);
-      setPlayersMap(pMap);
-      setSegmentsMap(sMap);
-      setSettings(loadedSettings);
-      setTotals(scoreSummary.totals);
-      setYellowByPlayer(scoreSummary.yellowCardsByPlayer);
-      setRedByPlayer(scoreSummary.redCardsByPlayer);
-      setAbsenceEvents(loadedAbsences);
-
-      if (loadedGame) {
-        syncTimerDisplayFromGame(loadedGame, sMap);
-      }
-    } finally {
-      if (mountedRef.current && seq === loadSeqRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [gameId, syncTimerDisplayFromGame]);
+    },
+    [gameId, syncTimerDisplayFromGame]
+  );
 
   useEffect(() => {
     setLoading(true);
-    void loadScreenState();
+    void loadScreenState({ refreshStatic: true });
   }, [loadScreenState]);
 
   // Monitor realtime transport connection status & resync on tab foregrounding
@@ -236,7 +268,7 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
     const unsubStatus = realtime.onStatusChange(setConnectionStatus);
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        void loadScreenState();
+        void loadScreenState({ refreshStatic: true });
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
@@ -371,17 +403,23 @@ export function BigScreenGameView({ gameId }: { gameId: string }) {
       }
 
       // Reload canonical state from repositories
-      if (
-        !msgGameId ||
-        msgGameId === gameId ||
+      const refreshStatic =
         message.event === 'data.reset' ||
         message.event === 'settings.updated' ||
         message.event === 'bracket.updated' ||
+        message.event === 'game.started' ||
+        message.event === 'game.finished' ||
+        message.event === 'match.started' ||
+        message.event === 'match.finished';
+      if (
+        !msgGameId ||
+        msgGameId === gameId ||
+        refreshStatic ||
         message.event === 'absence.recorded' ||
         message.event === 'match.needsReview' ||
         message.event === 'player.updated'
       ) {
-        void loadScreenState();
+        void loadScreenState({ refreshStatic });
       }
     });
 

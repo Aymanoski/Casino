@@ -83,10 +83,15 @@ import {
   DisciplinaryCardIcon,
   formatScoreEventDisplay,
 } from '@/components/brand/DisciplinaryCards';
-import {
-  canViewPlayerContactForMatch,
-  PlayerContactDialog,
-} from '@/components/brand/PlayerContactDialog';
+import { canViewPlayerContactForMatch } from '@/components/brand/PlayerContactDialog';
+
+const PlayerContactDialog = dynamic(
+  () =>
+    import('@/components/brand/PlayerContactDialog').then((m) => ({
+      default: m.PlayerContactDialog,
+    })),
+  { ssr: false }
+);
 
 const SessionHistoryDrawer = dynamic(
   () =>
@@ -263,122 +268,170 @@ export function ScorerConsoleView({ matchId, gameId }: ScorerConsoleViewProps) {
     };
   }, [shortcutsOpen]);
 
-  const loadConsoleState = useCallback(async () => {
-    const seq = ++loadSeqRef.current;
-    try {
-      const [
-        loadedMatch,
-        loadedPlayers,
-        loadedSegments,
-        loadedUsers,
-        loadedSettings,
-        scoreSummary,
-        matchScores,
-        matchAbsences,
-        matchBuzzes,
-      ] = await Promise.all([
-        matchRepo.get(resolvedMatchId),
-        playerRepo.list({ includeHost: true }),
-        segmentRepo.list(),
-        userRepo.list(),
-        settingsRepo.get(),
-        scoreRepo.getMatchScoreSummary(resolvedMatchId),
-        scoreRepo.listByMatch(resolvedMatchId),
-        scoreRepo.listAbsencesByMatch(resolvedMatchId),
-        scoreRepo.listBuzzByGame(resolvedMatchId),
-      ]);
+  const staticLoadedRef = useRef(false);
+  const staticSegmentsRef = useRef<Segment[]>([]);
+  const staticUsersRef = useRef<User[]>([]);
+  const staticSettingsRef = useRef<Settings | null>(null);
+  const roundCacheRef = useRef<Map<string, Round>>(new Map());
 
-      let loadedRound: Round | null = null;
-      if (loadedMatch) {
-        loadedRound = await roundRepo.get(loadedMatch.roundId);
-      }
+  const loadConsoleState = useCallback(
+    async (options?: { refreshStatic?: boolean }) => {
+      const seq = ++loadSeqRef.current;
+      const needStatic = Boolean(options?.refreshStatic || !staticLoadedRef.current);
+      try {
+        const [
+          loadedMatch,
+          scoreSummary,
+          matchScores,
+          matchAbsences,
+          matchBuzzes,
+          staticBundle,
+        ] = await Promise.all([
+          matchRepo.get(resolvedMatchId),
+          scoreRepo.getMatchScoreSummary(resolvedMatchId),
+          scoreRepo.listByMatch(resolvedMatchId),
+          scoreRepo.listAbsencesByMatch(resolvedMatchId),
+          scoreRepo.listBuzzByGame(resolvedMatchId),
+          needStatic
+            ? Promise.all([
+                segmentRepo.list(),
+                userRepo.list(),
+                settingsRepo.get(),
+              ])
+            : Promise.resolve(null),
+        ]);
 
-      if (!mountedRef.current || seq !== loadSeqRef.current) return;
-
-      if (loadedMatch) {
-        if (
-          loadedMatch.timer?.status === 'running' &&
-          loadedMatch.timer.endsAt
-        ) {
-          const left = Math.max(
-            0,
-            Math.ceil(
-              (new Date(loadedMatch.timer.endsAt).getTime() - Date.now()) / 1000
-            )
-          );
-          setDisplayRemainingSec(left);
-          if (left > 0) timerExpireHandledRef.current = false;
-          if (left > 5) timerWarnAnnouncedRef.current = false;
-        } else if (loadedMatch.timer) {
-          setDisplayRemainingSec(loadedMatch.timer.remainingSec);
-          if (loadedMatch.timer.remainingSec > 5) {
-            timerWarnAnnouncedRef.current = false;
-          }
-        } else {
-          const segId =
-            loadedMatch.segmentIds[loadedMatch.currentSegmentIndex];
-          const seg = loadedSegments.find((s) => s.id === segId);
-          setDisplayRemainingSec(seg?.durationSec ?? 45);
+        let loadedSegments = staticSegmentsRef.current;
+        let loadedUsers = staticUsersRef.current;
+        let loadedSettings = staticSettingsRef.current;
+        if (staticBundle) {
+          [loadedSegments, loadedUsers, loadedSettings] = staticBundle;
+          staticSegmentsRef.current = loadedSegments;
+          staticUsersRef.current = loadedUsers;
+          staticSettingsRef.current = loadedSettings;
+          staticLoadedRef.current = true;
         }
 
-        const realIds = loadedMatch.participants
-          .map((p) => p.playerId)
-          .filter((pid): pid is string => Boolean(pid));
-
-        setSelectedPlayerId((prev) => {
-          if (prev && realIds.includes(prev)) return prev;
-          if (
-            loadedMatch.activeBuzzPlayerId &&
-            realIds.includes(loadedMatch.activeBuzzPlayerId)
-          ) {
-            return loadedMatch.activeBuzzPlayerId;
+        // Only hydrate the 2–3 seated players (plus any scorer-log players) instead of cloning all 721 players on every tap!
+        const neededPlayerIds = new Set<string>();
+        if (loadedMatch) {
+          for (const p of loadedMatch.participants) {
+            if (p.playerId) neededPlayerIds.add(p.playerId);
           }
-          return realIds[0] ?? '';
-        });
+          for (const pid of loadedMatch.playerIds) {
+            if (pid && !pid.startsWith('tbd-') && !pid.startsWith('bye-')) {
+              neededPlayerIds.add(pid);
+            }
+          }
+        }
+        for (const ev of matchScores) neededPlayerIds.add(ev.playerId);
+        for (const ev of matchAbsences) neededPlayerIds.add(ev.playerId);
 
-        setOverrideWinnerId((prev) =>
-          prev && realIds.includes(prev) ? prev : (realIds[0] ?? '')
+        const [seatedPlayerResults, loadedRound] = await Promise.all([
+          Promise.all(Array.from(neededPlayerIds).map((pid) => playerRepo.get(pid))),
+          loadedMatch
+            ? roundCacheRef.current.has(loadedMatch.roundId) && !needStatic
+              ? Promise.resolve(roundCacheRef.current.get(loadedMatch.roundId) ?? null)
+              : roundRepo.get(loadedMatch.roundId)
+            : Promise.resolve(null),
+        ]);
+
+        const loadedPlayers = seatedPlayerResults.filter((p): p is Player => Boolean(p));
+        if (loadedMatch && loadedRound) {
+          roundCacheRef.current.set(loadedMatch.roundId, loadedRound);
+        }
+
+        if (!mountedRef.current || seq !== loadSeqRef.current) return;
+
+        if (loadedMatch) {
+          if (
+            loadedMatch.timer?.status === 'running' &&
+            loadedMatch.timer.endsAt
+          ) {
+            const left = Math.max(
+              0,
+              Math.ceil(
+                (new Date(loadedMatch.timer.endsAt).getTime() - Date.now()) / 1000
+              )
+            );
+            setDisplayRemainingSec(left);
+            if (left > 0) timerExpireHandledRef.current = false;
+            if (left > 5) timerWarnAnnouncedRef.current = false;
+          } else if (loadedMatch.timer) {
+            setDisplayRemainingSec(loadedMatch.timer.remainingSec);
+            if (loadedMatch.timer.remainingSec > 5) {
+              timerWarnAnnouncedRef.current = false;
+            }
+          } else {
+            const segId =
+              loadedMatch.segmentIds[loadedMatch.currentSegmentIndex];
+            const seg = loadedSegments.find((s) => s.id === segId);
+            setDisplayRemainingSec(seg?.durationSec ?? 45);
+          }
+
+          const realIds = loadedMatch.participants
+            .map((p) => p.playerId)
+            .filter((pid): pid is string => Boolean(pid));
+
+          setSelectedPlayerId((prev) => {
+            if (prev && realIds.includes(prev)) return prev;
+            if (
+              loadedMatch.activeBuzzPlayerId &&
+              realIds.includes(loadedMatch.activeBuzzPlayerId)
+            ) {
+              return loadedMatch.activeBuzzPlayerId;
+            }
+            return realIds[0] ?? '';
+          });
+
+          setOverrideWinnerId((prev) =>
+            prev && realIds.includes(prev) ? prev : (realIds[0] ?? '')
+          );
+        }
+
+        setMatch(loadedMatch);
+        setRound(loadedRound);
+        setAllPlayers(loadedPlayers);
+        if (staticBundle) {
+          setAllSegments(loadedSegments);
+          setAllUsers(loadedUsers);
+          setSettings(loadedSettings);
+        }
+        setTotals(scoreSummary.totals);
+        setYellowCardsByPlayer(scoreSummary.yellowCardsByPlayer);
+        setRedCardsByPlayer(scoreSummary.redCardsByPlayer);
+        setScoreEvents(matchScores);
+        setAbsenceEvents(matchAbsences);
+        setBuzzEvents(matchBuzzes);
+        setLoadError(null);
+        setLoading(false);
+      } catch (err) {
+        if (!mountedRef.current || seq !== loadSeqRef.current) return;
+        setLoadError(
+          err instanceof Error && err.message
+            ? err.message
+            : 'Failed to read match data.'
         );
+        setLoading(false);
       }
-
-      setMatch(loadedMatch);
-      setRound(loadedRound);
-      setAllPlayers(loadedPlayers);
-      setAllSegments(loadedSegments);
-      setAllUsers(loadedUsers);
-      setSettings(loadedSettings);
-      setTotals(scoreSummary.totals);
-      setYellowCardsByPlayer(scoreSummary.yellowCardsByPlayer);
-      setRedCardsByPlayer(scoreSummary.redCardsByPlayer);
-      setScoreEvents(matchScores);
-      setAbsenceEvents(matchAbsences);
-      setBuzzEvents(matchBuzzes);
-      setLoadError(null);
-      setLoading(false);
-    } catch (err) {
-      if (!mountedRef.current || seq !== loadSeqRef.current) return;
-      setLoadError(
-        err instanceof Error && err.message
-          ? err.message
-          : 'Failed to read match data.'
-      );
-      setLoading(false);
-    }
-  }, [resolvedMatchId]);
+    },
+    [resolvedMatchId]
+  );
 
   useEffect(() => {
-    loadConsoleState();
+    loadConsoleState({ refreshStatic: true });
     const unsub = realtime.subscribe('*', (msg) => {
       const payload = msg.payload as
         | { gameId?: string; matchId?: string }
         | undefined;
       const targetId = payload?.matchId ?? payload?.gameId;
-      if (
-        !targetId ||
-        targetId === resolvedMatchId ||
-        msg.event === 'data.reset'
-      ) {
-        loadConsoleState();
+      const refreshStatic =
+        msg.event === 'data.reset' ||
+        msg.event === 'settings.updated' ||
+        msg.event === 'segment.updated' ||
+        msg.event === 'user.updated';
+      if (!targetId || targetId === resolvedMatchId || refreshStatic) {
+        loadConsoleState({ refreshStatic });
       }
     });
     return () => unsub();

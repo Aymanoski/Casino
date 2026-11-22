@@ -532,7 +532,7 @@ export function StudioSidebarShell({
               onChange={(e) => {
                 if (e.target.value) loginAs(e.target.value);
               }}
-              className="min-h-[44px] h-11 min-w-0 max-w-[155px] xs:max-w-[190px] sm:max-w-[235px] rounded-input border-2 border-border-paper bg-white px-2.5 sm:px-3 text-base font-medium text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
+              className="min-h-[44px] h-11 min-w-0 max-w-[155px] xs:max-w-[190px] sm:max-w-[235px] truncate rounded-input border-2 border-border-paper bg-white ps-2.5 pe-8 sm:ps-3 sm:pe-8 text-base font-medium text-ink focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/25"
             >
               {!user && (
                 <option value="" disabled>

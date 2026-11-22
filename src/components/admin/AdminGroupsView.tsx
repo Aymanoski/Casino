@@ -572,7 +572,7 @@ export function AdminGroupsView() {
                   : 'Search player name, nickname, #seed, or group number...'
               }
               aria-label={lang === 'ar' ? 'بحث في المجموعات' : 'Search groups'}
-              className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-paper ps-9 pe-9 text-base sm:text-sm text-ink placeholder:text-ink-faint focus:border-blue-500 focus:outline-none"
+              className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-paper ps-9 pe-9 text-base lg:text-sm text-ink placeholder:text-ink-faint focus:border-blue-500 focus:outline-none"
             />
             {searchQuery && (
               <button
@@ -600,7 +600,7 @@ export function AdminGroupsView() {
                 onChange={(e) => setJumpInput(e.target.value)}
                 placeholder={lang === 'ar' ? `مجموعة 1..${groups.length}` : `Group 1..${groups.length}`}
                 aria-label={lang === 'ar' ? 'انتقال سريع إلى رقم المجموعة' : 'Jump to group number'}
-                className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-paper ps-8 pe-3 text-base sm:text-sm font-bold tabular-nums text-ink focus:border-blue-500 focus:outline-none"
+                className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-paper ps-8 pe-3 text-base lg:text-sm font-bold tabular-nums text-ink focus:border-blue-500 focus:outline-none"
               />
             </div>
             <Button type="submit" variant="secondary" size="sm">
@@ -845,7 +845,7 @@ export function AdminGroupsView() {
                       onClick={() =>
                         handleExecuteMove(movingPlayer.playerId, group.id)
                       }
-                      className="min-h-[36px] h-9 px-2.5 text-xs"
+                      className="min-h-[44px] px-3 text-xs"
                     >
                       {lang === 'ar' ? 'نقل هنا' : 'Move Here'}
                     </Button>
@@ -855,7 +855,7 @@ export function AdminGroupsView() {
                     variant="calm"
                     size="sm"
                     onClick={() => setSelectedGroupId(group.id)}
-                    className="min-h-[36px] h-9 px-3 text-xs"
+                    className="min-h-[44px] px-3 text-xs"
                   >
                     {lang === 'ar' ? 'الترتيب والمباريات' : 'Standings & Matches'}
                   </Button>
@@ -1205,7 +1205,7 @@ export function AdminGroupsView() {
                       setMoveTargetGroupNum(e.target.value);
                       setSwapTargetPlayerId('');
                     }}
-                    className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-white px-3 text-base sm:text-sm font-bold text-ink focus:border-blue-500 focus:outline-none"
+                    className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-white px-3 text-base lg:text-sm font-bold text-ink focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
@@ -1219,7 +1219,7 @@ export function AdminGroupsView() {
                     <select
                       value={swapTargetPlayerId}
                       onChange={(e) => setSwapTargetPlayerId(e.target.value)}
-                      className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-white px-3 text-base sm:text-sm font-semibold text-ink focus:border-blue-500 focus:outline-none"
+                      className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-white px-3 text-base lg:text-sm font-semibold text-ink focus:border-blue-500 focus:outline-none"
                     >
                       <option value="">
                         {lang === 'ar'

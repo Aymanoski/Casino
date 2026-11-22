@@ -379,14 +379,14 @@ export function BigScreenLeaderboardView() {
           <div
             role="group"
             aria-label={lang === 'ar' ? 'تصفية حسب الدور' : 'Filter by round'}
-            className="inline-flex items-center gap-1 rounded-pill border-[2.5px] border-outline bg-red-900 p-1 shadow-sticker-sm"
+            className="no-scrollbar inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-pill border-[2.5px] border-outline bg-red-900 p-1 shadow-sticker-sm"
           >
             <button
               type="button"
               onClick={() => setSelectedRoundId('all')}
               aria-pressed={selectedRoundId === 'all'}
               className={cn(
-                'min-h-[44px] min-w-[44px] rounded-pill px-3.5 text-xs sm:text-sm font-extrabold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+                'shrink-0 min-h-[44px] min-w-[44px] rounded-pill px-3 text-xs sm:text-sm font-extrabold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
                 selectedRoundId === 'all'
                   ? 'bg-gold-gradient text-red-900'
                   : 'text-white hover:bg-red-800'
@@ -395,29 +395,45 @@ export function BigScreenLeaderboardView() {
               {lang === 'ar' ? 'الكل' : 'All'}
             </button>
             {rounds
-              .filter((r) => r.id !== 'round-final')
+              .filter((r) => r.stage !== 'final' && r.id !== 'round-final')
               .map((round) => {
                 const isSelected = selectedRoundId === round.id;
+                const koNumMatch = round.id.match(/^round-ko-(\d+)$/);
                 const shortLabel =
-                  round.id === 'round-1'
+                  round.stage === 'group' || round.id === 'round-groups'
                     ? lang === 'ar'
-                      ? 'د١'
-                      : 'R1'
-                    : round.id === 'round-2'
+                      ? 'المجموعات'
+                      : 'Groups'
+                    : round.id === 'round-semi'
                       ? lang === 'ar'
-                        ? 'د٢'
-                        : 'R2'
-                      : lang === 'ar'
                         ? 'نصف'
-                        : 'Semi';
+                        : 'SF'
+                      : round.id === 'round-quarter'
+                        ? lang === 'ar'
+                          ? 'ربع'
+                          : 'QF'
+                        : koNumMatch
+                          ? lang === 'ar'
+                            ? `د${formatNumber(Number(koNumMatch[1]), { useArabicIndicDigits: useArabicIndic })}`
+                            : `R${koNumMatch[1]}`
+                          : round.id === 'round-1'
+                            ? lang === 'ar'
+                              ? 'د١'
+                              : 'R1'
+                            : round.id === 'round-2'
+                              ? lang === 'ar'
+                                ? 'د٢'
+                                : 'R2'
+                              : localizeText(lang, round.name.en, round.name.ar);
                 return (
                   <button
                     key={round.id}
                     type="button"
                     onClick={() => setSelectedRoundId(round.id)}
                     aria-pressed={isSelected}
+                    title={localizeText(lang, round.name.en, round.name.ar)}
                     className={cn(
-                      'min-h-[44px] min-w-[44px] rounded-pill px-3.5 text-xs sm:text-sm font-extrabold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+                      'shrink-0 min-h-[44px] min-w-[44px] rounded-pill px-3 text-xs sm:text-sm font-extrabold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
                       isSelected
                         ? 'bg-gold-gradient text-red-900'
                         : 'text-white hover:bg-red-800'
@@ -677,33 +693,41 @@ export function BigScreenLeaderboardView() {
                   </span>
                 </div>
 
-                {/* Page Indicator Dots + Prev/Next/Auto-Cycle Controls (>= 44px touch targets) */}
-                <div className="flex items-center gap-2">
-                  <div className="hidden sm:flex items-center gap-1 me-1">
-                    {Array.from({ length: totalPages }).map((_, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => setPageIndex(idx)}
-                        aria-label={
-                          lang === 'ar'
-                            ? `صفحة ${formatNumber(idx + 1, { useArabicIndicDigits: useArabicIndic })}`
-                            : `Page ${idx + 1}`
-                        }
-                        aria-current={idx === safePageIndex ? 'page' : undefined}
-                        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-pill px-1 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-                      >
-                        <span
-                          className={cn(
-                            'block h-2.5 rounded-pill border border-outline transition-all duration-300',
-                            idx === safePageIndex
-                              ? 'w-9 bg-gold-gradient'
-                              : 'w-3.5 bg-white/45 hover:bg-white/75'
-                          )}
-                        />
-                      </button>
-                    ))}
-                  </div>
+                {/* Page Indicator Dots (capped at <= 7 pages; compact badge at 720-player scale) + Prev/Next/Auto-Cycle Controls */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {totalPages <= 7 ? (
+                    <div className="hidden sm:flex items-center gap-1 me-1">
+                      {Array.from({ length: totalPages }).map((_, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setPageIndex(idx)}
+                          aria-label={
+                            lang === 'ar'
+                              ? `صفحة ${formatNumber(idx + 1, { useArabicIndicDigits: useArabicIndic })}`
+                              : `Page ${idx + 1}`
+                          }
+                          aria-current={idx === safePageIndex ? 'page' : undefined}
+                          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-pill px-1 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                        >
+                          <span
+                            className={cn(
+                              'block h-2.5 rounded-pill border border-outline transition-all duration-300',
+                              idx === safePageIndex
+                                ? 'w-9 bg-gold-gradient'
+                                : 'w-3.5 bg-white/45 hover:bg-white/75'
+                            )}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="inline-flex min-h-[36px] items-center rounded-pill border border-white/25 bg-red-950/75 px-3 text-xs sm:text-sm font-extrabold tabular-nums text-gold-200">
+                      {lang === 'ar'
+                        ? `صفحة ${formatNumber(safePageIndex + 1, { useArabicIndicDigits: useArabicIndic })} / ${formatNumber(totalPages, { useArabicIndicDigits: useArabicIndic })}`
+                        : `Page ${safePageIndex + 1} / ${totalPages}`}
+                    </span>
+                  )}
 
                   <button
                     type="button"

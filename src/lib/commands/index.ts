@@ -894,41 +894,68 @@ export const commands = {
       };
 
       db.scoreEvents.unshift(event);
-      db.matches[mIdx] = { ...match, version: match.version + 1 };
+      const updatedMatch: Match = { ...match, version: match.version + 1 };
+      db.matches[mIdx] = updatedMatch;
 
-      const { cascadeAuditEntries, cascadeBroadcasts } = applyPropagationAndCascade(
-        beforeDb,
-        db,
-        input.byUserId,
-        {
-          confirmCascade: input.confirmCascade,
-          cascadePolicy: input.cascadePolicy,
-          isDemo: match.isDemo,
+      // O(1) fast path for actively LIVE matches: a live +1/−1 point cannot alter any
+      // finished winner, group standing, qualifier, BYE, or knockout slot.
+      // Dev/test still run checkInvariants() to guarantee 100% parity with propagateWinners().
+      const isLiveFastPath = match.status === 'live';
+      let cascadeAuditEntries: AuditEntry[] = [];
+      let cascadeBroadcasts: RealtimeBroadcast[] = [];
+      let updatedPlayer: Player | undefined;
+
+      if (isLiveFastPath) {
+        if (!match.isDemo) {
+          const pIdx = db.players.findIndex((p) => p.id === input.playerId);
+          if (pIdx !== -1 && !db.players[pIdx].isGuest && !db.players[pIdx].isHost) {
+            const prevP = db.players[pIdx];
+            updatedPlayer = {
+              ...prevP,
+              stats: {
+                ...prevP.stats,
+                totalPoints: prevP.stats.totalPoints + input.delta,
+              },
+            };
+            db.players[pIdx] = updatedPlayer;
+          }
         }
-      );
+      } else {
+        const propagated = applyPropagationAndCascade(
+          beforeDb,
+          db,
+          input.byUserId,
+          {
+            confirmCascade: input.confirmCascade,
+            cascadePolicy: input.cascadePolicy,
+            isDemo: match.isDemo,
+          }
+        );
+        cascadeAuditEntries = propagated.cascadeAuditEntries;
+        cascadeBroadcasts = propagated.cascadeBroadcasts;
+      }
 
-      const player = db.players.find((p) => p.id === input.playerId);
+      const player = updatedPlayer ?? db.players.find((p) => p.id === input.playerId);
       const signStr = input.delta > 0 ? `+${input.delta}` : `${input.delta}`;
 
+      let actorAudit: AuditEntry | undefined;
       if (!match.isDemo) {
-        db.auditEntries.unshift(
-          ...cascadeAuditEntries,
-          createAuditRecord({
-            actorUserId: input.byUserId,
-            action: 'score.add',
-            entityType: 'score',
-            entityId: event.id,
-            summary: `Applied ${signStr} pt to ${player?.fullName ?? input.playerId}${event.note ? ` (${event.note})` : ''}`,
-            summaryAr: `تم احتساب ${signStr} نقطة للاعب ${player?.fullNameAr ?? input.playerId}${event.note ? ` (${event.note})` : ''}`,
-            before: null,
-            after: {
-              matchId: match.id,
-              playerId: input.playerId,
-              delta: input.delta,
-              kind: 'point',
-            },
-          })
-        );
+        actorAudit = createAuditRecord({
+          actorUserId: input.byUserId,
+          action: 'score.add',
+          entityType: 'score',
+          entityId: event.id,
+          summary: `Applied ${signStr} pt to ${player?.fullName ?? input.playerId}${event.note ? ` (${event.note})` : ''}`,
+          summaryAr: `تم احتساب ${signStr} نقطة للاعب ${player?.fullNameAr ?? input.playerId}${event.note ? ` (${event.note})` : ''}`,
+          before: null,
+          after: {
+            matchId: match.id,
+            playerId: input.playerId,
+            delta: input.delta,
+            kind: 'point',
+          },
+        });
+        db.auditEntries.unshift(...cascadeAuditEntries, actorAudit);
       }
 
       if (input.delta >= 0) {
@@ -942,6 +969,15 @@ export const commands = {
       return {
         result: event,
         nextDb: db,
+        delta: isLiveFastPath
+          ? {
+              putMatches: [updatedMatch],
+              putPlayers: updatedPlayer ? [updatedPlayer] : undefined,
+              putScoreEvents: [event],
+              putAuditEntries: actorAudit ? [actorAudit] : undefined,
+            }
+          : undefined,
+        skipInvariants: isLiveFastPath && isProductionEnv(),
         broadcasts: [
           {
             event: 'score.changed',
@@ -1014,39 +1050,65 @@ export const commands = {
       };
 
       db.scoreEvents.unshift(event);
-      db.matches[mIdx] = { ...match, version: match.version + 1 };
+      const updatedMatch: Match = { ...match, version: match.version + 1 };
+      db.matches[mIdx] = updatedMatch;
 
-      const { cascadeAuditEntries, cascadeBroadcasts } = applyPropagationAndCascade(
-        beforeDb,
-        db,
-        input.byUserId,
-        {
-          confirmCascade: input.confirmCascade,
-          cascadePolicy: input.cascadePolicy,
-          isDemo: match.isDemo,
+      const isLiveFastPath = match.status === 'live';
+      let cascadeAuditEntries: AuditEntry[] = [];
+      let cascadeBroadcasts: RealtimeBroadcast[] = [];
+      let updatedPlayer: Player | undefined;
+
+      if (isLiveFastPath) {
+        if (!match.isDemo) {
+          const pIdx = db.players.findIndex((p) => p.id === input.playerId);
+          if (pIdx !== -1 && !db.players[pIdx].isGuest && !db.players[pIdx].isHost) {
+            const prevP = db.players[pIdx];
+            updatedPlayer = {
+              ...prevP,
+              stats: {
+                ...prevP.stats,
+                totalPoints: prevP.stats.totalPoints + delta,
+                yellowCards: prevP.stats.yellowCards + (input.card === 'yellow' ? 1 : 0),
+                redCards: prevP.stats.redCards + (input.card === 'red' ? 1 : 0),
+              },
+            };
+            db.players[pIdx] = updatedPlayer;
+          }
         }
-      );
-
-      const player = db.players.find((p) => p.id === input.playerId);
-      if (!match.isDemo) {
-        db.auditEntries.unshift(
-          ...cascadeAuditEntries,
-          createAuditRecord({
-            actorUserId: input.byUserId,
-            action: input.card === 'yellow' ? 'score.yellowCard' : 'score.redCard',
-            entityType: 'score',
-            entityId: event.id,
-            summary: `${labelEn} issued to ${player?.fullName ?? input.playerId}${trimmedNote ? ` (${trimmedNote})` : ''}`,
-            summaryAr: `${labelAr} للاعب ${player?.fullNameAr ?? input.playerId}${trimmedNote ? ` (${trimmedNote})` : ''}`,
-            before: null,
-            after: {
-              matchId: match.id,
-              playerId: input.playerId,
-              delta,
-              kind: input.card,
-            },
-          })
+      } else {
+        const propagated = applyPropagationAndCascade(
+          beforeDb,
+          db,
+          input.byUserId,
+          {
+            confirmCascade: input.confirmCascade,
+            cascadePolicy: input.cascadePolicy,
+            isDemo: match.isDemo,
+          }
         );
+        cascadeAuditEntries = propagated.cascadeAuditEntries;
+        cascadeBroadcasts = propagated.cascadeBroadcasts;
+      }
+
+      const player = updatedPlayer ?? db.players.find((p) => p.id === input.playerId);
+      let actorAudit: AuditEntry | undefined;
+      if (!match.isDemo) {
+        actorAudit = createAuditRecord({
+          actorUserId: input.byUserId,
+          action: input.card === 'yellow' ? 'score.yellowCard' : 'score.redCard',
+          entityType: 'score',
+          entityId: event.id,
+          summary: `${labelEn} issued to ${player?.fullName ?? input.playerId}${trimmedNote ? ` (${trimmedNote})` : ''}`,
+          summaryAr: `${labelAr} للاعب ${player?.fullNameAr ?? input.playerId}${trimmedNote ? ` (${trimmedNote})` : ''}`,
+          before: null,
+          after: {
+            matchId: match.id,
+            playerId: input.playerId,
+            delta,
+            kind: input.card,
+          },
+        });
+        db.auditEntries.unshift(...cascadeAuditEntries, actorAudit);
       }
 
       feedback.play('score.negative');
@@ -1055,6 +1117,15 @@ export const commands = {
       return {
         result: event,
         nextDb: db,
+        delta: isLiveFastPath
+          ? {
+              putMatches: [updatedMatch],
+              putPlayers: updatedPlayer ? [updatedPlayer] : undefined,
+              putScoreEvents: [event],
+              putAuditEntries: actorAudit ? [actorAudit] : undefined,
+            }
+          : undefined,
+        skipInvariants: isLiveFastPath && isProductionEnv(),
         broadcasts: [
           {
             event: 'score.changed',
@@ -1172,39 +1243,74 @@ export const commands = {
         createdAt: nextIsoTimestamp(),
       };
 
-      db.scoreEvents[targetIdx] = {
+      const updatedTarget: ScoreEvent = {
         ...target,
         undoneByEventId: undoEvent.id,
       };
+      db.scoreEvents[targetIdx] = updatedTarget;
       db.scoreEvents.unshift(undoEvent);
-      db.matches[mIdx] = { ...match, version: match.version + 1 };
+      const updatedMatch: Match = { ...match, version: match.version + 1 };
+      db.matches[mIdx] = updatedMatch;
 
-      const { cascadeAuditEntries, cascadeBroadcasts } = applyPropagationAndCascade(
-        beforeDb,
-        db,
-        input.byUserId,
-        {
-          confirmCascade: input.confirmCascade,
-          cascadePolicy: input.cascadePolicy,
-          isDemo: match.isDemo,
+      // O(1) fast path when undoing an event on a currently LIVE match
+      const isLiveFastPath = match.status === 'live';
+      let cascadeAuditEntries: AuditEntry[] = [];
+      let cascadeBroadcasts: RealtimeBroadcast[] = [];
+      let updatedPlayer: Player | undefined;
+
+      if (isLiveFastPath) {
+        const sameEpoch = (target.replayEpoch ?? 0) === (match.replayEpoch ?? 0);
+        if (!match.isDemo && sameEpoch) {
+          const pIdx = db.players.findIndex((p) => p.id === target.playerId);
+          if (pIdx !== -1 && !db.players[pIdx].isGuest && !db.players[pIdx].isHost) {
+            const prevP = db.players[pIdx];
+            updatedPlayer = {
+              ...prevP,
+              stats: {
+                ...prevP.stats,
+                totalPoints: prevP.stats.totalPoints + undoEvent.delta,
+                yellowCards: Math.max(
+                  0,
+                  prevP.stats.yellowCards - (target.kind === 'yellow' ? 1 : 0)
+                ),
+                redCards: Math.max(
+                  0,
+                  prevP.stats.redCards - (target.kind === 'red' ? 1 : 0)
+                ),
+              },
+            };
+            db.players[pIdx] = updatedPlayer;
+          }
         }
-      );
-
-      const player = db.players.find((p) => p.id === target.playerId);
-      if (!match.isDemo) {
-        db.auditEntries.unshift(
-          ...cascadeAuditEntries,
-          createAuditRecord({
-            actorUserId: input.byUserId,
-            action: 'score.undo',
-            entityType: 'score',
-            entityId: undoEvent.id,
-            summary: `Reverted ${kindLabel} for ${player?.fullName ?? target.playerId} in "${match.tableName}"${input.reason ? ` (${input.reason})` : ''}`,
-            summaryAr: `تم عكس (${kindLabel}) للاعب ${player?.fullNameAr ?? target.playerId} في "${match.tableNameAr || match.tableName}"`,
-            before: { targetEventId: target.id, delta: target.delta, kind: target.kind },
-            after: { undoEventId: undoEvent.id, delta: undoEvent.delta },
-          })
+      } else {
+        const propagated = applyPropagationAndCascade(
+          beforeDb,
+          db,
+          input.byUserId,
+          {
+            confirmCascade: input.confirmCascade,
+            cascadePolicy: input.cascadePolicy,
+            isDemo: match.isDemo,
+          }
         );
+        cascadeAuditEntries = propagated.cascadeAuditEntries;
+        cascadeBroadcasts = propagated.cascadeBroadcasts;
+      }
+
+      const player = updatedPlayer ?? db.players.find((p) => p.id === target.playerId);
+      let actorAudit: AuditEntry | undefined;
+      if (!match.isDemo) {
+        actorAudit = createAuditRecord({
+          actorUserId: input.byUserId,
+          action: 'score.undo',
+          entityType: 'score',
+          entityId: undoEvent.id,
+          summary: `Reverted ${kindLabel} for ${player?.fullName ?? target.playerId} in "${match.tableName}"${input.reason ? ` (${input.reason})` : ''}`,
+          summaryAr: `تم عكس (${kindLabel}) للاعب ${player?.fullNameAr ?? target.playerId} في "${match.tableNameAr || match.tableName}"`,
+          before: { targetEventId: target.id, delta: target.delta, kind: target.kind },
+          after: { undoEventId: undoEvent.id, delta: undoEvent.delta },
+        });
+        db.auditEntries.unshift(...cascadeAuditEntries, actorAudit);
       }
 
       feedback.play('score.undo');
@@ -1213,6 +1319,15 @@ export const commands = {
       return {
         result: undoEvent,
         nextDb: db,
+        delta: isLiveFastPath
+          ? {
+              putMatches: [updatedMatch],
+              putPlayers: updatedPlayer ? [updatedPlayer] : undefined,
+              putScoreEvents: [updatedTarget, undoEvent],
+              putAuditEntries: actorAudit ? [actorAudit] : undefined,
+            }
+          : undefined,
+        skipInvariants: isLiveFastPath && isProductionEnv(),
         broadcasts: [
           {
             event: 'score.changed',
@@ -1647,27 +1762,33 @@ export const commands = {
       };
 
       db.buzzEvents.unshift(buzz);
-      db.matches[mIdx] = { ...match, version: match.version + 1 };
+      const isLiveFastPath = match.status === 'live' || match.status === 'needsTieBreak';
+      const updatedMatch: Match = isLiveFastPath
+        ? { ...match, activeBuzzPlayerId: input.playerId, version: match.version + 1 }
+        : { ...match, version: match.version + 1 };
+      db.matches[mIdx] = updatedMatch;
 
-      applyPropagationAndCascade(beforeDb, db, input.byUserId, {
-        confirmCascade: true,
-        isDemo: match.isDemo,
-      });
+      if (!isLiveFastPath) {
+        applyPropagationAndCascade(beforeDb, db, input.byUserId, {
+          confirmCascade: true,
+          isDemo: match.isDemo,
+        });
+      }
 
       const player = db.players.find((p) => p.id === input.playerId);
+      let actorAudit: AuditEntry | undefined;
       if (!match.isDemo) {
-        db.auditEntries.unshift(
-          createAuditRecord({
-            actorUserId: input.byUserId,
-            action: 'buzz.record',
-            entityType: 'buzz',
-            entityId: buzz.id,
-            summary: `${player?.fullName ?? input.playerId} buzzed first`,
-            summaryAr: `${player?.fullNameAr ?? input.playerId} ضغط الجرس أولاً`,
-            before: null,
-            after: { matchId: match.id, playerId: input.playerId, segmentId: input.segmentId },
-          })
-        );
+        actorAudit = createAuditRecord({
+          actorUserId: input.byUserId,
+          action: 'buzz.record',
+          entityType: 'buzz',
+          entityId: buzz.id,
+          summary: `${player?.fullName ?? input.playerId} buzzed first`,
+          summaryAr: `${player?.fullNameAr ?? input.playerId} ضغط الجرس أولاً`,
+          before: null,
+          after: { matchId: match.id, playerId: input.playerId, segmentId: input.segmentId },
+        });
+        db.auditEntries.unshift(actorAudit);
       }
 
       feedback.play('buzz');
@@ -1676,6 +1797,14 @@ export const commands = {
       return {
         result: buzz,
         nextDb: db,
+        delta: isLiveFastPath
+          ? {
+              putMatches: [updatedMatch],
+              putBuzzEvents: [buzz],
+              putAuditEntries: actorAudit ? [actorAudit] : undefined,
+            }
+          : undefined,
+        skipInvariants: isLiveFastPath && isProductionEnv(),
         broadcasts: [
           {
             event: 'buzz.recorded',
@@ -1719,31 +1848,45 @@ export const commands = {
         createdAt: nextIsoTimestamp(),
       };
       db.buzzEvents.unshift(clearEvent);
-      db.matches[mIdx] = { ...match, version: match.version + 1 };
+      const isLiveFastPath = match.status === 'live' || match.status === 'needsTieBreak';
+      const updatedMatch: Match = isLiveFastPath
+        ? { ...match, activeBuzzPlayerId: null, version: match.version + 1 }
+        : { ...match, version: match.version + 1 };
+      db.matches[mIdx] = updatedMatch;
 
-      applyPropagationAndCascade(beforeDb, db, input.byUserId, {
-        confirmCascade: true,
-        isDemo: match.isDemo,
-      });
+      if (!isLiveFastPath) {
+        applyPropagationAndCascade(beforeDb, db, input.byUserId, {
+          confirmCascade: true,
+          isDemo: match.isDemo,
+        });
+      }
 
+      let actorAudit: AuditEntry | undefined;
       if (!match.isDemo) {
-        db.auditEntries.unshift(
-          createAuditRecord({
-            actorUserId: input.byUserId,
-            action: 'buzz.clear',
-            entityType: 'buzz',
-            entityId: match.id,
-            summary: `Cleared active buzzer highlight on "${match.tableName}"`,
-            summaryAr: `تم مسح إشارة الجرس في "${match.tableNameAr || match.tableName}"`,
-            before: { activeBuzzPlayerId: prevPlayerId },
-            after: { activeBuzzPlayerId: null },
-          })
-        );
+        actorAudit = createAuditRecord({
+          actorUserId: input.byUserId,
+          action: 'buzz.clear',
+          entityType: 'buzz',
+          entityId: match.id,
+          summary: `Cleared active buzzer highlight on "${match.tableName}"`,
+          summaryAr: `تم مسح إشارة الجرس في "${match.tableNameAr || match.tableName}"`,
+          before: { activeBuzzPlayerId: prevPlayerId },
+          after: { activeBuzzPlayerId: null },
+        });
+        db.auditEntries.unshift(actorAudit);
       }
 
       return {
         result: undefined,
         nextDb: db,
+        delta: isLiveFastPath
+          ? {
+              putMatches: [updatedMatch],
+              putBuzzEvents: [clearEvent],
+              putAuditEntries: actorAudit ? [actorAudit] : undefined,
+            }
+          : undefined,
+        skipInvariants: isLiveFastPath && isProductionEnv(),
         broadcasts: [
           { event: 'buzz.cleared', payload: { gameId: match.id, matchId: match.id } },
         ],
@@ -2195,13 +2338,34 @@ export const commands = {
       const winnerId = finishedMatch.result?.winnerId;
       const winner = winnerId ? db.players.find((p) => p.id === winnerId) : null;
 
+      const matchGroup = match.groupId
+        ? db.groups.find((g) => g.id === match.groupId)
+        : undefined;
+      const matchGroupPlayerIds = matchGroup ? new Set(matchGroup.playerIds) : null;
+
       const advancedTo = impact.autoUpdatedMatches.map((chg) => {
         const tm = db.matches.find((m) => m.id === chg.matchId);
-        const seatIndex = chg.expectedParticipantIds.findIndex(
-          (pid) => pid === winnerId
-        );
+        // Derive the actual newly slotted player ID from before -> expected participant diff
+        // (e.g. finishing the final group match may qualify the group's #1 player, not this match's winner).
+        let slottedPlayerId = '';
+        let seatIndex = -1;
+        for (let i = 0; i < chg.expectedParticipantIds.length; i++) {
+          const nextPid = chg.expectedParticipantIds[i];
+          const prevPid = chg.beforeParticipantIds[i] ?? null;
+          if (nextPid && nextPid !== prevPid) {
+            if (!slottedPlayerId || (matchGroupPlayerIds && matchGroupPlayerIds.has(nextPid))) {
+              slottedPlayerId = nextPid;
+              seatIndex = i;
+              if (!matchGroupPlayerIds || matchGroupPlayerIds.has(nextPid)) break;
+            }
+          }
+        }
+        if (!slottedPlayerId && winnerId) {
+          slottedPlayerId = winnerId;
+          seatIndex = chg.expectedParticipantIds.findIndex((pid) => pid === winnerId);
+        }
         return {
-          playerId: winnerId ?? '',
+          playerId: slottedPlayerId,
           targetGameId: chg.matchId,
           targetTableName: tm?.tableName ?? chg.tableName,
           targetTableNameAr: tm?.tableNameAr ?? chg.tableNameAr,
@@ -2279,6 +2443,7 @@ export const commands = {
       assertRepoPermission(db, input.actorUserId, 'match.reopen', { match });
 
       // Prevent violating PLAYER_AT_MOST_ONE_LIVE_MATCH when reopening
+      let nonDownstreamLiveConflict: Match | undefined;
       if (!match.isDemo) {
         const myPids = new Set(
           match.participants
@@ -2292,8 +2457,18 @@ export const commands = {
             (other.status === 'live' || other.status === 'needsTieBreak') &&
             other.participants.some((p) => p.playerId && myPids.has(p.playerId))
         );
-        if (liveConflict && !input.confirmCascade) {
-          // Will be handled by cascade if it's a downstream match, else block!
+        if (liveConflict) {
+          const isPotentiallyDownstream =
+            liveConflict.type !== 'group' && liveConflict.round > match.round;
+          if (!isPotentiallyDownstream) {
+            const conflictPlayer = db.players.find((p) =>
+              liveConflict.participants.some((lp) => lp.playerId === p.id && myPids.has(p.id))
+            );
+            throw new CommandValidationError(
+              `Cannot reopen "${match.tableName}": ${conflictPlayer?.fullName ?? 'a participant'} is currently live in "${liveConflict.tableName}". Finish that match first.`
+            );
+          }
+          nonDownstreamLiveConflict = liveConflict;
         }
       }
 
@@ -2329,6 +2504,17 @@ export const commands = {
       );
 
       const updated = db.matches.find((m) => m.id === match.id)!;
+      if (nonDownstreamLiveConflict) {
+        const conflictAfter = db.matches.find((m) => m.id === nonDownstreamLiveConflict!.id);
+        if (
+          conflictAfter &&
+          (conflictAfter.status === 'live' || conflictAfter.status === 'needsTieBreak')
+        ) {
+          throw new CommandValidationError(
+            `Cannot reopen "${match.tableName}": a participant is still live in "${conflictAfter.tableName}".`
+          );
+        }
+      }
       if (!match.isDemo) {
         db.auditEntries.unshift(
           ...cascadeAuditEntries,
@@ -2482,23 +2668,43 @@ export const commands = {
           version: match.version + 1,
         };
       } else {
+        // Super Admin confirmed the played match as-is: pin the played participants
+        // as fixed feeders so future propagation & invariants honor this explicit ruling.
+        const pinnedParticipants = match.participants.map((p) =>
+          p.playerId && !p.guest && !p.isBye
+            ? { ...p, feeder: { kind: 'fixed' as const, playerId: p.playerId } }
+            : p
+        );
         db.matchEvents.unshift({
           id: nextId('me'),
           matchId: match.id,
           type: 'reviewResolved',
           byUserId: input.actorUserId,
           reason: input.reason ?? 'Super Admin confirmed existing match result',
+          payload: {
+            keptParticipants: pinnedParticipants.map((p) => p.playerId),
+          },
           replayEpoch: match.replayEpoch ?? 0,
           createdAt: nextIsoTimestamp(),
         });
-        db.matches[mIdx] = { ...match, version: match.version + 1 };
+        db.matches[mIdx] = {
+          ...match,
+          participants: pinnedParticipants,
+          version: match.version + 1,
+        };
       }
 
       const { cascadeAuditEntries, cascadeBroadcasts } = applyPropagationAndCascade(
         beforeDb,
         db,
         input.actorUserId,
-        { confirmCascade: true, cascadePolicy: 'invalidateForReplay' }
+        {
+          confirmCascade: true,
+          cascadePolicy:
+            input.action === 'invalidateForReplay'
+              ? 'invalidateForReplay'
+              : 'markNeedsReview',
+        }
       );
 
       const updated = db.matches.find((m) => m.id === match.id)!;

@@ -32,6 +32,7 @@ import type {
 import { formatNumber, localizeText, normalizeSearchText } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { PlayerCombobox } from '@/components/ui/player-combobox';
 import { Skeleton, TableRowSkeleton } from '@/components/ui/skeleton';
 import { DataTable, type DataTableColumn } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -175,6 +176,18 @@ export function AdminResultsView() {
     () => users.filter((u) => u.role === 'scorer' || u.role === 'superAdmin'),
     [users]
   );
+
+  // Scope the game dropdown to matches that actually have activity/events (avoids 976+ DOM <option> nodes at 720-player scale)
+  const filterableGames = useMemo(() => {
+    const activeIds = new Set<string>();
+    for (const ev of scoreEvents) activeIds.add(ev.gameId);
+    for (const g of games) {
+      if (g.status !== 'scheduled' || g.id === gameFilter) {
+        activeIds.add(g.id);
+      }
+    }
+    return games.filter((g) => activeIds.has(g.id));
+  }, [games, scoreEvents, gameFilter]);
 
   const unifiedRecords = useMemo<UnifiedResultRecord[]>(() => {
     const finishedGameRows: UnifiedResultRecord[] = games
@@ -685,7 +698,7 @@ export function AdminResultsView() {
               aria-label={lang === 'ar' ? 'تصفية بالجولة' : 'Filter by round'}
               value={roundFilter}
               onChange={(e) => setRoundFilter(e.target.value)}
-              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-2.5 text-base sm:text-xs font-semibold text-ink focus:border-blue-500 focus:outline-none"
+              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-2.5 text-base lg:text-xs font-semibold text-ink focus:border-blue-500 focus:outline-none"
             >
               <option value="all">{lang === 'ar' ? 'كل الجولات' : 'All Rounds'}</option>
               {rounds.map((r) => (
@@ -699,35 +712,32 @@ export function AdminResultsView() {
               aria-label={lang === 'ar' ? 'تصفية بالمباراة' : 'Filter by game'}
               value={gameFilter}
               onChange={(e) => setGameFilter(e.target.value)}
-              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-2.5 text-base sm:text-xs font-semibold text-ink focus:border-blue-500 focus:outline-none"
+              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-2.5 text-base lg:text-xs font-semibold text-ink focus:border-blue-500 focus:outline-none"
             >
-              <option value="all">{lang === 'ar' ? 'كل الطاولات' : 'All Games'}</option>
-              {games.map((g) => (
+              <option value="all">
+                {lang === 'ar' ? 'كل الطاولات النشطة' : 'All Active Matches'}
+              </option>
+              {filterableGames.map((g) => (
                 <option key={g.id} value={g.id}>
                   {localizeText(lang, g.tableName, g.tableNameAr)}
                 </option>
               ))}
             </select>
 
-            <select
-              aria-label={lang === 'ar' ? 'تصفية باللاعب' : 'Filter by player'}
-              value={playerFilter}
-              onChange={(e) => setPlayerFilter(e.target.value)}
-              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-2.5 text-base sm:text-xs font-semibold text-ink focus:border-blue-500 focus:outline-none"
-            >
-              <option value="all">{lang === 'ar' ? 'كل اللاعبين' : 'All Players'}</option>
-              {players.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {localizeText(lang, p.fullName, p.fullNameAr)}
-                </option>
-              ))}
-            </select>
+            <PlayerCombobox
+              players={players}
+              value={playerFilter === 'all' ? '' : playerFilter}
+              onChange={(pid) => setPlayerFilter(pid || 'all')}
+              placeholder={lang === 'ar' ? 'كل اللاعبين...' : 'All Players...'}
+              ariaLabel={lang === 'ar' ? 'تصفية باللاعب' : 'Filter by player'}
+              className="w-full"
+            />
 
             <select
               aria-label={lang === 'ar' ? 'تصفية بالحكم' : 'Filter by scorer'}
               value={scorerFilter}
               onChange={(e) => setScorerFilter(e.target.value)}
-              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-2.5 text-base sm:text-xs font-semibold text-ink focus:border-blue-500 focus:outline-none"
+              className="min-h-[44px] h-11 w-full rounded-input border-2 border-border-paper bg-white px-2.5 text-base lg:text-xs font-semibold text-ink focus:border-blue-500 focus:outline-none"
             >
               <option value="all">{lang === 'ar' ? 'كل الحكام' : 'All Scorers'}</option>
               {scorers.map((u) => (

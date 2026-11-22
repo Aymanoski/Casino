@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import {
   AlertCircle,
   Camera,
@@ -58,7 +59,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
 import { getAvatar3DDefinition } from '@/components/brand/AvatarLibrary3D';
-import { AvatarEditorDialog } from '@/components/player/AvatarEditorDialog';
+
+const AvatarEditorDialog = dynamic(
+  () =>
+    import('@/components/player/AvatarEditorDialog').then((m) => ({
+      default: m.AvatarEditorDialog,
+    })),
+  { ssr: false }
+);
 import { ScoreChip } from '@/components/brand/ScoreChip';
 import {
   CardCounterGroup,
@@ -205,15 +213,13 @@ export function AdminPlayersView() {
   const loadData = useCallback(async () => {
     const seq = ++loadSeqRef.current;
     try {
-      const [allPlayers, allGames, allSegments, appSettings] = await Promise.all([
+      const [allPlayers, allSegments, appSettings] = await Promise.all([
         playerRepo.list(),
-        gameRepo.list(),
         segmentRepo.list(),
         settingsRepo.get(),
       ]);
       if (!mountedRef.current || seq !== loadSeqRef.current) return;
       setPlayers(allPlayers);
-      setGames(allGames);
       setSegments(allSegments);
       setSettings(appSettings);
       setError(null);
@@ -320,8 +326,14 @@ export function AdminPlayersView() {
     setProfilePlayer(player);
     setProfileLoading(true);
     try {
-      const history = await scoreRepo.listByPlayer(player.id);
-      if (mountedRef.current) setProfileHistory(history);
+      const [history, loadedGames] = await Promise.all([
+        scoreRepo.listByPlayer(player.id),
+        games.length > 0 ? Promise.resolve(games) : gameRepo.list(),
+      ]);
+      if (mountedRef.current) {
+        setProfileHistory(history);
+        if (games.length === 0) setGames(loadedGames);
+      }
     } finally {
       if (mountedRef.current) setProfileLoading(false);
     }

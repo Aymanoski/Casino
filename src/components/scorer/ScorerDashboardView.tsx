@@ -1,12 +1,21 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
   ArrowRight,
   CalendarClock,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Crown,
   Filter,
@@ -14,6 +23,7 @@ import {
   Play,
   Radio,
   RotateCcw,
+  Search,
   Trophy,
   UserCheck,
   Zap,
@@ -39,11 +49,20 @@ import type {
   Settings,
   User,
 } from '@/lib/schemas';
-import { cn, formatArabicCount, formatNumber, localizeText } from '@/lib/utils';
+import {
+  cn,
+  formatArabicCount,
+  formatNumber,
+  localizeText,
+  normalizeSearchText,
+} from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+
+const NON_LIVE_PAGE_SIZE = 24;
 import { LiveBadge } from '@/components/brand/LiveBadge';
 import { MarqueeBulbs } from '@/components/brand/MarqueeBulbs';
 import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
@@ -84,6 +103,9 @@ export function ScorerDashboardView() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [scorerFilter, setScorerFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const deferredSearch = useDeferredValue(searchQuery);
+  const [nonLivePage, setNonLivePage] = useState<number>(1);
 
   const mountedRef = useRef<boolean>(true);
   const loadSeqRef = useRef<number>(0);
@@ -116,9 +138,11 @@ export function ScorerDashboardView() {
           ? allGames.filter((g) => g.scorerUserId === user.id)
           : allGames;
 
-      const totalsMap = await scoreRepo.getTotalsForMatches(
-        scopedGames.map((g) => g.id)
-      );
+      const scoredIds = scopedGames
+        .filter((g) => g.status !== 'scheduled')
+        .map((g) => g.id);
+      const totalsMap =
+        scoredIds.length > 0 ? await scoreRepo.getTotalsForMatches(scoredIds) : {};
 
       if (!mountedRef.current || seq !== loadSeqRef.current) return;
 
@@ -208,6 +232,7 @@ export function ScorerDashboardView() {
       finished: 4,
       void: 5,
     };
+    const q = normalizeSearchText(deferredSearch);
     return games
       .filter((g) => {
         if (isSuperAdmin && scorerFilter !== 'all' && g.scorerUserId !== scorerFilter) {
@@ -220,6 +245,24 @@ export function ScorerDashboardView() {
         } else if (statusFilter !== 'all' && g.status !== statusFilter) {
           return false;
         }
+        if (q) {
+          const tableMatch =
+            normalizeSearchText(g.tableName).includes(q) ||
+            normalizeSearchText(g.tableNameAr).includes(q) ||
+            String(g.tableNumber).includes(q);
+          if (!tableMatch) {
+            const playerMatch = g.playerIds.some((pid) => {
+              const p = playerMap.get(pid);
+              if (!p) return false;
+              return (
+                normalizeSearchText(p.fullName).includes(q) ||
+                normalizeSearchText(p.fullNameAr).includes(q) ||
+                normalizeSearchText(p.nickname).includes(q)
+              );
+            });
+            if (!playerMatch) return false;
+          }
+        }
         return true;
       })
       .sort((a, b) => {
@@ -230,7 +273,7 @@ export function ScorerDashboardView() {
         const tB = new Date(b.scheduledAt).getTime();
         return a.status === 'finished' ? tB - tA : tA - tB;
       });
-  }, [games, isSuperAdmin, scorerFilter, statusFilter]);
+  }, [games, isSuperAdmin, scorerFilter, statusFilter, deferredSearch, playerMap]);
 
   const liveGames = useMemo(
     () =>
@@ -246,6 +289,20 @@ export function ScorerDashboardView() {
       ),
     [filteredGames]
   );
+
+  const nonLiveTotalPages = Math.max(
+    1,
+    Math.ceil(nonLiveGames.length / NON_LIVE_PAGE_SIZE)
+  );
+  const safeNonLivePage = Math.min(nonLivePage, nonLiveTotalPages);
+  const pagedNonLiveGames = useMemo(() => {
+    const start = (safeNonLivePage - 1) * NON_LIVE_PAGE_SIZE;
+    return nonLiveGames.slice(start, start + NON_LIVE_PAGE_SIZE);
+  }, [nonLiveGames, safeNonLivePage]);
+
+  useEffect(() => {
+    setNonLivePage(1);
+  }, [statusFilter, scorerFilter, deferredSearch]);
 
   const firstLiveGame = useMemo(
     () => games.find((g) => g.status === 'live') ?? null,
@@ -354,29 +411,49 @@ export function ScorerDashboardView() {
           })}
         </div>
 
-        {isSuperAdmin && scorerUsers.length > 0 && (
-          <div className="flex items-center gap-2.5">
-            <Filter className="h-4 w-4 shrink-0 text-red-100" aria-hidden="true" />
-            <label htmlFor="scorer-filter-select" className="sr-only">
-              {lang === 'ar' ? 'تصفية حسب الحكم' : 'Filter by assigned scorer'}
-            </label>
-            <select
-              id="scorer-filter-select"
-              value={scorerFilter}
-              onChange={(e) => setScorerFilter(e.target.value)}
-              className="min-h-[48px] w-full sm:w-auto min-w-[230px] rounded-input border-2 border-outline bg-white ps-3.5 pe-8 py-2 text-base font-bold text-ink shadow-sticker-sm focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500"
-            >
-              <option value="all">
-                {lang === 'ar' ? 'كل الحكّام (الكل)' : 'All Scorers (Super Admin)'}
-              </option>
-              {scorerUsers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {localizeText(lang, s.name, s.nameAr)}
-                </option>
-              ))}
-            </select>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="w-full sm:w-64">
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              startIcon={<Search className="h-4 w-4" />}
+              aria-label={
+                lang === 'ar'
+                  ? 'ابحث بالطاولة أو اللاعب أو المجموعة'
+                  : 'Search by table, group, or player'
+              }
+              placeholder={
+                lang === 'ar'
+                  ? 'بحث بالطاولة أو اللاعب...'
+                  : 'Search table, group, or player...'
+              }
+              className="min-h-[48px] border-2 border-outline bg-white text-ink shadow-sticker-sm"
+            />
           </div>
-        )}
+          {isSuperAdmin && scorerUsers.length > 0 && (
+            <div className="flex items-center gap-2.5">
+              <Filter className="h-4 w-4 shrink-0 text-red-100" aria-hidden="true" />
+              <label htmlFor="scorer-filter-select" className="sr-only">
+                {lang === 'ar' ? 'تصفية حسب الحكم' : 'Filter by assigned scorer'}
+              </label>
+              <select
+                id="scorer-filter-select"
+                value={scorerFilter}
+                onChange={(e) => setScorerFilter(e.target.value)}
+                className="min-h-[48px] w-full sm:w-auto min-w-[210px] rounded-input border-2 border-outline bg-white ps-3.5 pe-8 py-2 text-base font-bold text-ink shadow-sticker-sm focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500"
+              >
+                <option value="all">
+                  {lang === 'ar' ? 'كل الحكّام (الكل)' : 'All Scorers (Super Admin)'}
+                </option>
+                {scorerUsers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {localizeText(lang, s.name, s.nameAr)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Loading Skeletons */}
@@ -640,24 +717,60 @@ export function ScorerDashboardView() {
           aria-label={lang === 'ar' ? 'الجلسات المجدولة والمنتهية' : 'Scheduled and Finished Tables'}
           className="space-y-4"
         >
-          {liveGames.length > 0 && (
-            <h2 className="font-display text-fluid-xl text-white">
-              {statusFilter === 'scheduled'
-                ? lang === 'ar'
-                  ? 'الجلسات المجدولة القادمة'
-                  : 'Scheduled Upcoming Sessions'
-                : statusFilter === 'finished'
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            {liveGames.length > 0 ? (
+              <h2 className="font-display text-fluid-xl text-white">
+                {statusFilter === 'scheduled'
                   ? lang === 'ar'
-                    ? 'الجلسات المنتهية'
-                    : 'Completed Sessions'
-                  : lang === 'ar'
-                    ? 'الجلسات المجدولة والمنتهية'
-                    : 'Scheduled & Completed Sessions'}
-            </h2>
-          )}
+                    ? 'الجلسات المجدولة القادمة'
+                    : 'Scheduled Upcoming Sessions'
+                  : statusFilter === 'finished'
+                    ? lang === 'ar'
+                      ? 'الجلسات المنتهية'
+                      : 'Completed Sessions'
+                    : lang === 'ar'
+                      ? 'الجلسات المجدولة والمنتهية'
+                      : 'Scheduled & Completed Sessions'}
+              </h2>
+            ) : (
+              <span />
+            )}
+
+            {nonLiveTotalPages > 1 && (
+              <div className="flex items-center gap-2 text-xs font-extrabold text-red-100 tabular-nums">
+                <span>
+                  {lang === 'ar'
+                    ? `صفحة ${formatNumber(safeNonLivePage, { useArabicIndicDigits: useArabicIndic })} / ${formatNumber(nonLiveTotalPages, { useArabicIndicDigits: useArabicIndic })} (${formatNumber(nonLiveGames.length, { useArabicIndicDigits: useArabicIndic })} طاولة)`
+                    : `Page ${safeNonLivePage} / ${nonLiveTotalPages} (${nonLiveGames.length} tables)`}
+                </span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={safeNonLivePage <= 1}
+                  onClick={() => setNonLivePage((p) => Math.max(1, p - 1))}
+                  aria-label={lang === 'ar' ? 'الصفحة السابقة' : 'Previous page'}
+                >
+                  <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={safeNonLivePage >= nonLiveTotalPages}
+                  onClick={() =>
+                    setNonLivePage((p) => Math.min(nonLiveTotalPages, p + 1))
+                  }
+                  aria-label={lang === 'ar' ? 'الصفحة التالية' : 'Next page'}
+                >
+                  <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+                </Button>
+              </div>
+            )}
+          </div>
 
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            {nonLiveGames.map((game) => {
+            {pagedNonLiveGames.map((game) => {
               const round = roundMap.get(game.roundId);
               const scorer = userMap.get(game.scorerUserId);
               const gameTotals = totalsByGame[game.id] ?? {};

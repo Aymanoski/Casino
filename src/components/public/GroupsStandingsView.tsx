@@ -260,7 +260,7 @@ export function GroupsStandingsView({ embedded = false }: GroupsStandingsViewPro
                   : 'Search player name, nickname, or group #...'
               }
               aria-label={lang === 'ar' ? 'بحث في المجموعات' : 'Search groups'}
-              className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-paper ps-9 pe-9 text-base sm:text-sm text-ink placeholder:text-ink-faint focus:border-blue-500 focus:outline-none"
+              className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-paper ps-9 pe-9 text-base lg:text-sm text-ink placeholder:text-ink-faint focus:border-blue-500 focus:outline-none"
             />
             {searchQuery && (
               <button
@@ -292,7 +292,7 @@ export function GroupsStandingsView({ embedded = false }: GroupsStandingsViewPro
                     : `Group 1..${groups.length}`
                 }
                 aria-label={lang === 'ar' ? 'انتقال سريع لمجموعة' : 'Jump to group #'}
-                className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-paper ps-8 pe-3 text-base sm:text-sm font-bold tabular-nums text-ink focus:border-blue-500 focus:outline-none"
+                className="min-h-[44px] w-full rounded-input border-2 border-border-paper bg-paper ps-8 pe-3 text-base lg:text-sm font-bold tabular-nums text-ink focus:border-blue-500 focus:outline-none"
               />
             </div>
             <Button type="submit" variant="red" size="sm">

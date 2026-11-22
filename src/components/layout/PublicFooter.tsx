@@ -91,11 +91,11 @@ export function PublicFooter() {
             </Badge>
 
             <ul className="space-y-1.5 pt-2 text-xs text-white/90">
-              <li className="flex min-w-0 items-start gap-2">
-                <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold-300" aria-hidden="true" />
+              <li className="flex min-w-0 items-center gap-2">
+                <Mail className="h-3.5 w-3.5 shrink-0 text-gold-300" aria-hidden="true" />
                 <a
                   href={`mailto:${contactEmail}`}
-                  className="min-w-0 break-all sm:break-words underline decoration-gold-300/70 underline-offset-4 hover:text-gold-200 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white rounded-highlight"
+                  className="inline-flex min-h-[44px] items-center min-w-0 break-all sm:break-words underline decoration-gold-300/70 underline-offset-4 hover:text-gold-200 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white rounded-highlight"
                 >
                   {contactEmail}
                 </a>

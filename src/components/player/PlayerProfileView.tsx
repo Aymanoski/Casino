@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -74,8 +75,12 @@ import {
   resolvePlayerDisplay,
 } from '@/components/public/publicFormatters';
 import { PublicErrorBanner } from '@/components/public/PublicErrorBanner';
-import { AvatarEditorDialog } from './AvatarEditorDialog';
 import { PlayerPortalChrome } from './PlayerPortalChrome';
+
+const AvatarEditorDialog = dynamic(
+  () => import('./AvatarEditorDialog').then((m) => ({ default: m.AvatarEditorDialog })),
+  { ssr: false }
+);
 
 interface PlayerPortalDataset {
   players: Player[];

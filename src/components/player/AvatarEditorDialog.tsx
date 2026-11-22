@@ -289,9 +289,14 @@ export function AvatarEditorDialog({
     recomputeCrop(zoom, nextPan);
   };
 
-  const handleCropPointerUp = () => {
+  const handleCropPointerUp = useCallback(() => {
     dragRef.current = null;
-  };
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('blur', handleCropPointerUp);
+    return () => window.removeEventListener('blur', handleCropPointerUp);
+  }, [handleCropPointerUp]);
 
   const handleRemovePhoto = () => {
     setPhotoDataUrl(null);
@@ -565,6 +570,7 @@ export function AvatarEditorDialog({
                       onPointerMove={handleCropPointerMove}
                       onPointerUp={handleCropPointerUp}
                       onPointerCancel={handleCropPointerUp}
+                      onLostPointerCapture={handleCropPointerUp}
                       className="relative h-44 w-44 cursor-move overflow-hidden rounded-card border-[3px] border-outline bg-white shadow-sticker select-none touch-none"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}

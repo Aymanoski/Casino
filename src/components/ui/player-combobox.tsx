@@ -112,7 +112,7 @@ export function PlayerCombobox({
         aria-haspopup="listbox"
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'flex min-h-[44px] w-full items-center justify-between gap-2 rounded-input border-2 border-border-paper bg-white px-3 py-2 text-start text-base sm:text-sm text-ink transition-colors hover:border-red-600/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50',
+          'flex min-h-[44px] w-full items-center justify-between gap-2 rounded-input border-2 border-border-paper bg-white px-3 py-2 text-start text-base lg:text-sm text-ink transition-colors hover:border-red-600/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50',
           open && 'border-blue-500'
         )}
       >

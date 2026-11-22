@@ -403,6 +403,38 @@ export function KnockoutCanvas({
     }
   }, [isLargeTree, region, layout.nodes, centerOnNode]);
 
+  const [viewportSize, setViewportSize] = useState<{ width: number; height: number }>({
+    width: 1200,
+    height: 760,
+  });
+
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const syncSize = () => {
+      const rect = vp.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setViewportSize({ width: rect.width, height: rect.height });
+      }
+    };
+    syncSize();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(syncSize);
+    ro.observe(vp);
+    return () => ro.disconnect();
+  }, []);
+
+  const handlePointerUp = useCallback(() => {
+    dragStartRef.current = null;
+    setIsDragging(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+    window.addEventListener('blur', handlePointerUp);
+    return () => window.removeEventListener('blur', handlePointerUp);
+  }, [isDragging, handlePointerUp]);
+
   // Pointer pan handlers
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button, a, input, [role="button"]')) {
@@ -428,10 +460,33 @@ export function KnockoutCanvas({
     setPan({ x: drag.panX + dx, y: drag.panY + dy });
   };
 
-  const handlePointerUp = () => {
-    dragStartRef.current = null;
-    setIsDragging(false);
-  };
+  // Viewport culling for large trees (>48 nodes, e.g. full 256-slot view) so pan/zoom stays 60fps on phones
+  const { visibleNodes, visibleConnectors } = useMemo(() => {
+    if (layout.nodes.length <= 48) {
+      return { visibleNodes: layout.nodes, visibleConnectors: layout.connectors };
+    }
+    const overscan = 420 / Math.max(0.4, zoom);
+    const minX = -pan.x / zoom - overscan;
+    const maxX = (viewportSize.width - pan.x) / zoom + overscan;
+    const minY = -pan.y / zoom - overscan;
+    const maxY = (viewportSize.height - pan.y) / zoom + overscan;
+
+    const nodes = layout.nodes.filter(
+      (n) =>
+        n.x + NODE_WIDTH >= minX &&
+        n.x <= maxX &&
+        n.y + n.height >= minY &&
+        n.y <= maxY
+    );
+    const connectors = layout.connectors.filter((c) => {
+      const cMinX = Math.min(c.x1, c.x2);
+      const cMaxX = Math.max(c.x1, c.x2);
+      const cMinY = Math.min(c.y1, c.y2);
+      const cMaxY = Math.max(c.y1, c.y2);
+      return cMaxX >= minX && cMinX <= maxX && cMaxY >= minY && cMinY <= maxY;
+    });
+    return { visibleNodes: nodes, visibleConnectors: connectors };
+  }, [layout.nodes, layout.connectors, pan.x, pan.y, zoom, viewportSize.width, viewportSize.height]);
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     if (!e.ctrlKey && !e.metaKey) return;
@@ -596,13 +651,15 @@ export function KnockoutCanvas({
         {/* Pan & Zoom Viewport */}
         <div
           ref={viewportRef}
+          data-knockout-canvas="true"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
+          onLostPointerCapture={handlePointerUp}
           onWheel={handleWheel}
           className={cn(
-            'relative h-[min(70dvh,760px)] w-full overflow-hidden select-none',
+            'relative h-[min(70dvh,760px)] w-full overflow-hidden select-none touch-none',
             isDragging ? 'cursor-grabbing' : 'cursor-grab'
           )}
         >
@@ -650,7 +707,7 @@ export function KnockoutCanvas({
             className="pointer-events-none absolute inset-0"
             aria-hidden="true"
           >
-            {layout.connectors.map((c) => {
+            {visibleConnectors.map((c) => {
               const midX = (c.x1 + c.x2) / 2;
               const pathD = `M ${c.x1} ${c.y1} H ${midX} V ${c.y2} H ${c.x2}`;
               return (
@@ -668,7 +725,7 @@ export function KnockoutCanvas({
           </svg>
 
           {/* Positioned Match Nodes */}
-          {layout.nodes.map((node) => {
+          {visibleNodes.map((node) => {
             const m = node.match;
             const totals = totalsByMatch.get(m.id) ?? {};
             const slots = buildSlotsForMatch(m, playerMap, totals, lang);

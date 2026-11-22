@@ -53,10 +53,22 @@ import { Input } from '@/components/ui/input';
 import { PlayerCombobox } from '@/components/ui/player-combobox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
-import { KnockoutCanvas } from '@/components/brand/KnockoutCanvas';
 import { AdminErrorBanner, AdminPageHeader } from './AdminPageHeader';
 import { DEMO_SEED_PRESETS } from './AdminSettingsView';
 import type { MatchEditorPayload } from './GameEditorDialog';
+
+const KnockoutCanvas = dynamic(
+  () =>
+    import('@/components/brand/KnockoutCanvas').then((m) => ({
+      default: m.KnockoutCanvas,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <Skeleton shape="card" className="h-[min(70dvh,760px)] w-full rounded-card" />
+    ),
+  }
+);
 
 const GameEditorDialog = dynamic(
   () => import('./GameEditorDialog').then((m) => ({ default: m.GameEditorDialog })),

@@ -261,6 +261,7 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   const { lang } = useI18n();
   const [query, setQuery] = React.useState('');
+  const deferredQuery = React.useDeferredValue(query);
   const [sortKey, setSortKey] = React.useState<string | null>(null);
   const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('asc');
   const [viewMode, setViewMode] = React.useState<'cards' | 'scroll'>(mobileMode);
@@ -280,7 +281,7 @@ export function DataTable<T>({
   };
 
   const filteredAndSorted = React.useMemo(() => {
-    const q = normalizeSearchText(query);
+    const q = normalizeSearchText(deferredQuery);
     let list = data;
     if (q && searchFilter) {
       list = list.filter((item) => searchFilter(item, q));
@@ -301,7 +302,7 @@ export function DataTable<T>({
     }
 
     return list;
-  }, [data, query, searchFilter, sortKey, sortDir, columns]);
+  }, [data, deferredQuery, searchFilter, sortKey, sortDir, columns]);
 
   const totalCount = filteredAndSorted.length;
   const totalPages =

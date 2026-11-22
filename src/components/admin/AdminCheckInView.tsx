@@ -1,8 +1,18 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import dynamic from 'next/dynamic';
 import {
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Crown,
   RotateCcw,
@@ -35,10 +45,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/toast';
 import { LiveBadge } from '@/components/brand/LiveBadge';
 import { PlayerAvatar } from '@/components/brand/PlayerAvatar';
-import {
-  ContactIconButton,
-  PlayerContactDialog,
-} from '@/components/brand/PlayerContactDialog';
+import { ContactIconButton } from '@/components/brand/PlayerContactDialog';
+
+const PlayerContactDialog = dynamic(
+  () =>
+    import('@/components/brand/PlayerContactDialog').then((m) => ({
+      default: m.PlayerContactDialog,
+    })),
+  { ssr: false }
+);
+
+const TABLES_PAGE_SIZE = 20;
+const ROSTER_PAGE_SIZE = 30;
 import {
   AdminErrorBanner,
   AdminPageHeader,
@@ -63,6 +81,11 @@ export function AdminCheckInView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const deferredSearch = useDeferredValue(search);
+  const [tableSearch, setTableSearch] = useState('');
+  const deferredTableSearch = useDeferredValue(tableSearch);
+  const [tablesPage, setTablesPage] = useState(1);
+  const [rosterPage, setRosterPage] = useState(1);
   const [busyPlayerId, setBusyPlayerId] = useState<string | null>(null);
   const [contactPlayer, setContactPlayer] = useState<Player | null>(null);
 
@@ -141,8 +164,39 @@ export function AdminCheckInView() {
       });
   }, [games]);
 
+  const filteredTables = useMemo(() => {
+    const q = normalizeSearchText(deferredTableSearch);
+    if (!q) return activeAndUpcomingGames;
+    return activeAndUpcomingGames.filter((g) => {
+      if (
+        normalizeSearchText(g.tableName).includes(q) ||
+        normalizeSearchText(g.tableNameAr).includes(q) ||
+        String(g.tableNumber).includes(q)
+      ) {
+        return true;
+      }
+      return g.playerIds.some((pid) => {
+        const p = playerMap.get(pid);
+        if (!p) return false;
+        return (
+          normalizeSearchText(p.fullName).includes(q) ||
+          normalizeSearchText(p.fullNameAr).includes(q) ||
+          normalizeSearchText(p.nickname).includes(q) ||
+          normalizeSearchText(p.phone).includes(q)
+        );
+      });
+    });
+  }, [activeAndUpcomingGames, deferredTableSearch, playerMap]);
+
+  const tablesTotalPages = Math.max(1, Math.ceil(filteredTables.length / TABLES_PAGE_SIZE));
+  const safeTablesPage = Math.min(tablesPage, tablesTotalPages);
+  const pagedTables = useMemo(() => {
+    const start = (safeTablesPage - 1) * TABLES_PAGE_SIZE;
+    return filteredTables.slice(start, start + TABLES_PAGE_SIZE);
+  }, [filteredTables, safeTablesPage]);
+
   const filteredRoster = useMemo(() => {
-    const q = normalizeSearchText(search);
+    const q = normalizeSearchText(deferredSearch);
     if (!q) return players;
     return players.filter(
       (p) =>
@@ -150,9 +204,25 @@ export function AdminCheckInView() {
         normalizeSearchText(p.fullNameAr).includes(q) ||
         normalizeSearchText(p.nickname).includes(q) ||
         normalizeSearchText(p.nicknameAr).includes(q) ||
-        normalizeSearchText(p.phone).includes(q)
+        normalizeSearchText(p.phone).includes(q) ||
+        String(p.seed).includes(q)
     );
-  }, [players, search]);
+  }, [players, deferredSearch]);
+
+  const rosterTotalPages = Math.max(1, Math.ceil(filteredRoster.length / ROSTER_PAGE_SIZE));
+  const safeRosterPage = Math.min(rosterPage, rosterTotalPages);
+  const pagedRoster = useMemo(() => {
+    const start = (safeRosterPage - 1) * ROSTER_PAGE_SIZE;
+    return filteredRoster.slice(start, start + ROSTER_PAGE_SIZE);
+  }, [filteredRoster, safeRosterPage]);
+
+  useEffect(() => {
+    setTablesPage(1);
+  }, [deferredTableSearch]);
+
+  useEffect(() => {
+    setRosterPage(1);
+  }, [deferredSearch]);
 
   const handleSetArrival = async (
     player: Player,
@@ -320,23 +390,72 @@ export function AdminCheckInView() {
         </TabsList>
 
         <TabsContent value="tables" className="space-y-4">
-          {activeAndUpcomingGames.length === 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="w-full max-w-md">
+              <Input
+                value={tableSearch}
+                onChange={(e) => setTableSearch(e.target.value)}
+                startIcon={<Search className="h-4 w-4" />}
+                aria-label={
+                  lang === 'ar'
+                    ? 'ابحث برقم الطاولة أو اسم المباراة أو المتسابق'
+                    : 'Search tables by table number, match name, or player'
+                }
+                placeholder={
+                  lang === 'ar'
+                    ? 'ابحث برقم الطاولة أو اسم المتسابق...'
+                    : 'Search by table #, match name, or contestant...'
+                }
+              />
+            </div>
+            {filteredTables.length > TABLES_PAGE_SIZE && (
+              <div className="flex items-center gap-2 text-xs font-bold text-ink-muted tabular-nums">
+                <span>
+                  {lang === 'ar'
+                    ? `صفحة ${formatNumber(safeTablesPage, { useArabicIndicDigits: useArabicIndic })} من ${formatNumber(tablesTotalPages, { useArabicIndicDigits: useArabicIndic })} (${formatNumber(filteredTables.length, { useArabicIndicDigits: useArabicIndic })} طاولة)`
+                    : `Page ${safeTablesPage} of ${tablesTotalPages} (${filteredTables.length} tables)`}
+                </span>
+                <Button
+                  type="button"
+                  variant="calm"
+                  size="sm"
+                  disabled={safeTablesPage <= 1}
+                  onClick={() => setTablesPage((p) => Math.max(1, p - 1))}
+                  aria-label={lang === 'ar' ? 'الصفحة السابقة' : 'Previous tables page'}
+                >
+                  <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="calm"
+                  size="sm"
+                  disabled={safeTablesPage >= tablesTotalPages}
+                  onClick={() => setTablesPage((p) => Math.min(tablesTotalPages, p + 1))}
+                  aria-label={lang === 'ar' ? 'الصفحة التالية' : 'Next tables page'}
+                >
+                  <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {pagedTables.length === 0 ? (
             <EmptyState
               compact
               title={
                 lang === 'ar'
-                  ? 'لا توجد مباريات مجدولة أو مباشرة'
-                  : 'No live or upcoming tables'
+                  ? 'لا توجد مباريات مطابقة'
+                  : 'No matching live or upcoming tables'
               }
               description={
                 lang === 'ar'
-                  ? 'كل مباريات البطولة الحالية مكتملة.'
-                  : 'All currently scheduled tables have already finished.'
+                  ? 'غيّر عبارة البحث أو كل المباريات الحالية مكتملة.'
+                  : 'Adjust your search query or all currently scheduled tables have already finished.'
               }
             />
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
-              {activeAndUpcomingGames.map((game) => {
+              {pagedTables.map((game) => {
                 const round = roundMap.get(game.roundId);
                 const gMeta = getGameStatusMeta(game.status, lang);
 
@@ -456,26 +575,57 @@ export function AdminCheckInView() {
         </TabsContent>
 
         <TabsContent value="roster" className="space-y-4">
-          <div className="max-w-md">
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              startIcon={<Search className="h-4 w-4" />}
-              aria-label={
-                lang === 'ar'
-                  ? 'ابحث باسم المتسابق أو اللقب أو الهاتف'
-                  : 'Search walk-up contestant by name, nickname, or phone'
-              }
-              placeholder={
-                lang === 'ar'
-                  ? 'ابحث باسم المتسابق أو اللقب أو الهاتف...'
-                  : 'Search walk-up contestant by name, nickname, or phone...'
-              }
-            />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="w-full max-w-md">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                startIcon={<Search className="h-4 w-4" />}
+                aria-label={
+                  lang === 'ar'
+                    ? 'ابحث باسم المتسابق أو اللقب أو الهاتف'
+                    : 'Search walk-up contestant by name, nickname, or phone'
+                }
+                placeholder={
+                  lang === 'ar'
+                    ? 'ابحث باسم المتسابق أو اللقب أو الهاتف...'
+                    : 'Search walk-up contestant by name, nickname, or phone...'
+                }
+              />
+            </div>
+            {filteredRoster.length > ROSTER_PAGE_SIZE && (
+              <div className="flex items-center gap-2 text-xs font-bold text-ink-muted tabular-nums">
+                <span>
+                  {lang === 'ar'
+                    ? `صفحة ${formatNumber(safeRosterPage, { useArabicIndicDigits: useArabicIndic })} من ${formatNumber(rosterTotalPages, { useArabicIndicDigits: useArabicIndic })} (${formatNumber(filteredRoster.length, { useArabicIndicDigits: useArabicIndic })} متسابق)`
+                    : `Page ${safeRosterPage} of ${rosterTotalPages} (${filteredRoster.length} contestants)`}
+                </span>
+                <Button
+                  type="button"
+                  variant="calm"
+                  size="sm"
+                  disabled={safeRosterPage <= 1}
+                  onClick={() => setRosterPage((p) => Math.max(1, p - 1))}
+                  aria-label={lang === 'ar' ? 'الصفحة السابقة' : 'Previous roster page'}
+                >
+                  <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="calm"
+                  size="sm"
+                  disabled={safeRosterPage >= rosterTotalPages}
+                  onClick={() => setRosterPage((p) => Math.min(rosterTotalPages, p + 1))}
+                  aria-label={lang === 'ar' ? 'الصفحة التالية' : 'Next roster page'}
+                >
+                  <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+                </Button>
+              </div>
+            )}
           </div>
 
           <div className="grid gap-2.5 md:grid-cols-2">
-            {filteredRoster.map((p) => {
+            {pagedRoster.map((p) => {
               const stMeta = getPlayerStatusMeta(p.status, lang);
               return (
                 <div

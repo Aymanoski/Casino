@@ -163,7 +163,7 @@ export function PresenterControlPill({
                       : 'bg-paper-2 text-red-900'
                   )}
                 >
-                  {lang === 'ar' ? 'الترتيب' : 'TOP 27'}
+                  {lang === 'ar' ? 'الترتيب' : 'RANKINGS'}
                 </span>
               </Link>
 
