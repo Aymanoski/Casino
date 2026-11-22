@@ -118,8 +118,11 @@ export function PlayerContactDialog({
     null
   );
 
+  const playerId = player?.id ?? null;
+
   useEffect(() => {
-    if (!open || !player || !actorUserId) {
+    if (!open || !playerId || !actorUserId) {
+      setLoading(false);
       setContact(null);
       setError(null);
       setCopiedField(null);
@@ -131,7 +134,7 @@ export function PlayerContactDialog({
     setError(null);
 
     playerRepo
-      .getContactForActor(player.id, actorUserId, matchId)
+      .getContactForActor(playerId, actorUserId, matchId)
       .then((res) => {
         if (cancelled) return;
         setContact(res);
@@ -153,7 +156,7 @@ export function PlayerContactDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, player, actorUserId, matchId, lang]);
+  }, [open, playerId, actorUserId, matchId, lang]);
 
   const handleCopy = useCallback(
     async (field: 'phone' | 'whatsapp' | 'email', value: string) => {

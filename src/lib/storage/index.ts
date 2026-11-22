@@ -44,17 +44,25 @@ import {
   type CreateSeedOptions,
 } from '@/lib/seed';
 
-const DB_NAME = 'casino_el_al3ab_idb_v1';
-const DB_SCHEMA_VERSION = 3;
+const DB_NAME = 'casino_el_al3ab_idb_v2';
+const LEGACY_DB_NAME = 'casino_el_al3ab_idb_v1';
+const DB_SCHEMA_VERSION = 1;
+const QUIZ_EVENT_CHUNK_SIZE = 500;
 const LEGACY_LOCALSTORAGE_KEY = 'casino_el_al3ab_db_v1';
-const IDB_SYNC_CHANNEL = 'casino_el_al3ab_idb_sync_v1';
-const IDB_SYNC_STORAGE_KEY = 'casino_el_al3ab_idb_ping_v1';
+const IDB_SYNC_CHANNEL = 'casino_el_al3ab_idb_sync_v2';
+const IDB_SYNC_STORAGE_KEY = 'casino_el_al3ab_idb_ping_v2';
 
 interface MetaRecord {
   id: 'dbMeta';
   version: number;
   settings: Settings;
   updatedAt: string;
+}
+
+interface QuizEventChunkRecord {
+  id: string;
+  order: number;
+  events: QuizAttemptEvent[];
 }
 
 interface CasinoIDBSchema extends DBSchema {
@@ -159,8 +167,7 @@ interface CasinoIDBSchema extends DBSchema {
   };
   quizEvents: {
     key: string;
-    value: QuizAttemptEvent;
-    indexes: { 'by-attemptId': string };
+    value: QuizEventChunkRecord;
   };
   quizHandoffs: {
     key: string;
@@ -262,9 +269,54 @@ let dbPromise: Promise<IDBPDatabase<CasinoIDBSchema>> | null = null;
 let memorySnapshot: DatabaseSnapshot | null = null;
 let bgSeedWritePromise: Promise<void> | null = null;
 let idbUnavailable = false;
+let legacyDbCleaned = false;
+let quizChunkSeq = 0;
 let syncBound = false;
 let syncChannel: BroadcastChannel | null = null;
 const tabInstanceId = `tab-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+function packQuizEventChunks(
+  events: QuizAttemptEvent[],
+  prefix: string,
+  baseOrder: number
+): QuizEventChunkRecord[] {
+  const chunks: QuizEventChunkRecord[] = [];
+  for (let i = 0; i < events.length; i += QUIZ_EVENT_CHUNK_SIZE) {
+    const idx = Math.floor(i / QUIZ_EVENT_CHUNK_SIZE);
+    chunks.push({
+      id: `${prefix}-${String(idx).padStart(5, '0')}`,
+      order: baseOrder + idx,
+      events: events.slice(i, i + QUIZ_EVENT_CHUNK_SIZE),
+    });
+  }
+  return chunks;
+}
+
+function unpackQuizEventChunks(chunks: QuizEventChunkRecord[]): QuizAttemptEvent[] {
+  if (chunks.length === 0) return [];
+  const sorted = [...chunks].sort((a, b) => a.order - b.order);
+  const byId = new Map<string, QuizAttemptEvent>();
+  for (const chunk of sorted) {
+    if (!Array.isArray(chunk.events)) continue;
+    for (const ev of chunk.events) {
+      byId.set(ev.id, ev);
+    }
+  }
+  return Array.from(byId.values());
+}
+
+function cleanupLegacyIdbAsync(): void {
+  if (legacyDbCleaned || typeof indexedDB === 'undefined') return;
+  legacyDbCleaned = true;
+  try {
+    // Non-blocking fire-and-forget cleanup of old v1 DB so stale tabs never block v2
+    const req = indexedDB.deleteDatabase(LEGACY_DB_NAME);
+    req.onerror = () => undefined;
+    req.onblocked = () => undefined;
+  } catch {
+    // ignore
+  }
+}
 
 function hasIndexedDB(): boolean {
   return !idbUnavailable && typeof indexedDB !== 'undefined';
@@ -301,7 +353,7 @@ function bindCrossTabInvalidation(): void {
     try {
       syncChannel = new BroadcastChannel(IDB_SYNC_CHANNEL);
       syncChannel.onmessage = (ev: MessageEvent<{ source?: string }>) => {
-        if (ev.data?.source !== tabInstanceId) {
+        if (ev.data?.source !== tabInstanceId && !idbUnavailable) {
           memorySnapshot = null;
         }
       };
@@ -311,7 +363,7 @@ function bindCrossTabInvalidation(): void {
   }
 
   window.addEventListener('storage', (ev) => {
-    if (ev.key === IDB_SYNC_STORAGE_KEY) {
+    if (ev.key === IDB_SYNC_STORAGE_KEY && !idbUnavailable) {
       memorySnapshot = null;
     }
   });
@@ -349,7 +401,7 @@ function cleanupLegacyLocalStorage(): void {
 async function getDb(): Promise<IDBPDatabase<CasinoIDBSchema>> {
   if (!dbPromise) {
     dbPromise = openDB<CasinoIDBSchema>(DB_NAME, DB_SCHEMA_VERSION, {
-      upgrade(db, _oldVersion, _newVersion, tx) {
+      upgrade(db) {
         if (!db.objectStoreNames.contains('meta')) {
           db.createObjectStore('meta', { keyPath: 'id' });
         }
@@ -433,16 +485,7 @@ async function getDb(): Promise<IDBPDatabase<CasinoIDBSchema>> {
           s.createIndex('by-applicantId', 'applicantId');
         }
         if (!db.objectStoreNames.contains('quizEvents')) {
-          const s = db.createObjectStore('quizEvents', { keyPath: 'id' });
-          s.createIndex('by-attemptId', 'attemptId');
-        } else {
-          const s = tx.objectStore('quizEvents');
-          if (s.indexNames.contains('by-applicantId' as never)) {
-            s.deleteIndex('by-applicantId' as never);
-          }
-          if (s.indexNames.contains('by-type' as never)) {
-            s.deleteIndex('by-type' as never);
-          }
+          db.createObjectStore('quizEvents', { keyPath: 'id' });
         }
         if (!db.objectStoreNames.contains('quizHandoffs')) {
           const s = db.createObjectStore('quizHandoffs', { keyPath: 'id' });
@@ -451,7 +494,6 @@ async function getDb(): Promise<IDBPDatabase<CasinoIDBSchema>> {
         }
       },
       blocking(_currentVersion, _blockedVersion, event) {
-        // Immediately release stale v1 connections so v1 -> v2 upgrade in another tab never deadlocks!
         (event.target as IDBDatabase | null)?.close();
         dbPromise = null;
       },
@@ -460,54 +502,68 @@ async function getDb(): Promise<IDBPDatabase<CasinoIDBSchema>> {
       },
     });
   }
-  return dbPromise;
+  try {
+    return await withTimeout(dbPromise, 2500);
+  } catch (err) {
+    dbPromise = null;
+    idbUnavailable = true;
+    throw err;
+  }
 }
 
 async function writeFullSnapshotToIDB(snapshot: DatabaseSnapshot): Promise<void> {
-  const db = await getDb();
-  const tx = db.transaction([...ALL_STORES], 'readwrite');
+  const op = async () => {
+    const db = await getDb();
+    const tx = db.transaction([...ALL_STORES], 'readwrite');
 
-  await Promise.all(ALL_STORES.map((name) => tx.objectStore(name).clear()));
+    await Promise.all(ALL_STORES.map((name) => tx.objectStore(name).clear()));
 
-  const metaStore = tx.objectStore('meta');
-  void metaStore.put({
-    id: 'dbMeta',
-    version: snapshot.version,
-    settings: snapshot.settings,
-    updatedAt: new Date().toISOString(),
-  });
+    const metaStore = tx.objectStore('meta');
+    void metaStore.put({
+      id: 'dbMeta',
+      version: snapshot.version,
+      settings: snapshot.settings,
+      updatedAt: new Date().toISOString(),
+    });
 
-  const putAll = <K extends Exclude<(typeof ALL_STORES)[number], 'meta'>>(
-    storeName: K,
-    rows: Array<CasinoIDBSchema[K]['value']>
-  ) => {
-    const store = tx.objectStore(storeName);
-    for (const row of rows) {
-      void store.put(row);
+    const putAll = <K extends Exclude<(typeof ALL_STORES)[number], 'meta' | 'quizEvents'>>(
+      storeName: K,
+      rows: Array<CasinoIDBSchema[K]['value']>
+    ) => {
+      const store = tx.objectStore(storeName);
+      for (const row of rows) {
+        void store.put(row);
+      }
+    };
+
+    putAll('players', snapshot.players);
+    putAll('users', snapshot.users);
+    putAll('groups', snapshot.groups);
+    putAll('rounds', snapshot.rounds);
+    putAll('segments', snapshot.segments);
+    putAll('matches', snapshot.matches);
+    putAll('scoreEvents', snapshot.scoreEvents);
+    putAll('absenceEvents', snapshot.absenceEvents);
+    putAll('buzzEvents', snapshot.buzzEvents);
+    putAll('matchEvents', snapshot.matchEvents);
+    putAll('checkInEvents', snapshot.checkInEvents);
+    putAll('auditEntries', snapshot.auditEntries);
+    putAll('sponsors', snapshot.sponsors);
+    putAll('contentItems', snapshot.contentItems);
+    putAll('quizQuestions', snapshot.quizQuestions ?? []);
+    putAll('quizApplicants', snapshot.quizApplicants ?? []);
+    putAll('quizAttempts', snapshot.quizAttempts ?? []);
+    putAll('quizHandoffs', snapshot.quizHandoffs ?? []);
+
+    // Pack 26,000+ quiz events into ~52 chunks so initial IDB write finishes in <150ms
+    const quizEventStore = tx.objectStore('quizEvents');
+    for (const chunk of packQuizEventChunks(snapshot.quizEvents ?? [], 'seed', 0)) {
+      void quizEventStore.put(chunk);
     }
+
+    await tx.done;
   };
-
-  putAll('players', snapshot.players);
-  putAll('users', snapshot.users);
-  putAll('groups', snapshot.groups);
-  putAll('rounds', snapshot.rounds);
-  putAll('segments', snapshot.segments);
-  putAll('matches', snapshot.matches);
-  putAll('scoreEvents', snapshot.scoreEvents);
-  putAll('absenceEvents', snapshot.absenceEvents);
-  putAll('buzzEvents', snapshot.buzzEvents);
-  putAll('matchEvents', snapshot.matchEvents);
-  putAll('checkInEvents', snapshot.checkInEvents);
-  putAll('auditEntries', snapshot.auditEntries);
-  putAll('sponsors', snapshot.sponsors);
-  putAll('contentItems', snapshot.contentItems);
-  putAll('quizQuestions', snapshot.quizQuestions ?? []);
-  putAll('quizApplicants', snapshot.quizApplicants ?? []);
-  putAll('quizAttempts', snapshot.quizAttempts ?? []);
-  putAll('quizEvents', snapshot.quizEvents ?? []);
-  putAll('quizHandoffs', snapshot.quizHandoffs ?? []);
-
-  await tx.done;
+  await withTimeout(op(), 4000);
 }
 
 async function readFullSnapshotFromIDB(): Promise<DatabaseSnapshot | null> {
@@ -536,7 +592,7 @@ async function readFullSnapshotFromIDB(): Promise<DatabaseSnapshot | null> {
     quizQuestions,
     quizApplicants,
     quizAttempts,
-    quizEvents,
+    quizEventChunks,
     quizHandoffs,
   ] = await Promise.all([
     tx.objectStore('players').getAll(),
@@ -580,7 +636,7 @@ async function readFullSnapshotFromIDB(): Promise<DatabaseSnapshot | null> {
     quizQuestions,
     quizApplicants,
     quizAttempts,
-    quizEvents,
+    quizEvents: unpackQuizEventChunks(quizEventChunks),
     quizHandoffs,
     settings: meta.settings,
   };
@@ -602,30 +658,38 @@ async function ensureInitialized(): Promise<DatabaseSnapshot> {
 
   if (!initInFlight) {
     initInFlight = (async () => {
+      let idbReadFailed = false;
       try {
-        const existing = await withTimeout(readFullSnapshotFromIDB(), 3500);
+        const existing = await withTimeout(readFullSnapshotFromIDB(), 3000);
         if (existing) {
           memorySnapshot = existing;
+          cleanupLegacyIdbAsync();
           return existing;
         }
       } catch {
-        // Fall through to clean seed on timeout, blocked v1->v2 upgrade, or corrupted store
+        // IndexedDB blocked, timed out, or unavailable (e.g. Safari Private)
+        idbReadFailed = true;
+        idbUnavailable = true;
+        dbPromise = null;
       }
 
       cleanupLegacyLocalStorage();
       const fresh = await createSeedSnapshotAsync();
-      // Expose memorySnapshot immediately so AuthProvider & first render hydrate in <60ms
-      // instead of waiting for 26,000+ quiz events to flush to IndexedDB on disk.
       memorySnapshot = fresh;
 
-      bgSeedWritePromise = writeFullSnapshotToIDB(fresh)
-        .catch(() => {
-          // Gracefully degrade to in-memory mode (e.g. Safari Private / blocked IDB)
-          idbUnavailable = true;
-        })
-        .finally(() => {
-          bgSeedWritePromise = null;
-        });
+      if (!idbReadFailed && hasIndexedDB()) {
+        bgSeedWritePromise = writeFullSnapshotToIDB(fresh)
+          .then(() => {
+            cleanupLegacyIdbAsync();
+          })
+          .catch(() => {
+            idbUnavailable = true;
+            dbPromise = null;
+          })
+          .finally(() => {
+            bgSeedWritePromise = null;
+          });
+      }
 
       return fresh;
     })().finally(() => {
@@ -637,8 +701,14 @@ async function ensureInitialized(): Promise<DatabaseSnapshot> {
 }
 
 async function flushPendingSeedWrite(): Promise<void> {
-  if (bgSeedWritePromise) {
-    await bgSeedWritePromise;
+  if (!bgSeedWritePromise) return;
+  try {
+    await withTimeout(bgSeedWritePromise, 2500);
+  } catch {
+    // Never let a slow/blocked background IDB seed deadlock user actions
+    idbUnavailable = true;
+    dbPromise = null;
+    bgSeedWritePromise = null;
   }
 }
 
@@ -675,6 +745,7 @@ function shallowCloneSnapshot(snap: DatabaseSnapshot): DatabaseSnapshot {
 
 export const storage: StorageAdapter = {
   invalidateCache(): void {
+    if (idbUnavailable) return;
     memorySnapshot = null;
   },
 
@@ -691,6 +762,7 @@ export const storage: StorageAdapter = {
         await writeFullSnapshotToIDB(copied);
       } catch {
         idbUnavailable = true;
+        dbPromise = null;
       }
     }
     memorySnapshot = copied;
@@ -824,23 +896,37 @@ export const storage: StorageAdapter = {
           }
           if (delta.putQuizEvents?.length) {
             const s = tx.objectStore('quizEvents');
-            for (const item of delta.putQuizEvents) void s.put(item);
+            quizChunkSeq += 1;
+            const baseOrder = Date.now() * 1000 + quizChunkSeq;
+            const prefix = `delta-${baseOrder.toString(36)}`;
+            for (const chunk of packQuizEventChunks(delta.putQuizEvents, prefix, baseOrder)) {
+              void s.put(chunk);
+            }
           }
           if (delta.putQuizHandoffs?.length) {
             const s = tx.objectStore('quizHandoffs');
             for (const item of delta.putQuizHandoffs) void s.put(item);
           }
 
-          await tx.done;
+          const deltaItemCount =
+            (delta.putPlayers?.length ?? 0) +
+            (delta.putMatches?.length ?? 0) +
+            (delta.putScoreEvents?.length ?? 0) +
+            (delta.putQuizApplicants?.length ?? 0) +
+            (delta.putQuizAttempts?.length ?? 0) +
+            (delta.putQuizEvents?.length ?? 0);
+          const commitTimeoutMs = Math.min(30_000, Math.max(4000, deltaItemCount * 0.25));
+          await withTimeout(tx.done, commitTimeoutMs);
         } catch {
           idbUnavailable = true;
+          dbPromise = null;
         }
       }
     }
 
     if (nextSnapshotCache) {
       memorySnapshot = shallowCloneSnapshot(nextSnapshotCache);
-    } else {
+    } else if (!idbUnavailable) {
       memorySnapshot = null;
     }
     notifyOtherTabsCommitted();
@@ -855,6 +941,7 @@ export const storage: StorageAdapter = {
         await writeFullSnapshotToIDB(fresh);
       } catch {
         idbUnavailable = true;
+        dbPromise = null;
       }
     }
     memorySnapshot = fresh;
@@ -1047,7 +1134,7 @@ export const storage: StorageAdapter = {
         quizQuestions,
         quizApplicants,
         quizAttempts,
-        quizEvents,
+        quizEventChunks,
         quizHandoffs,
       ] = await Promise.all([
         tx.objectStore('players').count(),
@@ -1061,10 +1148,11 @@ export const storage: StorageAdapter = {
         tx.objectStore('quizQuestions').count(),
         tx.objectStore('quizApplicants').count(),
         tx.objectStore('quizAttempts').count(),
-        tx.objectStore('quizEvents').count(),
+        tx.objectStore('quizEvents').getAll(),
         tx.objectStore('quizHandoffs').count(),
       ]);
       await tx.done;
+      const quizEvents = unpackQuizEventChunks(quizEventChunks).length;
       return {
         players,
         groups,

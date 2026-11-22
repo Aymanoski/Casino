@@ -250,6 +250,16 @@ function computeDeltaBetweenSnapshots(
     prevArr: T[],
     nextArr: T[]
   ): { put: T[]; del: string[] } => {
+    if (prevArr.length === nextArr.length) {
+      let allSameRef = true;
+      for (let i = 0; i < prevArr.length; i += 1) {
+        if (prevArr[i] !== nextArr[i]) {
+          allSameRef = false;
+          break;
+        }
+      }
+      if (allSameRef) return { put: [], del: [] };
+    }
     const prevMap = new Map(prevArr.map((x) => [x.id, x]));
     const nextMap = new Map(nextArr.map((x) => [x.id, x]));
     const put: T[] = [];
@@ -1941,6 +1951,8 @@ export const commands = {
       return {
         result: updated,
         nextDb: db,
+        delta: { putMatches: [updated] },
+        skipInvariants: true,
         broadcasts: [
           {
             event: 'timer.updated',
@@ -4497,20 +4509,25 @@ export const commands = {
         }
       );
 
-      db.auditEntries.unshift(
-        createAuditRecord({
-          actorUserId: input.actorUserId,
-          action: 'contact.viewed',
-          entityType: 'contact',
-          entityId: input.targetId,
-          summary: `Viewed ${input.targetType} contact info (${input.targetId})${input.matchId ? ` for match ${input.matchId}` : ''}`,
-          summaryAr: `تم عرض بيانات التواصل (${input.targetId})`,
-          before: null,
-          after: { targetType: input.targetType, matchId: input.matchId ?? null },
-        })
-      );
+      const auditRecord = createAuditRecord({
+        actorUserId: input.actorUserId,
+        action: 'contact.viewed',
+        entityType: 'contact',
+        entityId: input.targetId,
+        summary: `Viewed ${input.targetType} contact info (${input.targetId})${input.matchId ? ` for match ${input.matchId}` : ''}`,
+        summaryAr: `تم عرض بيانات التواصل (${input.targetId})`,
+        before: null,
+        after: { targetType: input.targetType, matchId: input.matchId ?? null },
+      });
+      db.auditEntries.unshift(auditRecord);
 
-      return { result: undefined, nextDb: db, broadcasts: [] };
+      return {
+        result: undefined,
+        nextDb: db,
+        delta: { putAuditEntries: [auditRecord] },
+        skipInvariants: true,
+        broadcasts: [],
+      };
     });
   },
 
